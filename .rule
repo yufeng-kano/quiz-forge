@@ -1,0 +1,91 @@
+# QuizForge 系統規則
+
+## 專案定位
+
+- 專案代號 `quiz-forge`，是單一使用者自架的題庫生成系統。
+- 核心流程：文件輸入（上傳掃描件、PDF、Word、圖片，或抓取網頁）→ 文字化與解析 → 分類 → 出題 → 審題 → 匯出 Word 考卷。
+- 系統以 Docker Compose 在使用者本機執行，成品以公開 GitHub repo 發佈。
+- LLM 一律走 OpenAI-compatible 介面，預設供應商為 OpenRouter；API 費用由使用者自行負擔，不屬於系統開發範圍。
+- 不整合掃描器硬體；掃描實體文件由使用者自行掃描成檔案後上傳。
+
+## 文件規則
+
+- 每次執行任何任務前，必須先閱讀 `docs/index.md`，確認是否有相關文件。
+- `docs/` 是專案唯一真實來源；需求、流程、資料定義與功能行為，以 `docs/` 內文件為準。
+- 決策文件放 `docs/decisions/`，檔名 `YYYY-MM-DD-主題.md`，記錄當下決策與理由，之後不回改；推翻舊決策時新增一份新的決策文件。
+- 系統即時文件平放在 `docs/` 頂層，不建立子資料夾；實作變更時必須同步更新對應文件。
+- 寫任何程式碼或功能改動前，必須先新增或更新 `docs/` 內的對應文件，再依文件實作。
+- 新增、移動、刪除或修改 `docs/` 內文件時，必須同步更新 `docs/index.md` 的文件路徑與摘要。
+- 若使用者需求與既有文件衝突，必須先告知衝突點，待文件更新後再改程式碼或功能。
+
+## 資料規則
+
+- `data/` 用來保存需納入 Git 紀錄的資料，包含測試樣本與 container mount 掛載點。
+- 測試用樣本文件（範例 PDF、掃描件、Word）放在 `data/samples/`，盡量保留原始檔名與格式。
+- container mount 資料放在 `data/container-mounts/`；runtime 產生的內容（DB 資料檔、上傳原檔、匯出檔）由 `.gitignore` 排除，只保留資料夾結構。
+- 新增、移動、刪除或修改 `data/` 內資料時，必須同步更新 `docs/data-inventory.md`。
+- `.DS_Store`、快取檔與暫存檔不屬於專案資料，不放進 `data/`。
+- 若資料含有密碼、金鑰或個資，先告知使用者，再決定是否納入 Git。
+
+## 登入與安全規則
+
+- 本系統為單人本機使用，不做帳號系統與登入驗證。
+- 不得在程式碼、文件、測試或 Git 紀錄中出現真實 API key；LLM API key 只能透過 `.env` 提供。
+- 這是公開 repo；提交前必須確認沒有任何憑證或個資進入版本紀錄。
+
+## 使用者體驗規則
+
+- 長任務（OCR、摘要、分類、出題）一律走背景 job，前端輪詢 `/api/v1/jobs/{id}` 顯示進度；多頁文件要顯示逐頁進度。
+- 任務失敗必須可以最小單位重試（單頁、單題），不得要求整份文件或整批題目重跑。
+- LLM 生成的題目一律先進 `draft` 狀態；經審題頁採用（`approved`）後才進題庫與 Word 匯出範圍。
+- 每次 LLM 呼叫必須記錄 model 與 token 用量，提供使用者查看累計用量。
+
+## Server-side Docker 規則
+
+- Server-side 服務一律使用 Docker container 執行。
+- 開發與測試可直接操作 container 內部資料、檔案與狀態，用來驗證 migration、API、DB 寫入與整合流程。
+- Docker Compose 服務包含 `backend`、`db`、`nginx` 與檔案儲存 bind mount。
+- `backend` 是 Python FastAPI 服務，必須放在 `backend/`。
+- `db` 是 PostgreSQL 服務，使用 `pgvector/pgvector` 官方 image，設定放在 `db/`。
+- `nginx` 是反向代理服務，必須放在 `nginx/`；`/` serve 前端靜態檔，`/api/v1` proxy 到 backend。
+- `frontend` 是 Vue 3 專案，必須放在 `frontend/`；build 產物交由 nginx serve，不做獨立常駐 container。
+- Docker Compose 服務與 container 必須明確命名，不得使用 Docker 自動產生的隨機名稱。
+- container name 固定使用 `quiz-forge-backend`、`quiz-forge-db`、`quiz-forge-nginx`。
+- 環境變數統一放在專案根目錄 `.env`，Docker Compose 必須明確引用；Git 只保存 `.env.example`，記錄必要變數名稱、範例值與說明。
+- 含有 API key 或資料庫密碼的 `.env` 不得納入 Git。
+- Docker volume 必須使用明確的 bind mount，來源路徑統一放在 `data/container-mounts/` 底下；不得使用 anonymous volume。
+- nginx 必須設定 `client_max_body_size`（大型掃描 PDF 上傳）與足夠的 proxy timeout；相關數值放設定檔，不寫死在程式碼。
+
+## 命名規則
+
+- 專案代號固定使用 `quiz-forge`。
+- 規則主檔固定使用 `.rule`。
+- `AGENTS.md` 與 `CLAUDE.md` 必須是指向 `.rule` 的 symlink。
+- 使用者輸入的英文詞彙、程式碼變數、函式名稱、類別名稱、檔名或指令，若有拼字、語法、單字時態錯誤，或不符合該程式語言慣用風格，需自動修正並告知使用者。
+
+## 回答與文件規則
+
+- 使用繁體中文，採台灣常用說法。
+- 先講結論，再補必要原因與下一步。
+- 句子保持短句，避免空泛說法。
+- 技術說明要具體指出檔案、指令或修改位置。
+
+## 開發規則
+
+- 不使用系統 Python；所有 Python 指令一律使用 `uv`。
+- 新增專案、套件、子模組或工具骨架時，必須優先使用該工具官方的 scaffold/init 指令，不得直接手寫整套初始設定檔。
+- Python project 必須用 `uv init` 建立，再用 `uv add`、`uv lock`、`uv sync` 管理依賴與 lockfile，不手動從零建立 `pyproject.toml` 或改 lockfile。
+- 其他生態也同理，例如前端用官方 create 指令（`npm create vue@latest`）、Alembic 用 `alembic revision` 產生 migration 檔後再編輯。
+- 若官方 scaffold/init 指令和既有 repo 結構衝突，必須先說明原因，再採最小手動修改。
+- 所有程式碼必須採模組化設計；不得把 API、設定、資料庫、外部服務、LLM 呼叫邏輯長期集中在單一大型檔案。
+- 程式碼禁止硬編碼環境值、API key、model 名稱、外部服務 URL、併發數、DPI、檔案路徑與部署設定；這些值必須放在 `.env`、設定檔或正式的常數設定模組中。
+- 後端 API 必須有版本路徑；第一版公開 API 使用 `/api/v1/*`，FastAPI 內部 router 使用 `/v1/*`。
+- 後端 API handler 預設使用非同步設計，也就是 `async def`。只有明確不需要 I/O 且有文件理由時，才可使用同步 handler。
+- LLM 呼叫一律走 OpenAI-compatible 介面，不做 Anthropic message format；結構化輸出（vision 解析、分類、出題）必須用 `response_format: json_schema` 強制 JSON，不得 parse 自由文字。
+- 資料庫存取使用 SQLAlchemy 2.0 async + asyncpg；schema 更新必須由 `backend/` 內的 Alembic migration 管理，不得手動 SQL 改資料庫。
+- embedding 維度由 `EMBEDDING_DIM` 設定提供；更換 embedding model 需 re-embed 與 migration，屬於重大變更，必須先告知使用者。
+- 所有 Python 程式碼交付前必須通過 `uv run --project backend ruff check backend` 與 `uv run --project backend basedpyright -p backend`。
+- 後端重要邏輯必須撰寫 pytest 驗證；不是每個函式都要寫 test，但 job queue、設定解析、vision 輸出解析與 bbox 換算、題型 schema 驗證、Word 匯出與 migration 等高風險邏輯要有測試。
+- 修改前先檢查現有檔案與 git 狀態。
+- 不覆蓋使用者既有修改。
+- 交付前要檢查檔案、symlink、git diff、ruff、basedpyright、pytest、Alembic 設定與 Docker Compose 設定。

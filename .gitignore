@@ -1,0 +1,13 @@
+# 環境變數（含 API key、DB 密碼）
+.env
+
+# container mount 的 runtime 內容，只保留資料夾結構
+data/container-mounts/*
+!data/container-mounts/.gitkeep
+
+# 系統與暫存檔
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
+dist/
