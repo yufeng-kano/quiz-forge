@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { DOCUMENT_POLL_INTERVAL_MS, type DocumentListItem } from '@/api'
@@ -16,6 +16,7 @@ import { formatDateTime } from '@/i18n/datetime'
 import { translateApiError } from '@/i18n/errors'
 import { useDocumentsStore } from '@/stores/documents'
 import { useToastsStore } from '@/stores/toasts'
+import { matchesQuery, normalizeQuery } from '@/utils/search'
 
 /**
  * 文件列表 — the intake card row above the table, then every document with its
@@ -26,12 +27,26 @@ import { useToastsStore } from '@/stores/toasts'
  * document left `pending` / `processing` by an earlier session, whose job id no
  * endpoint can give back. For those, the whole list is refetched on an
  * interval, which stops as soon as none are left.
+ *
+ * The search box narrows the rows client-side: `GET /api/v1/documents` returns
+ * the whole list in one response, so filtering it here is instant and a server
+ * round trip would only add latency.
  */
 const { t } = useAppI18n()
 const router = useRouter()
 const store = useDocumentsStore()
 const toasts = useToastsStore()
 const { confirm } = useConfirm()
+
+const search = ref('')
+
+const query = computed(() => normalizeQuery(search.value))
+
+const visibleDocuments = computed<DocumentListItem[]>(() =>
+  store.documents.filter((document) => matchesQuery(document.title, query.value)),
+)
+
+const isFiltering = computed(() => query.value !== '')
 
 const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
   {
@@ -152,9 +167,23 @@ onUnmounted(clearTimer)
   <div class="page">
     <PageHeader
       :title="t('pages.documents.title')"
-      :subtitle="t('documents.list.count', { count: store.documents.length })"
+      :subtitle="
+        isFiltering
+          ? t('documents.list.filteredCount', {
+              total: store.documents.length,
+              count: visibleDocuments.length,
+            })
+          : t('documents.list.count', { count: store.documents.length })
+      "
     >
       <template #actions>
+        <input
+          v-model="search"
+          class="form-input documents__search"
+          type="search"
+          :aria-label="t('documents.list.search')"
+          :placeholder="t('documents.list.searchPlaceholder')"
+        />
         <AppButton variant="secondary" :disabled="store.loading" @click="store.load()">
           {{ t('documents.list.reload') }}
         </AppButton>
@@ -172,20 +201,23 @@ onUnmounted(clearTimer)
 
     <DataTable
       :columns="columns"
-      :rows="store.documents"
+      :rows="visibleDocuments"
       :row-key="(item: DocumentListItem) => item.id"
       :loading="store.loading"
-      :empty-title="t('documents.list.emptyTitle')"
-      :empty-description="t('documents.list.emptyDescription')"
+      :empty-title="isFiltering ? t('documents.list.noMatchTitle') : t('documents.list.emptyTitle')"
+      :empty-description="
+        isFiltering ? t('documents.list.noMatchDescription') : t('documents.list.emptyDescription')
+      "
       clickable-rows
       @row-click="openDetail"
     >
       <template #title="{ row }">
-        <span class="documents__title">{{ row.title }}</span>
+        <span class="documents__title text-ellipsis" :title="row.title">{{ row.title }}</span>
         <a
           v-if="row.source_url !== null"
-          class="documents__source"
+          class="documents__source text-ellipsis"
           :href="row.source_url"
+          :title="row.source_url"
           target="_blank"
           rel="noopener noreferrer"
           @click.stop
@@ -218,17 +250,24 @@ onUnmounted(clearTimer)
   --data-table-max-height: max(22rem, calc(100vh - 28rem));
 }
 
+.documents__search {
+  width: min(18rem, 40vw);
+}
+
+/* The title cell has no fixed width, so the truncation needs one to bite: this
+   is the widest a title column gets before the rest of the row loses room */
+.documents__title,
+.documents__source {
+  max-width: 34rem;
+}
+
 .documents__title {
-  display: block;
   color: var(--color-heading);
   font-weight: 600;
-  overflow-wrap: anywhere;
 }
 
 .documents__source {
-  display: block;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
-  overflow-wrap: anywhere;
 }
 </style>

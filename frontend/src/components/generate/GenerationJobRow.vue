@@ -12,7 +12,8 @@ import { QUESTION_TYPE_LABEL_KEYS } from '@/questions/labels'
 import type { GenerationJobEntry } from '@/stores/generation'
 
 /**
- * One generation job launched in this session, with its live progress.
+ * One generation job launched in this session, with its live progress and the
+ * 題型 × 數量 combos it was asked for.
  *
  * `jobs.error` is shown even on a `done` job: a generation job that finished
  * with some questions failing records the summary there and still counts as
@@ -38,16 +39,22 @@ const difficultyLabel = computed(() =>
   <article class="job-row">
     <div class="job-row__head">
       <span class="job-row__summary">
-        {{
-          t('generate.jobs.summary', {
-            type: t(QUESTION_TYPE_LABEL_KEYS[entry.questionType]),
-            count: entry.count,
-          })
-        }}
+        {{ t('generate.jobs.total', { count: entry.totalCount }) }}
       </span>
       <StatusBadge v-if="status !== null" :status="status" />
       <ProgressText v-if="isActive" :progress="progress" />
     </div>
+
+    <ul class="job-row__items">
+      <li v-for="item in entry.items" :key="item.question_type" class="job-row__item">
+        {{
+          t('generate.jobs.item', {
+            type: t(QUESTION_TYPE_LABEL_KEYS[item.question_type]),
+            count: item.count,
+          })
+        }}
+      </li>
+    </ul>
 
     <p class="job-row__meta">
       {{
@@ -113,6 +120,25 @@ const difficultyLabel = computed(() =>
 .job-row__summary {
   color: var(--color-heading);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.job-row__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  padding: 0;
+  list-style: none;
+}
+
+.job-row__item {
+  padding: 0.05rem var(--space-2);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-pill);
+  background: var(--color-background);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .job-row__meta {

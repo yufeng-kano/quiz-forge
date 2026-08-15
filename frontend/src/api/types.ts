@@ -432,12 +432,29 @@ export interface QuestionPatch {
   difficulty?: string | null
 }
 
-/** Request body of `POST /api/v1/generate`; at least one scope list is required. */
+/**
+ * One `items[]` entry of `POST /api/v1/generate`
+ * (`backend.schemas.question.GenerateItemIn`): a question type and how many of
+ * it to draft. `count` must be positive and no two entries of one request may
+ * carry the same `question_type` — both are 422 on the server.
+ */
+export interface GenerateItem {
+  question_type: QuestionType
+  count: number
+}
+
+/**
+ * Request body of `POST /api/v1/generate` (docs/question-bank.md 出題流程
+ * step 1 — 多個「題型 × 數量」項目，一個 job 出完).
+ *
+ * At least one scope list is required and `items` must not be empty. The whole
+ * combination is drafted by a single job whose progress counts every question
+ * of every item together, and one item failing outright does not fail the rest.
+ */
 export interface GenerateRequest {
   document_ids?: number[]
   category_ids?: number[]
-  question_type: QuestionType
-  count: number
+  items: GenerateItem[]
   difficulty?: string | null
 }
 

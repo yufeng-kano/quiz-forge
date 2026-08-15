@@ -19,7 +19,7 @@ defineProps<{
 <template>
   <header class="page-header-bar">
     <div class="page-header-bar__titles">
-      <h1 class="page-header-bar__title">{{ title }}</h1>
+      <h1 class="page-header-bar__title text-ellipsis" :title="title">{{ title }}</h1>
       <p v-if="subtitle !== undefined" class="page-header-bar__subtitle">{{ subtitle }}</p>
       <div v-if="$slots.meta" class="page-header-bar__meta">
         <slot name="meta" />
@@ -56,9 +56,11 @@ defineProps<{
   min-width: 0;
 }
 
+/* A page title can be a document's own title, which on a URL import is whatever
+   the page was called — one line with a tooltip, never a wrapped block */
 .page-header-bar__title {
+  max-width: 100%;
   font-size: var(--font-size-xl);
-  overflow-wrap: anywhere;
 }
 
 .page-header-bar__subtitle {

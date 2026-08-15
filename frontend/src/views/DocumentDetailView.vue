@@ -296,7 +296,13 @@ async function onDelete(): Promise<void> {
           >
             <p v-if="detail.source_url !== null" class="detail__fact">
               <span class="detail__fact-label">{{ t('documentDetail.sourceUrl') }}</span>
-              <a :href="detail.source_url" target="_blank" rel="noopener noreferrer">
+              <a
+                class="detail__fact-url text-ellipsis"
+                :href="detail.source_url"
+                :title="detail.source_url"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 {{ detail.source_url }}
               </a>
             </p>
@@ -455,10 +461,20 @@ async function onDelete(): Promise<void> {
 }
 
 .detail__fact {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
+/* A source URL is arbitrarily long and carries no line breaks: one line with
+   the whole address in its tooltip (docs/frontend.md 清單有界原則) */
+.detail__fact-url {
+  min-width: 0;
+}
+
 .detail__fact-label {
+  flex: none;
   margin-right: var(--space-2);
   color: var(--color-heading);
   font-size: var(--font-size-md);

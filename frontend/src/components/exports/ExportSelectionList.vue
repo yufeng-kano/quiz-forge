@@ -106,9 +106,13 @@ const hasUnavailable = computed(
   font-variant-numeric: tabular-nums;
 }
 
+/* A selection of two hundred questions must not turn the page into two hundred
+   rows before the form below it (docs/frontend.md 清單有界原則) */
 .selection__list {
   display: flex;
   flex-direction: column;
+  max-height: 20rem;
+  overflow-y: auto;
   padding: 0;
   list-style: none;
 }

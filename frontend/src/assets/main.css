@@ -45,6 +45,20 @@ a:hover {
   font-size: var(--font-size-base);
 }
 
+/* Single-line truncation for anything that can arrive arbitrarily long — a
+   document title taken from a web page, a URL, a category path.
+
+   docs/frontend.md 清單有界原則: such a title is cut to one line and the whole
+   text lives in the element's `title` tooltip, so no list row is ever six lines
+   tall. The element needs a bounded width (a table cell, a flex child with
+   `min-width: 0`) for the ellipsis to appear at all. */
+.text-ellipsis {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 /* Secondary line of text (counts, timestamps, hints) */
 .muted-text {
   color: var(--color-text-muted);

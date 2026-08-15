@@ -3,34 +3,30 @@ import { computed, ref } from 'vue'
 
 import {
   GENERATE_COUNT_DEFAULT,
-  GENERATE_COUNT_MAX,
   GENERATE_COUNT_MIN,
   QUESTION_TYPES,
+  type GenerateItem,
   type GenerateRequest,
-  type QuestionType,
 } from '@/api'
 import AppButton from '@/components/AppButton.vue'
-import CategoryScopePicker from '@/components/generate/CategoryScopePicker.vue'
-import DocumentScopePicker from '@/components/generate/DocumentScopePicker.vue'
+import CategoryScopeField from '@/components/generate/CategoryScopeField.vue'
+import DocumentScopeField from '@/components/generate/DocumentScopeField.vue'
+import GenerateItemRows from '@/components/generate/GenerateItemRows.vue'
 import GenerationJobRow from '@/components/generate/GenerationJobRow.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
-import {
-  DIFFICULTY_LABEL_KEYS,
-  DIFFICULTY_LEVELS,
-  QUESTION_TYPE_LABEL_KEYS,
-} from '@/questions/labels'
+import { DIFFICULTY_LABEL_KEYS, DIFFICULTY_LEVELS } from '@/questions/labels'
 import { useGenerationStore } from '@/stores/generation'
 import { useToastsStore } from '@/stores/toasts'
 
 /**
- * 出題 — pick the scope, type, count and difficulty, then queue the job
- * (docs/question-bank.md 出題流程 step 1).
+ * 出題 — pick the scope, combine 題型 × 數量 rows, pick a difficulty, queue the
+ * job (docs/question-bank.md 出題流程 step 1).
  *
  * Nothing is generated here: the request returns a job id, whose progress is
- * polled by the rows on the right. The scope selection is deliberately kept
- * after a submit, since asking for more of the same material is the common
+ * polled by the rows on the right. The scope and the combos are deliberately
+ * kept after a submit, since asking for more of the same material is the common
  * next step — the two columns exist for exactly that: the form stays where it
  * is while the jobs it produced report next to it.
  *
@@ -44,8 +40,9 @@ const toasts = useToastsStore()
 
 const documentIds = ref<number[]>([])
 const categoryIds = ref<number[]>([])
-const questionType = ref<QuestionType>(QUESTION_TYPES[0])
-const count = ref(GENERATE_COUNT_DEFAULT)
+const items = ref<GenerateItem[]>([
+  { question_type: QUESTION_TYPES[0], count: GENERATE_COUNT_DEFAULT },
+])
 const difficulty = ref('')
 
 const submitting = ref(false)
@@ -53,26 +50,24 @@ const submitError = ref<string | null>(null)
 
 const hasScope = computed(() => documentIds.value.length > 0 || categoryIds.value.length > 0)
 
-function onCountInput(event: Event): void {
-  const target = event.target
-  if (!(target instanceof HTMLInputElement)) {
-    return
-  }
-  const parsed = Number.parseInt(target.value, 10)
-  if (Number.isNaN(parsed)) {
-    count.value = GENERATE_COUNT_MIN
-    return
-  }
-  count.value = Math.min(GENERATE_COUNT_MAX, Math.max(GENERATE_COUNT_MIN, parsed))
-}
+/** What the job's progress will count, and what the user is billed for. */
+const totalCount = computed(() => items.value.reduce((total, item) => total + item.count, 0))
+
+/** Mirrors `GenerateIn`: a scope, at least one item, and every count positive. */
+const canSubmit = computed(
+  () =>
+    hasScope.value &&
+    items.value.length > 0 &&
+    items.value.every((item) => item.count >= GENERATE_COUNT_MIN) &&
+    !submitting.value,
+)
 
 async function onSubmit(): Promise<void> {
-  if (!hasScope.value || submitting.value) {
+  if (!canSubmit.value) {
     return
   }
   const request: GenerateRequest = {
-    question_type: questionType.value,
-    count: count.value,
+    items: items.value.map((item) => ({ ...item })),
   }
   if (documentIds.value.length > 0) {
     request.document_ids = [...documentIds.value]
@@ -105,42 +100,23 @@ async function onSubmit(): Promise<void> {
 
     <div class="generate">
       <form class="card generate__form" @submit.prevent="onSubmit">
-        <h2 class="card-title">{{ t('generate.form.scopeTitle') }}</h2>
-        <p class="form-hint">{{ t('generate.form.scopeHint') }}</p>
+        <section class="generate__block">
+          <h2 class="card-title">{{ t('generate.form.scopeTitle') }}</h2>
+          <p class="form-hint">{{ t('generate.form.scopeHint') }}</p>
 
-        <div class="generate__scope">
-          <DocumentScopePicker v-model="documentIds" />
-          <CategoryScopePicker v-model="categoryIds" />
-        </div>
+          <div class="generate__scope">
+            <DocumentScopeField v-model="documentIds" />
+            <CategoryScopeField v-model="categoryIds" />
+          </div>
+        </section>
 
-        <div class="generate__settings">
-          <label class="form-field">
-            <span class="form-label">{{ t('generate.form.type') }}</span>
-            <select v-model="questionType" class="form-select">
-              <option v-for="type in QUESTION_TYPES" :key="type" :value="type">
-                {{ t(QUESTION_TYPE_LABEL_KEYS[type]) }}
-              </option>
-            </select>
-          </label>
+        <section class="generate__block">
+          <h2 class="card-title">{{ t('generate.form.comboTitle') }}</h2>
+          <p class="form-hint">{{ t('generate.form.comboHint') }}</p>
 
-          <label class="form-field">
-            <span class="form-label">{{ t('generate.form.count') }}</span>
-            <input
-              class="form-input"
-              type="number"
-              :min="GENERATE_COUNT_MIN"
-              :max="GENERATE_COUNT_MAX"
-              :value="count"
-              @input="onCountInput"
-            />
-            <span class="form-hint">
-              {{
-                t('generate.form.countHint', { min: GENERATE_COUNT_MIN, max: GENERATE_COUNT_MAX })
-              }}
-            </span>
-          </label>
+          <GenerateItemRows v-model="items" />
 
-          <label class="form-field">
+          <label class="form-field generate__difficulty">
             <span class="form-label">{{ t('generate.form.difficulty') }}</span>
             <select v-model="difficulty" class="form-select">
               <option value="">{{ t('generate.form.difficultyAny') }}</option>
@@ -153,26 +129,38 @@ async function onSubmit(): Promise<void> {
               </option>
             </select>
           </label>
-        </div>
+        </section>
 
         <p v-if="submitError !== null" class="form-error">{{ submitError }}</p>
 
         <div class="generate__actions">
-          <AppButton type="submit" :disabled="!hasScope || submitting">
+          <AppButton type="submit" :disabled="!canSubmit">
             {{ submitting ? t('generate.form.submitting') : t('generate.form.submit') }}
           </AppButton>
+          <span class="generate__total">
+            {{ t('generate.form.total', { count: totalCount, calls: totalCount }) }}
+          </span>
         </div>
       </form>
 
-      <section class="card generate__jobs">
-        <h2 class="card-title">{{ t('generate.jobs.title') }}</h2>
-        <p v-if="store.jobs.length === 0" class="form-hint">{{ t('generate.jobs.empty') }}</p>
-        <ul v-else class="generate__jobs-list">
-          <li v-for="entry in store.jobs" :key="entry.jobId">
-            <GenerationJobRow :entry="entry" />
-          </li>
-        </ul>
-      </section>
+      <aside class="generate__jobs">
+        <section v-if="store.jobs.length > 0" class="card generate__jobs-card">
+          <header class="generate__jobs-head">
+            <h2 class="card-title">{{ t('generate.jobs.title') }}</h2>
+            <span class="muted-text">{{
+              t('generate.jobs.count', { count: store.jobs.length })
+            }}</span>
+          </header>
+
+          <ul class="generate__jobs-list">
+            <li v-for="entry in store.jobs" :key="entry.jobId">
+              <GenerationJobRow :entry="entry" />
+            </li>
+          </ul>
+        </section>
+
+        <p v-else class="generate__jobs-empty">{{ t('generate.jobs.empty') }}</p>
+      </aside>
     </div>
   </div>
 </template>
@@ -192,29 +180,76 @@ async function onSubmit(): Promise<void> {
   }
 }
 
-.generate__form,
-.generate__jobs {
+.generate__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.generate__block {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-.generate__scope,
-.generate__settings {
+.generate__scope {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
   gap: var(--space-4);
+}
+
+.generate__difficulty {
+  max-width: 20rem;
 }
 
 .generate__actions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.generate__total {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.generate__jobs-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* The column must not grow with the session's history: the card keeps its
+     head fixed and the rows scroll inside it (docs/frontend.md 清單有界原則) */
+  max-height: calc(100vh - 14rem);
+  overflow: hidden;
+}
+
+.generate__jobs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 .generate__jobs-list {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
   padding: 0;
   list-style: none;
+}
+
+/* Nothing queued yet is one line of guidance, not an empty card the size of
+   the form next to it */
+.generate__jobs-empty {
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
 }
 </style>

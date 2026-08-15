@@ -39,7 +39,7 @@
 | 路由 | 頁面 | 說明 |
 |---|---|---|
 | `/` | Dashboard | 總覽：文件/題目各狀態計數、待審 CTA、最近任務、累計 token |
-| `/documents` | 文件列表 | 所有 documents 與處理狀態；入口含上傳與網址匯入 |
+| `/documents` | 文件區 | 兩個 tab：「上傳」（拖放上傳、網址匯入、進行中的解析任務）與「文件庫」（list 模式 DataTable，含搜尋與排序） |
 | `/documents/:id` | 文件詳情 | 逐頁渲染 Markdown（含裁切圖表）、chunk 與分類結果、失敗頁重試、重新 chunk |
 | `/jobs` | 任務中心 | 全域 job 列表（篩狀態/種類）、失敗重試 |
 | `/review` | 審題 | `draft` 題目列表，對照來源 chunk 原文，可編輯後採用／丟棄 |
