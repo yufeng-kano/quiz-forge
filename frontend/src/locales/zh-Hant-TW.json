@@ -1,24 +1,40 @@
 {
   "app": {
     "title": "QuizForge",
-    "navLabel": "主導覽"
+    "navLabel": "主導覽",
+    "collapseSidebar": "收合側邊欄",
+    "expandSidebar": "展開側邊欄"
+  },
+  "common": {
+    "confirm": "確定",
+    "cancel": "取消",
+    "close": "關閉"
   },
   "nav": {
-    "documents": "文件列表",
+    "dashboard": "總覽",
+    "documents": "文件",
+    "generate": "出題",
     "review": "審題",
     "questions": "題庫",
-    "generate": "出題",
     "exports": "匯出",
+    "jobs": "任務",
     "usage": "用量"
   },
   "pages": {
+    "dashboard": {
+      "title": "總覽",
+      "description": "文件、題目與背景任務的整體狀態。"
+    },
     "documents": {
-      "title": "文件列表",
-      "description": "所有文件與處理狀態，並提供上傳與網址匯入入口。"
+      "title": "文件"
     },
     "documentDetail": {
       "title": "文件詳情",
       "subtitle": "文件 #{id}"
+    },
+    "jobs": {
+      "title": "任務中心",
+      "description": "所有背景任務的狀態、進度與失敗原因，可重試失敗任務。"
     },
     "review": {
       "title": "審題",
@@ -41,6 +57,9 @@
       "description": "依模型與用途統計 LLM token 累計用量。"
     }
   },
+  "table": {
+    "emptyTitle": "沒有資料"
+  },
   "status": {
     "pending": "等待中",
     "running": "處理中",
@@ -61,21 +80,82 @@
         "pages": "頁",
         "chunks": "個段落"
       }
+    },
+    "kind": {
+      "parseDocument": "文件解析",
+      "parsePage": "單頁重新解析",
+      "rechunkDocument": "重新分段",
+      "generateQuestions": "出題",
+      "exportDocx": "匯出考卷"
+    }
+  },
+  "dashboard": {
+    "refresh": "重新整理",
+    "cards": {
+      "documents": "文件",
+      "drafts": "待審題目",
+      "draftsCta": "前往審題處理",
+      "draftsIdle": "目前沒有待審題目。",
+      "questions": "題目總數",
+      "questionsHint": "已採用 {count} 題",
+      "chunks": "分段",
+      "chunksHint": "分類 {count} 個",
+      "failedJobs": "失敗任務",
+      "failedJobsCta": "前往任務中心重試",
+      "failedJobsIdle": "目前沒有失敗任務。",
+      "tokens": "累計 token",
+      "tokensHint": "共 {count} 次 LLM 呼叫"
+    },
+    "recent": {
+      "title": "最近任務",
+      "viewAll": "查看全部",
+      "empty": "尚未執行任何背景任務。",
+      "meta": "任務 #{id} · 更新於 {datetime}"
+    }
+  },
+  "jobs": {
+    "refresh": "重新整理",
+    "retry": "重試",
+    "retrying": "重新排入中…",
+    "retryQueued": "任務 #{id} 已重新排入佇列。",
+    "expandError": "顯示完整錯誤",
+    "collapseError": "收合錯誤",
+    "none": "—",
+    "emptyTitle": "沒有符合條件的任務",
+    "emptyDescription": "調整篩選條件，或先上傳文件、建立出題與匯出任務。",
+    "filters": {
+      "status": "狀態",
+      "kind": "種類",
+      "anyStatus": "全部狀態",
+      "anyKind": "全部種類"
+    },
+    "columns": {
+      "id": "編號",
+      "kind": "種類",
+      "status": "狀態",
+      "progress": "進度",
+      "error": "錯誤",
+      "createdAt": "建立時間",
+      "updatedAt": "更新時間",
+      "actions": "操作"
     }
   },
   "documents": {
     "intake": {
-      "title": "新增文件",
-      "fileLabel": "上傳檔案",
+      "dropTitle": "把檔案拖到這裡上傳",
+      "pickFile": "選擇檔案",
       "fileHint": "支援 PDF、PNG、JPG、DOCX。",
       "uploading": "上傳中…",
+      "uploaded": "已建立文件「{title}」，開始解析。",
+      "unsupportedFile": "不支援的檔案格式：{name}",
       "urlLabel": "網址匯入",
+      "urlHint": "貼上網頁網址，系統會抓取內文並摘要。",
       "urlPlaceholder": "https://example.com/article",
       "urlSubmit": "匯入",
-      "importing": "匯入中…"
+      "importing": "匯入中…",
+      "imported": "已匯入「{title}」，開始解析。"
     },
     "list": {
-      "loading": "載入文件中…",
       "count": "共 {count} 份文件",
       "reload": "重新載入",
       "emptyTitle": "尚未有任何文件",
@@ -83,23 +163,33 @@
     },
     "row": {
       "pageCount": "{count} 頁",
+      "open": "開啟",
       "delete": "刪除",
-      "deleting": "刪除中…",
-      "deleteConfirmQuestion": "確定刪除這份文件？頁面、分段與裁切圖會一併移除。",
+      "deleteTitle": "刪除文件",
+      "deleteConfirmQuestion": "確定刪除「{title}」？頁面、分段與裁切圖會一併移除。",
       "deleteConfirm": "確定刪除",
-      "deleteCancel": "取消",
+      "deleted": "已刪除「{title}」。",
       "retryJob": "重試解析",
       "retrying": "重新排入中…",
+      "retryQueued": "「{title}」的解析已重新排入佇列。",
       "jobFailed": "解析失敗：{error}",
-      "jobFailedNoDetail": "解析失敗，未取得失敗原因。"
+      "jobFailedNoDetail": "解析失敗，未取得失敗原因。",
+      "refreshFailed": "無法更新「{title}」的最新狀態。"
     },
     "sourceType": {
       "upload": "上傳檔案",
       "url": "網址匯入"
+    },
+    "columns": {
+      "title": "標題",
+      "sourceType": "來源",
+      "status": "狀態",
+      "pageCount": "頁數",
+      "createdAt": "建立時間",
+      "actions": "操作"
     }
   },
   "documentDetail": {
-    "back": "回文件列表",
     "loading": "載入文件中…",
     "invalidId": "文件編號無效",
     "invalidIdDescription": "網址中的文件編號必須是正整數。",
@@ -107,10 +197,24 @@
     "createdAt": "建立於 {datetime}",
     "sourceUrl": "來源網址",
     "summary": "摘要",
-    "jobProgress": "解析進度",
     "jobFailed": "解析失敗：{error}",
     "jobFailedNoDetail": "解析失敗，未取得失敗原因。",
     "retryJob": "重試解析",
+    "retrying": "重新排入中…",
+    "retryQueued": "解析已重新排入佇列。",
+    "outline": {
+      "label": "文件大綱",
+      "pages": "頁面",
+      "noPages": "尚未產生頁面。"
+    },
+    "rechunk": {
+      "action": "重新分段",
+      "title": "重新分段與分類",
+      "message": "會刪除現有分段並以目前的頁面內容重建，重新呼叫 LLM 進行分類與向量化，需要額外 API 費用。頁面解析結果不受影響。",
+      "confirm": "重新分段",
+      "queueing": "建立中…",
+      "queued": "重新分段任務已建立。"
+    },
     "pages": {
       "title": "頁面",
       "count": "共 {count} 頁",
@@ -119,7 +223,8 @@
       "pageNo": "第 {no} 頁",
       "retry": "重試此頁",
       "retrying": "重新排入中…",
-      "noContent": "此頁尚未產生內容。"
+      "noContent": "此頁尚未產生內容。",
+      "retryQueued": "此頁已重新排入解析佇列。"
     },
     "chunks": {
       "title": "分段與分類",

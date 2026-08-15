@@ -21,32 +21,48 @@ a:hover {
   text-decoration: underline;
 }
 
-/* Shared page layout: every view uses these classes for its header block, so
-   the styling is maintained in one place */
+/* Shared page layout.
+
+   The shell (`App.vue` + `PageHeader`) owns the sidebar, the per-page header
+   bar and the padding of the content region; a view only stacks its own blocks
+   with `.page` inside that region. */
 .page {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--space-5);
 }
 
-.page-header {
+/* Surface used by every content block that is not a table: cards, panels,
+   filter bars. One definition so borders and radii stay identical everywhere */
+.card {
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-background);
+}
+
+.card-title {
+  font-size: var(--font-size-base);
+}
+
+/* Secondary line of text (counts, timestamps, hints) */
+.muted-text {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+}
+
+/* Inline failure block, used wherever a read failed but the page still renders */
+.error-banner {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.page-title {
-  font-size: 1.375rem;
-}
-
-.page-subtitle {
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.page-description {
-  color: var(--color-text-muted);
-  max-width: 44rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-status-failed-border);
+  border-radius: var(--radius-md);
+  background: var(--color-status-failed-bg);
+  color: var(--color-status-failed-text);
+  overflow-wrap: anywhere;
 }
 
 /* Shared form controls: the question editors and the 出題 form all use these,

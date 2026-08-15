@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 import AppButton from '@/components/AppButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ReviewQuestionCard from '@/components/questions/ReviewQuestionCard.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
 import { useAppI18n } from '@/i18n'
 import { useQuestionsStore } from '@/stores/questions'
 
@@ -25,11 +26,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="page">
-    <header class="page-header">
-      <h2 class="page-title">{{ t('pages.review.title') }}</h2>
-      <p class="page-description">{{ t('pages.review.description') }}</p>
-    </header>
+  <div class="page">
+    <PageHeader :title="t('pages.review.title')" :subtitle="t('pages.review.description')" />
 
     <p v-if="store.draftsError !== null" class="review__error">
       {{ store.draftsError }}
@@ -60,7 +58,7 @@ onMounted(async () => {
         </RouterLink>
       </template>
     </EmptyState>
-  </section>
+  </div>
 </template>
 
 <style scoped>

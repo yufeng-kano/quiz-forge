@@ -39,6 +39,55 @@ export interface Job {
 }
 
 /**
+ * Query parameters of `GET /api/v1/jobs`. `status` and `kind` are the two
+ * filters the endpoint supports; `limit`'s cap is `JOB_LIST_LIMIT`'s comment.
+ */
+export interface JobListQuery {
+  status?: JobStatus
+  kind?: string
+  limit?: number
+}
+
+/**
+ * `jobs.kind` values the backend enqueues today (`Job(kind=...)` in
+ * `backend.api.v1`). The column is a plain string, so an unknown kind is shown
+ * verbatim rather than hidden — this list only decides which kinds get a
+ * translated name and appear in the 任務中心 filter.
+ */
+export const JOB_KINDS = [
+  'parse_document',
+  'parse_page',
+  'rechunk_document',
+  'generate_questions',
+  'export_docx',
+] as const
+
+export type JobKind = (typeof JOB_KINDS)[number]
+
+export function isJobKind(value: string): value is JobKind {
+  return JOB_KINDS.some((kind) => kind === value)
+}
+
+/**
+ * `GET /api/v1/stats` — the Dashboard's overview counts
+ * (`backend.schemas.stats.StatsOut`).
+ *
+ * The two `*_by_status` maps are keyed by whatever status strings exist in the
+ * database right now: a status with no rows is simply absent from the map, so
+ * callers must default a missing key to 0 rather than expecting every status.
+ */
+export interface Stats {
+  documents_by_status: Record<string, number>
+  questions_by_status: Record<string, number>
+  chunk_count: number
+  category_count: number
+  failed_job_count: number
+  llm_call_count: number
+  llm_prompt_tokens: number
+  llm_completion_tokens: number
+}
+
+/**
  * `documents.source_type`. The backend types this field as a plain string but
  * a CHECK constraint restricts it to these two values, so the union is safe.
  */
@@ -124,6 +173,15 @@ export interface DocumentDetail {
   created_at: string
   pages: DocumentPage[]
   chunks: DocumentChunk[]
+}
+
+/**
+ * `POST /api/v1/documents/{id}/rechunk` — the id of the queued
+ * `rechunk_document` job, which deletes and rebuilds every chunk of the
+ * document (pages are left untouched).
+ */
+export interface RechunkResult {
+  job_id: number
 }
 
 /**
@@ -314,6 +372,21 @@ export interface QuestionListQuery {
   type?: QuestionType
   difficulty?: string
   category_id?: number
+}
+
+/**
+ * `GET /api/v1/questions` — the pagination envelope
+ * (`backend.schemas.question.QuestionListOut`).
+ *
+ * `limit` and `offset` are echoed back as the server applied them: an omitted
+ * `limit` is filled in from `Settings.questions_list_limit_default`, so `total`
+ * can be larger than `items.length` even when the caller asked for no page.
+ */
+export interface QuestionListPage {
+  items: QuestionListItem[]
+  total: number
+  limit: number
+  offset: number
 }
 
 /**

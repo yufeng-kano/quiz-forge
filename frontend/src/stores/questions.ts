@@ -77,7 +77,7 @@ export const useQuestionsStore = defineStore('questions', () => {
       draftsLoading.value = true
     }
     try {
-      drafts.value = await listQuestions({ status: 'draft' })
+      drafts.value = (await listQuestions({ status: 'draft' })).items
       draftsLoaded.value = true
       draftsError.value = null
     } catch (error) {
@@ -108,7 +108,7 @@ export const useQuestionsStore = defineStore('questions', () => {
       bankLoading.value = true
     }
     try {
-      bank.value = await listQuestions(bankQuery())
+      bank.value = (await listQuestions(bankQuery())).items
       bankLoaded.value = true
       bankError.value = null
     } catch (error) {

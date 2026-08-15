@@ -1,121 +1,64 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { RouterLink, RouterView, useRoute } from 'vue-router'
-import { useAppI18n } from '@/i18n'
+import { ref } from 'vue'
+import { RouterView } from 'vue-router'
 
-import { NAV_ITEMS } from '@/router/nav'
-
-const route = useRoute()
-const { t } = useAppI18n()
+import AppSidebar from '@/components/ui/AppSidebar.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import ToastHost from '@/components/ui/ToastHost.vue'
 
 /**
- * The active item is computed rather than left to `router-link-active`.
- * `/documents/:id` is its own route record and has no nav entry of its own, so
- * the built-in classes would leave the whole navigation unhighlighted while the
- * user sits on a document detail page. `NAV_ITEMS[].matches` maps that route
- * back onto the document list entry.
+ * Application shell: a left sidebar plus a full-width content region, with the
+ * two singleton overlays (confirmation dialog and toast stack) mounted once
+ * here rather than by every view that needs them.
+ *
+ * Each view supplies its own header bar (`PageHeader`) as its first element,
+ * so the title and the primary action land on the same line on every route.
  */
-const activeRouteName = computed(() => {
-  const current = route.name
-  const item = NAV_ITEMS.find((navItem) => navItem.matches.some((name) => name === current))
-  return item?.routeName ?? null
-})
+const sidebarCollapsed = ref(false)
 </script>
 
 <template>
-  <div class="app-shell">
-    <header class="app-header">
-      <RouterLink class="app-brand" :to="{ name: 'documents' }">{{ t('app.title') }}</RouterLink>
-
-      <nav class="app-nav" :aria-label="t('app.navLabel')">
-        <RouterLink
-          v-for="item in NAV_ITEMS"
-          :key="item.routeName"
-          class="app-nav-link"
-          :class="{ 'is-active': item.routeName === activeRouteName }"
-          :aria-current="item.routeName === activeRouteName ? 'page' : undefined"
-          :to="{ name: item.routeName }"
-        >
-          {{ t(item.labelKey) }}
-        </RouterLink>
-      </nav>
-    </header>
+  <div class="app-shell" :class="{ 'is-collapsed': sidebarCollapsed }">
+    <AppSidebar :collapsed="sidebarCollapsed" @toggle="sidebarCollapsed = !sidebarCollapsed" />
 
     <main class="app-main">
       <RouterView />
     </main>
+
+    <ConfirmDialog />
+    <ToastHost />
   </div>
 </template>
 
 <style scoped>
 .app-shell {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   min-height: 100vh;
 }
 
-.app-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1rem 2rem;
-  padding: 0.9rem 2rem;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background);
-}
-
-.app-brand {
-  color: var(--color-heading);
-  font-size: 1.0625rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.app-brand:hover {
-  text-decoration: none;
-}
-
-.app-nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.app-nav-link {
-  padding: 0.3rem 0.7rem;
-  border-radius: 6px;
-  color: var(--color-text-muted);
-}
-
-.app-nav-link:hover {
-  color: var(--color-heading);
-  background: var(--color-background-mute);
-  text-decoration: none;
-}
-
-.app-nav-link.is-active {
-  color: var(--color-accent-strong);
-  background: var(--color-accent-soft);
+.app-shell.is-collapsed {
+  grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr);
 }
 
 .app-main {
-  flex: 1;
+  min-width: 0;
   width: 100%;
   max-width: var(--content-max-width);
-  margin: 0 auto;
-  padding: var(--section-gap) 2rem 4rem;
+  padding: 0 var(--content-padding-x) var(--space-7);
+}
+
+/* Same breakpoint as the sidebar's own collapse rule */
+@media (max-width: 1080px) {
+  .app-shell,
+  .app-shell.is-collapsed {
+    grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 640px) {
-  .app-header {
-    padding: 0.9rem 1rem;
-  }
-
   .app-main {
-    padding: 1.5rem 1rem 3rem;
+    --content-padding-x: var(--space-4);
   }
 }
 </style>

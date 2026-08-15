@@ -1,19 +1,32 @@
-/* 單一淺色主題：白底、留白充足、低彩度點綴色 */
+/* 單一淺色主題：白底、留白充足、低彩度點綴色。
+   本檔只放設計 token（顏色、間距、字級、圓角、陰影、版面尺寸），
+   元件樣式一律引用 token，不再各自寫死數值。 */
 :root {
   --color-background: #ffffff;
   --color-background-soft: #fafafa;
   --color-background-mute: #f4f4f5;
+  /* 側邊欄與頁面標題列的底色：比內容區再淡一階，用來分出主次 */
+  --color-surface-shell: #fbfbfc;
 
   --color-border: #e4e4e7;
   --color-border-hover: #d4d4d8;
+  /* 表格列與卡片內的細分隔線，比一般邊框再淡 */
+  --color-hairline: #ececed;
 
   --color-heading: #18181b;
   --color-text: #3f3f46;
   --color-text-muted: #71717a;
+  --color-text-faint: #a1a1aa;
 
   --color-accent: #4b6b8a;
   --color-accent-strong: #3b5670;
   --color-accent-soft: #eef2f6;
+  /* 主要按鈕與側邊欄 active 標記上的文字色 */
+  --color-on-accent: #ffffff;
+
+  /* 破壞性動作（刪除、丟棄）的實心按鈕 */
+  --color-danger: #8a4b4b;
+  --color-danger-strong: #733e3e;
 
   /* Job status colours: still low saturation, hue alone separates the four states */
   --color-status-pending-text: #52525b;
@@ -37,8 +50,48 @@
   --color-status-unknown-bg: #ffffff;
   --color-status-unknown-border: #e4e4e7;
 
-  --section-gap: 2.5rem;
-  --content-max-width: 1080px;
+  /* 間距階梯：所有 padding / gap / margin 只從這裡取值 */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* 字級階梯，基準為 body 的 15px */
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-md: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.0625rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+
+  /* 陰影克制使用：只有浮層（modal、toast、下拉）才脫離平面 */
+  --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.04);
+  --shadow-md: 0 6px 20px rgba(24, 24, 27, 0.08);
+  --shadow-lg: 0 16px 40px rgba(24, 24, 27, 0.14);
+
+  /* 版面尺寸 */
+  --sidebar-width: 15rem;
+  --sidebar-width-collapsed: 3.75rem;
+  --page-header-height: 3.5rem;
+  --content-padding-x: var(--space-6);
+  --content-max-width: 100rem;
+  /* 純閱讀內容（頁面 Markdown、說明段落）的行寬上限 */
+  --reading-max-width: 56rem;
+
+  /* 疊層順序集中管理，避免各元件各自猜數字 */
+  --z-sidebar: 20;
+  --z-page-header: 15;
+  --z-modal: 100;
+  --z-toast: 200;
 }
 
 *,

@@ -2,22 +2,29 @@
 
 import { apiDelete, apiGet, apiPatch, apiPost } from './client'
 import type { QueryParams } from './client'
-import type { QuestionDetail, QuestionListItem, QuestionListQuery, QuestionPatch } from './types'
+import type {
+  QuestionDetail,
+  QuestionListItem,
+  QuestionListPage,
+  QuestionListQuery,
+  QuestionPatch,
+} from './types'
 
 /**
- * `GET /api/v1/questions` — newest first, payload included.
+ * `GET /api/v1/questions` — newest first, payload included, wrapped in the
+ * `{ items, total, limit, offset }` pagination envelope.
  *
  * Every filter is optional and an omitted one is left out of the query string
  * entirely (the backend treats a missing parameter as "no filter").
  */
-export function listQuestions(query: QuestionListQuery = {}): Promise<QuestionListItem[]> {
+export function listQuestions(query: QuestionListQuery = {}): Promise<QuestionListPage> {
   const params: QueryParams = {
     status: query.status,
     type: query.type,
     difficulty: query.difficulty,
     category_id: query.category_id,
   }
-  return apiGet<QuestionListItem[]>('/questions', params)
+  return apiGet<QuestionListPage>('/questions', params)
 }
 
 /** `GET /api/v1/questions/{id}` — includes the full text of the source chunks. */

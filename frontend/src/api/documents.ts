@@ -1,7 +1,13 @@
 /** Document ingestion and per-page retry endpoints, see docs/ingestion.md. */
 
 import { apiDelete, apiGet, apiPost, apiUpload } from './client'
-import type { DocumentDetail, DocumentListItem, DocumentUploadResult, Job } from './types'
+import type {
+  DocumentDetail,
+  DocumentListItem,
+  DocumentUploadResult,
+  Job,
+  RechunkResult,
+} from './types'
 
 /** `GET /api/v1/documents` — newest first. */
 export function listDocuments(): Promise<DocumentListItem[]> {
@@ -32,6 +38,17 @@ export function uploadDocument(file: File): Promise<DocumentUploadResult> {
 /** `POST /api/v1/documents/url` — import a web page; the URL is the default title. */
 export function importDocumentFromUrl(url: string, title?: string): Promise<DocumentUploadResult> {
   return apiPost<DocumentUploadResult>('/documents/url', { url, title })
+}
+
+/**
+ * `POST /api/v1/documents/{id}/rechunk` — rebuild every chunk of the document
+ * from the page Markdown that is already parsed. The whole chunk stage runs
+ * again (splitting, LLM classification, embedding), so it costs API calls; the
+ * caller must confirm with the user first. A document with no `ready` page
+ * comes back as 409.
+ */
+export function rechunkDocument(documentId: number): Promise<RechunkResult> {
+  return apiPost<RechunkResult>(`/documents/${encodeURIComponent(documentId)}/rechunk`)
 }
 
 /** `POST /api/v1/pages/{id}/retry` — retry a single page, never the whole document. */

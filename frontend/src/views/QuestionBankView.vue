@@ -7,6 +7,7 @@ import EmptyState from '@/components/EmptyState.vue'
 import BankQuestionCard from '@/components/questions/BankQuestionCard.vue'
 import ExportSelectionBar from '@/components/questions/ExportSelectionBar.vue'
 import QuestionFilters from '@/components/questions/QuestionFilters.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
 import { useAppI18n } from '@/i18n'
 import { useQuestionsStore } from '@/stores/questions'
 
@@ -38,11 +39,8 @@ watch(
 </script>
 
 <template>
-  <section class="page">
-    <header class="page-header">
-      <h2 class="page-title">{{ t('pages.questions.title') }}</h2>
-      <p class="page-description">{{ t('pages.questions.description') }}</p>
-    </header>
+  <div class="page">
+    <PageHeader :title="t('pages.questions.title')" :subtitle="t('pages.questions.description')" />
 
     <QuestionFilters />
 
@@ -75,7 +73,7 @@ watch(
         </RouterLink>
       </template>
     </EmptyState>
-  </section>
+  </div>
 </template>
 
 <style scoped>

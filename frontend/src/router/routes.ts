@@ -2,11 +2,13 @@
 
 import type { RouteRecordRaw } from 'vue-router'
 
-import DocumentListView from '@/views/DocumentListView.vue'
+import DashboardView from '@/views/DashboardView.vue'
 
 export const ROUTE_NAMES = [
+  'dashboard',
   'documents',
   'document-detail',
+  'jobs',
   'review',
   'questions',
   'generate',
@@ -18,20 +20,30 @@ export type RouteName = (typeof ROUTE_NAMES)[number]
 
 /**
  * Everything except the landing route is lazily imported, so a cold visit only
- * downloads the document list chunk. `props: true` on `document-detail` feeds
+ * downloads the Dashboard chunk. `props: true` on `document-detail` feeds
  * `:id` straight into the component, which then needs no `useRoute()`.
  */
 export const routes: RouteRecordRaw[] = [
   {
     path: '/',
+    name: 'dashboard',
+    component: DashboardView,
+  },
+  {
+    path: '/documents',
     name: 'documents',
-    component: DocumentListView,
+    component: () => import('@/views/DocumentListView.vue'),
   },
   {
     path: '/documents/:id',
     name: 'document-detail',
     component: () => import('@/views/DocumentDetailView.vue'),
     props: true,
+  },
+  {
+    path: '/jobs',
+    name: 'jobs',
+    component: () => import('@/views/JobsView.vue'),
   },
   {
     path: '/review',

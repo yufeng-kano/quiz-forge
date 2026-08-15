@@ -5,7 +5,8 @@
 | 來源 | 處理方式 |
 |---|---|
 | 上傳檔案（PDF、圖片、Word） | PDF/圖片走 vision 管線；Word 用 `python-docx`/`mammoth` 直接抽文字 |
-| 網址 | `trafilatura` 本地抽正文轉 Markdown（免費），再用 `TEXT_MODEL` 產摘要 |
+| 網址（網頁） | `trafilatura` 本地抽正文轉 Markdown（免費），再用 `TEXT_MODEL` 產摘要 |
+| 網址（檔案） | 依 content-type／副檔名判斷指向 PDF/Word/圖片時，下載檔案後進上傳檔案同一條管線；下載大小上限由 `URL_FETCH_MAX_BYTES` 設定 |
 
 原始檔一律保留在 `DATA_DIR` 下，`documents.raw_file_path` 記錄位置。
 

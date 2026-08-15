@@ -27,6 +27,27 @@ export const JOB_POLL_INTERVAL_MS = 1500
 export const DOCUMENT_POLL_INTERVAL_MS = 3000
 
 /**
+ * Interval for refetching the job list (任務中心 and the Dashboard's recent
+ * activity) while at least one listed job is still pending or running. A list
+ * response covers many jobs at once, so it is fetched at the same rate as a
+ * document rather than as often as a single job.
+ */
+export const JOB_LIST_POLL_INTERVAL_MS = 3000
+
+/**
+ * How many jobs the Dashboard's recent-activity block asks for. It is a
+ * glance, not the 任務中心 list, so it stays short.
+ */
+export const DASHBOARD_RECENT_JOB_LIMIT = 8
+
+/**
+ * How many jobs 任務中心 asks for. `GET /api/v1/jobs` caps `limit` at
+ * `Settings.jobs_list_limit_max` (200) and rejects anything larger with 422,
+ * so this stays inside that bound.
+ */
+export const JOB_LIST_LIMIT = 100
+
+/**
  * Extensions `POST /api/v1/documents/upload` accepts. The backend rejects
  * anything else with 400 (`backend.ingestion.kind._EXTENSION_KIND`), so the
  * file picker offers exactly this set instead of letting the user pick a file

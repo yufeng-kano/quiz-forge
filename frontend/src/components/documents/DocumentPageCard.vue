@@ -11,11 +11,13 @@ import { useAppI18n } from '@/i18n'
  * One parsed page: its status, the retry control for a failed page (a retry is
  * always per page, never per document, per the .rule UX rules) and the parsed
  * Markdown.
+ *
+ * A failed retry is reported by the view as a toast, so the card carries no
+ * error state of its own.
  */
 const props = defineProps<{
   page: DocumentPage
   retrying: boolean
-  error: string | null
 }>()
 
 const emit = defineEmits<{ retry: [pageId: number] }>()
@@ -42,8 +44,6 @@ const markdown = computed(() => props.page.markdown ?? '')
         {{ retrying ? t('documentDetail.pages.retrying') : t('documentDetail.pages.retry') }}
       </AppButton>
     </header>
-
-    <p v-if="error !== null" class="page-card__error">{{ error }}</p>
 
     <MarkdownContent v-if="markdown.trim() !== ''" :source="markdown" />
     <p v-else class="page-card__empty">{{ t('documentDetail.pages.noContent') }}</p>
@@ -76,12 +76,6 @@ const markdown = computed(() => props.page.markdown ?? '')
 
 .page-card__retry {
   margin-left: auto;
-}
-
-.page-card__error {
-  color: var(--color-status-failed-text);
-  font-size: 0.875rem;
-  overflow-wrap: anywhere;
 }
 
 .page-card__empty {

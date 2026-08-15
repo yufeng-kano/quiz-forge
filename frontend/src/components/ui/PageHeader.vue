@@ -1,0 +1,86 @@
+<script setup lang="ts">
+/**
+ * Header bar of a page: title (with optional secondary line) on the left, the
+ * page's primary actions on the right.
+ *
+ * Every view renders exactly one of these as its first element, so the shell
+ * has the same anchor line on every route. It sticks to the top of the content
+ * region, which is what keeps the main action reachable while a long table or
+ * a long document is scrolled.
+ */
+defineProps<{
+  /** Localised page title. */
+  title: string
+  /** Short line under the title: a count, an id, a one-sentence description. */
+  subtitle?: string
+}>()
+</script>
+
+<template>
+  <header class="page-header-bar">
+    <div class="page-header-bar__titles">
+      <h1 class="page-header-bar__title">{{ title }}</h1>
+      <p v-if="subtitle !== undefined" class="page-header-bar__subtitle">{{ subtitle }}</p>
+      <div v-if="$slots.meta" class="page-header-bar__meta">
+        <slot name="meta" />
+      </div>
+    </div>
+
+    <div v-if="$slots.actions" class="page-header-bar__actions">
+      <slot name="actions" />
+    </div>
+  </header>
+</template>
+
+<style scoped>
+.page-header-bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-page-header);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  min-height: var(--page-header-height);
+  margin: 0 calc(-1 * var(--content-padding-x));
+  padding: var(--space-4) var(--content-padding-x);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background);
+}
+
+.page-header-bar__titles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.page-header-bar__title {
+  font-size: var(--font-size-xl);
+  overflow-wrap: anywhere;
+}
+
+.page-header-bar__subtitle {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+  max-width: var(--reading-max-width);
+}
+
+.page-header-bar__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+}
+
+.page-header-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+</style>

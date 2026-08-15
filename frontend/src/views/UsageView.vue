@@ -5,6 +5,7 @@ import { getUsage, type UsageSummary } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import UsageTable from '@/components/usage/UsageTable.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
 import { formatCount } from '@/i18n/number'
@@ -74,11 +75,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="page">
-    <header class="page-header">
-      <h2 class="page-title">{{ t('pages.usage.title') }}</h2>
-      <p class="page-description">{{ t('pages.usage.description') }}</p>
-    </header>
+  <div class="page">
+    <PageHeader :title="t('pages.usage.title')" :subtitle="t('pages.usage.description')" />
 
     <div class="usage__actions">
       <AppButton variant="secondary" :disabled="loading" @click="load">
@@ -116,7 +114,7 @@ onMounted(() => {
       :title="t('usage.emptyTitle')"
       :description="t('usage.emptyDescription')"
     />
-  </section>
+  </div>
 </template>
 
 <style scoped>

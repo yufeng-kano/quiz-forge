@@ -13,6 +13,7 @@ import AppButton from '@/components/AppButton.vue'
 import CategoryScopePicker from '@/components/generate/CategoryScopePicker.vue'
 import DocumentScopePicker from '@/components/generate/DocumentScopePicker.vue'
 import GenerationJobRow from '@/components/generate/GenerationJobRow.vue'
+import PageHeader from '@/components/ui/PageHeader.vue'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
 import {
@@ -92,11 +93,8 @@ async function onSubmit(): Promise<void> {
 </script>
 
 <template>
-  <section class="page">
-    <header class="page-header">
-      <h2 class="page-title">{{ t('pages.generate.title') }}</h2>
-      <p class="page-description">{{ t('pages.generate.description') }}</p>
-    </header>
+  <div class="page">
+    <PageHeader :title="t('pages.generate.title')" :subtitle="t('pages.generate.description')" />
 
     <form class="generate-form" @submit.prevent="onSubmit">
       <h3 class="generate-form__title">{{ t('generate.form.scopeTitle') }}</h3>
@@ -165,7 +163,7 @@ async function onSubmit(): Promise<void> {
         </li>
       </ul>
     </section>
-  </section>
+  </div>
 </template>
 
 <style scoped>

@@ -25,7 +25,10 @@
 - 匯出頁：消費 `exportSelection`（顯示已選題、單筆移除）、紙張選擇（尺寸常數鏡射自 `backend/export/paper.py`，JIS B）、job 進度、歷史紀錄與題目卷/答案卷下載（純 `<a>` 連結、由後端 Content-Disposition 決定檔名）；job 失敗保留選取並顯示違規 id。
 - 用量頁：總計卡片 + 依 model/依用途兩表，purpose 未知值顯示原字串不隱藏。
 - 七頁全部實作完成；尚未加 vitest（純函式模組 `usage/rows.ts` 等暫無單元測試，屬待補項目）。
-- 導覽列 6 項（`/documents/:id` 無獨立入口，由文件列表進入，active 狀態仍標在文件列表）。
+- 佈局：側邊欄導覽（8 項：總覽/文件/出題/審題/題庫/匯出/任務/用量，inline SVG icon，窄幅自動縮為 icon-only）＋每頁 `PageHeader`（標題左、動作右）＋全寬內容區。
+- 設計系統 `src/components/ui/`：`DataTable`（泛型欄位定義、排序、sticky header、skeleton/empty）、`AppModal`/`ConfirmDialog`（`useConfirm` promise 式）、`ToastHost`＋toasts store、`AppSkeleton`、`StatCard`、`AppIcon`。
+- Dashboard（`/`）吃 `GET /v1/stats`；任務中心（`/jobs`）吃 `GET /v1/jobs`，僅在有進行中 job 時輪詢。
+- 文件列表改 DataTable＋拖放上傳；詳情改雙欄（左 sticky 頁面導覽、右內容），header 提供重試解析/重新分段（rechunk，ConfirmDialog 註明會花 LLM 費用）/刪除。
 - 尚無前端單元測試（scaffold 未含 vitest）；功能頁落地時再補 vitest。
 
 ## 頁面清單

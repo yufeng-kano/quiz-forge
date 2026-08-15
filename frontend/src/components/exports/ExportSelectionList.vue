@@ -47,7 +47,7 @@ async function load(options: { silent?: boolean } = {}): Promise<void> {
     loading.value = true
   }
   try {
-    approved.value = await listQuestions({ status: 'approved' })
+    approved.value = (await listQuestions({ status: 'approved' })).items
     loaded.value = true
     loadError.value = null
   } catch (error) {

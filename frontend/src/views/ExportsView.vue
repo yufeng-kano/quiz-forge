@@ -10,6 +10,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import ExportHistoryRow from '@/components/exports/ExportHistoryRow.vue'
 import ExportSelectionList from '@/components/exports/ExportSelectionList.vue'
 import { useJobPolling } from '@/composables/useJobPolling'
+import PageHeader from '@/components/ui/PageHeader.vue'
 import { useAppI18n } from '@/i18n'
 import { formatDateTime } from '@/i18n/datetime'
 import { translateApiError } from '@/i18n/errors'
@@ -83,11 +84,8 @@ async function onSubmit(): Promise<void> {
 </script>
 
 <template>
-  <section class="page">
-    <header class="page-header">
-      <h2 class="page-title">{{ t('pages.exports.title') }}</h2>
-      <p class="page-description">{{ t('pages.exports.description') }}</p>
-    </header>
+  <div class="page">
+    <PageHeader :title="t('pages.exports.title')" :subtitle="t('pages.exports.description')" />
 
     <ExportSelectionList v-if="selection.count > 0" />
 
@@ -188,7 +186,7 @@ async function onSubmit(): Promise<void> {
         :description="t('exports.history.emptyDescription')"
       />
     </section>
-  </section>
+  </div>
 </template>
 
 <style scoped>
