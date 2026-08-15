@@ -5,7 +5,7 @@
 | 來源 | 處理方式 |
 |---|---|
 | 上傳檔案（PDF、圖片、Word） | PDF/圖片走 vision 管線；Word 用 `python-docx`/`mammoth` 直接抽文字 |
-| 網址（網頁） | `trafilatura` 本地抽正文轉 Markdown（免費），再用 `TEXT_MODEL` 產摘要 |
+| 網址（網頁） | `trafilatura` 本地抽正文轉 Markdown（免費），再用 `TEXT_MODEL` 產摘要與標題 |
 | 網址（檔案） | 依 content-type／副檔名判斷指向 PDF/Word/圖片時，下載檔案後進上傳檔案同一條管線；下載大小上限由 `URL_FETCH_MAX_BYTES` 設定 |
 
 原始檔一律保留在 `DATA_DIR` 下，`documents.raw_file_path` 記錄位置。
@@ -40,6 +40,13 @@
 
 - 摘要（`TEXT_MODEL` 產生）只用於**分類與列表顯示**。
 - **出題一律用全文**，不得用摘要出題（摘要會丟失細節）。
+- 摘要呼叫同時產出**文件標題**（同一次 `TEXT_MODEL` 呼叫、json_schema `{title, summary}`，不多花一次呼叫）：以內文為準生成簡潔標題並覆寫 `documents.title`，取代網址／trafilatura metadata 的難讀標題。LLM 標題失敗時保留原 fallback 鏈（metadata → URL 片段 → hostname）。
+
+## 文件管理
+
+- 改名：`PATCH /api/v1/documents/{id}`（body `{title}`），任何來源類型皆可改。
+- 資料夾：平面結構（見 `data-model.md`）。`GET/POST /api/v1/folders`、`PATCH /api/v1/folders/{id}`（改名）、`DELETE /api/v1/folders/{id}`（文件自動變未分類）；移動文件用 `PATCH /api/v1/documents/{id}`（body `{folder_id}`，`null` 為未分類）。
+- 資料夾與 LLM 知識分類（`categories`）無關：前者是使用者手動整理文件庫，後者供出題範圍與題庫篩選。
 
 ## Chunk 與分類
 

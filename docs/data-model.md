@@ -3,8 +3,9 @@
 Schema 由 `backend/` 內的 Alembic migration 管理。以下為邏輯定義，實作時以 migration 為準並回頭更新本文件。
 
 ```
+folders     id, name, created_at                   -- 平面資料夾（不巢狀）
 documents   id, source_type(upload/url), title, status, raw_file_path,
-            source_url, summary, created_at
+            source_url, summary, folder_id(nullable), created_at
 pages       id, document_id, page_no, markdown, image_path, status
 assets      id, page_id, bbox, file_path, caption
 chunks      id, document_id, content, category_id, tags[],
@@ -36,3 +37,4 @@ llm_usage   id, model, purpose, prompt_tokens, completion_tokens, created_at
 - **`source_chunk_ids` 保留出題溯源**：每題可回查生成來源，審題時可對照原文。
 - **`llm_usage` 支撐用量頁面**：使用者自付 API 費，累計 token 是必要的透明度。
 - **pgvector 維度綁 `EMBEDDING_DIM`**：更換 embedding model 屬重大變更（re-embed + migration），必須先告知使用者。
+- **`folders` 為平面結構**：單人系統文件量小，不做巢狀資料夾；`documents.folder_id` nullable FK（`ON DELETE SET NULL`，刪資料夾文件自動變未分類，不擋刪除）。資料夾只影響文件庫瀏覽，與 `categories`（LLM 知識分類，供出題範圍）互不相干。

@@ -22,7 +22,7 @@
 - 出題頁：範圍選擇為兩個獨立 picker widget——「選擇文件」「選擇分類」按鈕開 Modal（搜尋框＋有界捲動清單；文件顯示標題/來源/頁數且僅 ready 可選；分類為科目分組樹、勾科目展開為主題 id），已選項目以可移除 chips 呈現（單行 ellipsis、過多折疊「+N」）。**題型×數量組合列**（可增減列、同題型不重複、合計題數與預估 LLM 呼叫數顯示）、難度、job 進度與本 session 歷史（右欄有界捲動）。
 - 題庫頁：debounce 搜尋（`q`）＋篩選（題型/難度/科目/主題）＋真分頁（`AppPagination`，頁量對齊後端 default limit）；「新增題目」modal 重用六題型編輯器（`QuestionPayloadFields`）、可存草稿；每題可「複製」成草稿改造；「管理分類」modal 支援改名/刪除（409 原因直出）。勾選存 `exportSelection` Pinia store 跨頁保留，供匯出頁消費。
 - 審題頁：伺服器端篩選與分頁、批次採用/丟棄（ConfirmDialog、逐題進度、單題失敗不中斷、總結 toast）。
-- 匯出頁：必填考卷標題、僅對選取中存在的題型顯示配分輸入；歷史為可排序 DataTable。
+- 匯出頁：必填考卷標題；配分改為獨立「配分設定」widget——按鈕開 Modal（每題型預設配分＋逐題覆寫清單（有界捲動）＋即時合計總分＋「依目標總分平均分配」輔助鈕，餘數配給前面題目），頁面本體只顯示合計摘要一行，不隨題數拉長。表頭欄位勾選群（班級／座號／姓名／總分欄）。紙張、表頭勾選、每題型預設配分等偏好經 Pinia store 持久化到 localStorage，重開瀏覽器記住；題目選取（exportSelection）維持 session 內。歷史為可排序 DataTable。
 - 用量頁：總計 StatCard ＋ 兩張可排序 DataTable。
 - 難度字彙統一「簡單/中等/困難」（與後端分類 prompt 同組值，見 `src/questions/labels.ts`）。
 - 匯出頁：消費 `exportSelection`（顯示已選題、單筆移除）、紙張選擇（尺寸常數鏡射自 `backend/export/paper.py`，JIS B）、job 進度、歷史紀錄與題目卷/答案卷下載（純 `<a>` 連結、由後端 Content-Disposition 決定檔名）；job 失敗保留選取並顯示違規 id。
@@ -31,7 +31,7 @@
 - 佈局：側邊欄導覽（8 項：總覽/文件/出題/審題/題庫/匯出/任務/用量，inline SVG icon，窄幅自動縮為 icon-only）＋每頁 `PageHeader`（標題左、動作右）＋全寬內容區。
 - 設計系統 `src/components/ui/`：`DataTable`（泛型欄位定義、排序、sticky header、skeleton/empty）、`AppModal`/`ConfirmDialog`（`useConfirm` promise 式）、`ToastHost`＋toasts store、`AppSkeleton`、`StatCard`、`AppIcon`、`AppTabs`（底線式 tab，ARIA tabs pattern、隱藏面板不掛載內容故不觸發輪詢）。
 - Dashboard（`/`）吃 `GET /v1/stats`；任務中心（`/jobs`）吃 `GET /v1/jobs`，僅在有進行中 job 時輪詢。
-- 文件區為兩 tab：「上傳」（拖放上傳、網址匯入、進行中/失敗文件的有界清單）與「文件庫」（預設；DataTable 含標題搜尋與欄位排序）。tab 記在路由 query（`?tab=upload`，預設不帶）；上傳/匯入完成自動切回「上傳」tab。詳情改雙欄（左 sticky 頁面導覽、右內容），header 提供重試解析/重新分段（rechunk，ConfirmDialog 註明會花 LLM 費用）/刪除。
+- 文件區為兩 tab：「上傳」（拖放上傳、網址匯入、進行中/失敗文件的有界清單）與「文件庫」（預設；DataTable 含標題搜尋與欄位排序）。文件庫左側資料夾欄：「全部／未分類／各資料夾」篩選、資料夾新增/改名/刪除（刪除即文件變未分類）；文件列可拖放到資料夾欄項目（HTML5 drag & drop，拖曳中目標高亮）；文件改名於列內動作與詳情頁 header 提供（inline 編輯，PATCH title）。tab 記在路由 query（`?tab=upload`，預設不帶）；上傳/匯入完成自動切回「上傳」tab。詳情改雙欄（左 sticky 頁面導覽、右內容），header 提供重試解析/重新分段（rechunk，ConfirmDialog 註明會花 LLM 費用）/刪除。
 - 尚無前端單元測試（scaffold 未含 vitest）；功能頁落地時再補 vitest。
 
 ## 頁面清單
@@ -39,7 +39,7 @@
 | 路由 | 頁面 | 說明 |
 |---|---|---|
 | `/` | Dashboard | 總覽：文件/題目各狀態計數、待審 CTA、最近任務、累計 token |
-| `/documents` | 文件區 | 兩個 tab：「上傳」（拖放上傳、網址匯入、進行中的解析任務）與「文件庫」（list 模式 DataTable，含搜尋與排序） |
+| `/documents` | 文件區 | 兩個 tab：「上傳」（拖放上傳、網址匯入、進行中的解析任務）與「文件庫」（list 模式 DataTable，含搜尋與排序；左側資料夾欄，文件列可拖放入資料夾；文件可改名） |
 | `/documents/:id` | 文件詳情 | 逐頁渲染 Markdown（含裁切圖表）、chunk 與分類結果、失敗頁重試、重新 chunk |
 | `/jobs` | 任務中心 | 全域 job 列表（篩狀態/種類）、失敗重試 |
 | `/review` | 審題 | `draft` 題目列表，對照來源 chunk 原文，可編輯後採用／丟棄 |

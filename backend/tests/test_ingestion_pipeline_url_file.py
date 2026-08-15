@@ -198,8 +198,65 @@ def _fake_llm_handler(dim: int) -> Callable[[httpx2.Request], httpx2.Response]:
             return _embeddings_response(model=body["model"], dim=dim)
 
         schema_name = body["response_format"]["json_schema"]["name"]
-        if schema_name == "SummaryResult":
-            content: dict[str, object] = {"summary": "光合作用摘要"}
+        if schema_name == "TitleAndSummaryResult":
+            content: dict[str, object] = {"title": "光合作用完整教學", "summary": "光合作用摘要"}
+        elif schema_name == "ChunkClassification":
+            content = {
+                "subject": "生物",
+                "topic": "光合作用",
+                "difficulty": "中等",
+                "tags": ["葉綠體"],
+            }
+        else:
+            raise AssertionError(f"unexpected response_format schema: {schema_name!r}")
+        return _chat_completion_response(model=body["model"], content=content)
+
+    return handler
+
+
+def _fake_llm_handler_blank_title(dim: int) -> Callable[[httpx2.Request], httpx2.Response]:
+    """Same as `_fake_llm_handler`, except the title+summary call succeeds
+    but comes back with a whitespace-only title -- exercises the "title
+    comes back empty/whitespace" fallback branch, distinct from an outright
+    call failure."""
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=dim)
+
+        schema_name = body["response_format"]["json_schema"]["name"]
+        if schema_name == "TitleAndSummaryResult":
+            content: dict[str, object] = {"title": "   ", "summary": "光合作用摘要"}
+        elif schema_name == "ChunkClassification":
+            content = {
+                "subject": "生物",
+                "topic": "光合作用",
+                "difficulty": "中等",
+                "tags": ["葉綠體"],
+            }
+        else:
+            raise AssertionError(f"unexpected response_format schema: {schema_name!r}")
+        return _chat_completion_response(model=body["model"], content=content)
+
+    return handler
+
+
+def _fake_llm_handler_title_failure(dim: int) -> Callable[[httpx2.Request], httpx2.Response]:
+    """Same as `_fake_llm_handler`, except the title+summary call itself
+    fails schema validation (missing the required `summary` field) --
+    exercises the "call fails outright" fallback branch: `LLMClient.chat`
+    raises `LLMResponseError`, which the pipeline must catch instead of
+    failing the whole ingestion job."""
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=dim)
+
+        schema_name = body["response_format"]["json_schema"]["name"]
+        if schema_name == "TitleAndSummaryResult":
+            content: dict[str, object] = {"title": "光合作用"}  # missing required "summary"
         elif schema_name == "ChunkClassification":
             content = {
                 "subject": "生物",
@@ -374,14 +431,14 @@ async def test_url_document_unsupported_content_type_fails_job_with_clear_messag
         assert document.raw_file_path is None
 
 
-async def test_url_document_webpage_case_is_unchanged(
+async def test_url_document_webpage_title_and_summary_come_from_llm(
     local_server: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """docs/ingestion.md 網址（網頁）— an HTML page must still go through
-    trafilatura + summary exactly as before this feature, never the file
-    download path. `document.title` picks up the page's real `<title>` (via
-    trafilatura metadata) instead of staying the raw URL string — the fix
-    for the bug where it always stayed the raw, often percent-encoded URL."""
+    """docs/ingestion.md 網址（網頁）— an HTML page still goes through
+    trafilatura, then one combined `TEXT_MODEL` call producing BOTH
+    `documents.title` and `documents.summary` (docs/ingestion.md 網頁線的摘
+    要用途界定). The LLM title overwrites the URL/metadata-derived fallback
+    outright — it is not merely used when metadata has no `<title>`."""
     url = f"{local_server}/article.html"
     document_id = await _make_url_document(url)
 
@@ -398,7 +455,9 @@ async def test_url_document_webpage_case_is_unchanged(
         assert document.status == "ready"
         assert document.raw_file_path is None  # no file was ever downloaded
         assert document.summary == "光合作用摘要"
-        assert document.title == "光合作用"  # from the page's real <title>, not the raw URL
+        # From the LLM call, not the page's real <title> ("光合作用") nor the
+        # raw URL -- the LLM title overwrites the metadata-derived fallback.
+        assert document.title == "光合作用完整教學"
 
         page_rows = (
             (await session.execute(select(Page).where(Page.document_id == document_id)))
@@ -409,18 +468,20 @@ async def test_url_document_webpage_case_is_unchanged(
         assert "光合作用" in (page_rows[0].markdown or "")
 
 
-async def test_url_document_webpage_without_title_falls_back_to_decoded_url_path_segment(
+async def test_url_document_webpage_llm_call_failure_falls_back_to_derived_title(
     local_server: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No `<title>`/metadata on the page at all -- `derive_webpage_title`'s
-    URL-path-segment fallback kicks in, and the percent-encoded Chinese slug
-    in the URL must come out decoded, not as raw `%E7%B4...` gibberish (the
-    exact production bug this task fixes)."""
+    """docs/ingestion.md — a broken title+summary call (schema validation
+    failure here, via a response missing the required `summary` field) must
+    not fail the whole ingestion job: the document still reaches `ready`
+    with its page/chunks, falling back to the URL-path-segment-derived title
+    (`derive_webpage_title`, decoding the percent-encoded Chinese slug) and
+    no summary."""
     url = f"{local_server}/posts/%E7%B4%B0%E8%83%9E%E5%91%BC%E5%90%B8%E4%BD%9C%E7%94%A8"
     document_id = await _make_url_document(url)
 
     dim = Settings().embedding_dim
-    fake_client = _fake_llm_client(_fake_llm_handler(dim))
+    fake_client = _fake_llm_client(_fake_llm_handler_title_failure(dim))
     monkeypatch.setattr(pipeline_module, "get_llm_client", lambda: fake_client)
 
     job = await _run_parse_document_job(document_id)
@@ -429,4 +490,31 @@ async def test_url_document_webpage_without_title_falls_back_to_decoded_url_path
     async with AsyncSessionLocal() as session:
         document = await session.get(Document, document_id)
         assert document is not None
-        assert document.title == "細胞呼吸作用"
+        assert document.status == "ready"
+        assert document.title == "細胞呼吸作用"  # URL-path-segment fallback, not the LLM
+        assert document.summary is None  # the failed call never set it
+
+
+async def test_url_document_webpage_blank_llm_title_falls_back_to_derived_title(
+    local_server: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The title+summary call succeeds but the title comes back
+    whitespace-only -- title falls back to the URL-derived one, but the
+    summary (which did come back fine) is still saved (docs/ingestion.md —
+    only the title half degrades, not the whole call's result)."""
+    url = f"{local_server}/posts/%E7%B4%B0%E8%83%9E%E5%91%BC%E5%90%B8%E4%BD%9C%E7%94%A8"
+    document_id = await _make_url_document(url)
+
+    dim = Settings().embedding_dim
+    fake_client = _fake_llm_client(_fake_llm_handler_blank_title(dim))
+    monkeypatch.setattr(pipeline_module, "get_llm_client", lambda: fake_client)
+
+    job = await _run_parse_document_job(document_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        document = await session.get(Document, document_id)
+        assert document is not None
+        assert document.status == "ready"
+        assert document.title == "細胞呼吸作用"  # URL-path-segment fallback, not blank
+        assert document.summary == "光合作用摘要"  # summary half still saved

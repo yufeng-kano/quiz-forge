@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
+from backend.core.config import get_settings
 from backend.schemas.job import JobSummaryOut
 
 
@@ -60,6 +61,7 @@ class DocumentListItemOut(BaseModel):
     title: str
     status: str
     source_url: str | None
+    folder_id: int | None
     created_at: datetime
     page_count: int
     # The most recent `parse_document` job for this document, if any —
@@ -75,6 +77,7 @@ class DocumentDetailOut(BaseModel):
     status: str
     source_url: str | None
     summary: str | None
+    folder_id: int | None
     created_at: datetime
     pages: list[PageOut]
     chunks: list[ChunkOut]
@@ -89,3 +92,35 @@ class DocumentUploadOut(BaseModel):
 class UrlUploadIn(BaseModel):
     url: HttpUrl
     title: str | None = None
+
+
+class DocumentPatchIn(BaseModel):
+    """`PATCH /v1/documents/{id}` body (docs/ingestion.md 文件管理) — a
+    partial update: any subset of `title`/`folder_id` may be given.
+
+    `folder_id` is legitimately nullable (`null` means "move to unfiled"), so
+    "field omitted" vs. "field explicitly null" has to be told apart via
+    `model_fields_set` at the call site — the field's own default can't
+    carry that distinction. `title` has no such nullable meaning (the DB
+    column is `NOT NULL`), so an explicit `null` for it is rejected by the
+    validator below outright; the validator never runs for an *omitted*
+    title at all (pydantic skips validating the field's own default unless
+    `validate_default=True`, which this model does not set), so it only ever
+    sees a value the client actually sent.
+    """
+
+    title: str | None = None
+    folder_id: int | None = None
+
+    @field_validator("title")
+    @classmethod
+    def _title_valid(cls, value: str | None) -> str | None:
+        if value is None:
+            raise ValueError("title must not be null")
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("title must not be blank")
+        max_length = get_settings().webpage_title_max_length
+        if len(stripped) > max_length:
+            raise ValueError(f"title must be at most {max_length} characters")
+        return stripped

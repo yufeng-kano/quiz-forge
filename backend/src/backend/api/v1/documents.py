@@ -10,7 +10,7 @@ actual parsing happens in the background worker
 import asyncio
 import shutil
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +21,7 @@ from backend.ingestion.category_gc import gc_unused_categories
 from backend.ingestion.kind import UnsupportedUploadError, detect_upload_kind
 from backend.models.chunk import Chunk
 from backend.models.document import Document
+from backend.models.folder import Folder
 from backend.models.job import Job
 from backend.models.page import Page
 from backend.schemas.document import (
@@ -28,6 +29,7 @@ from backend.schemas.document import (
     ChunkOut,
     DocumentDetailOut,
     DocumentListItemOut,
+    DocumentPatchIn,
     DocumentUploadOut,
     PageOut,
     RechunkOut,
@@ -53,6 +55,7 @@ def _to_list_item(
         title=document.title,
         status=document.status,
         source_url=document.source_url,
+        folder_id=document.folder_id,
         created_at=document.created_at,
         page_count=page_count,
         latest_job=_job_summary(latest_job),
@@ -165,13 +168,36 @@ async def create_url_document(
 
 @router.get("", response_model=list[DocumentListItemOut])
 async def list_documents(
+    folder_id: int
+    | None = Query(
+        None,
+        description=(
+            "Filter to documents in this folder. Mutually exclusive with `unfiled`; "
+            "omit both to list every document regardless of folder."
+        ),
+    ),
+    unfiled: bool = Query(
+        False,
+        description=(
+            "Filter to documents with no folder (`folder_id IS NULL`). "
+            "Mutually exclusive with `folder_id`."
+        ),
+    ),
     session: AsyncSession = Depends(get_session),
 ) -> list[DocumentListItemOut]:
-    documents = (
-        (await session.execute(select(Document).order_by(Document.created_at.desc())))
-        .scalars()
-        .all()
-    )
+    if folder_id is not None and unfiled:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="folder_id and unfiled are mutually exclusive",
+        )
+
+    stmt = select(Document).order_by(Document.created_at.desc())
+    if unfiled:
+        stmt = stmt.where(Document.folder_id.is_(None))
+    elif folder_id is not None:
+        stmt = stmt.where(Document.folder_id == folder_id)
+
+    documents = (await session.execute(stmt)).scalars().all()
     count_rows = await session.execute(
         select(Page.document_id, func.count()).group_by(Page.document_id)
     )
@@ -187,20 +213,23 @@ async def list_documents(
     ]
 
 
-@router.get("/{document_id}", response_model=DocumentDetailOut)
-async def get_document(
-    document_id: int, session: AsyncSession = Depends(get_session)
-) -> DocumentDetailOut:
+async def _get_document_or_404(document_id: int, session: AsyncSession) -> Document:
     document = await session.get(Document, document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+    return document
 
-    latest_job = (await _latest_parse_document_jobs_map(session, [document_id])).get(document_id)
+
+async def _document_detail(session: AsyncSession, document: Document) -> DocumentDetailOut:
+    """Builds the full `DocumentDetailOut` payload for `document` — shared by
+    `GET /v1/documents/{id}` and `PATCH /v1/documents/{id}` so both return
+    exactly the same shape (docs/ingestion.md 文件管理)."""
+    latest_job = (await _latest_parse_document_jobs_map(session, [document.id])).get(document.id)
 
     pages = (
         (
             await session.execute(
-                select(Page).where(Page.document_id == document_id).order_by(Page.page_no)
+                select(Page).where(Page.document_id == document.id).order_by(Page.page_no)
             )
         )
         .scalars()
@@ -209,7 +238,7 @@ async def get_document(
     chunks = (
         (
             await session.execute(
-                select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.id)
+                select(Chunk).where(Chunk.document_id == document.id).order_by(Chunk.id)
             )
         )
         .scalars()
@@ -223,11 +252,53 @@ async def get_document(
         status=document.status,
         source_url=document.source_url,
         summary=document.summary,
+        folder_id=document.folder_id,
         created_at=document.created_at,
         pages=[PageOut.model_validate(page) for page in pages],
         chunks=[_to_chunk_out(chunk) for chunk in chunks],
         latest_job=_job_summary(latest_job),
     )
+
+
+@router.get("/{document_id}", response_model=DocumentDetailOut)
+async def get_document(
+    document_id: int, session: AsyncSession = Depends(get_session)
+) -> DocumentDetailOut:
+    document = await _get_document_or_404(document_id, session)
+    return await _document_detail(session, document)
+
+
+@router.patch("/{document_id}", response_model=DocumentDetailOut)
+async def patch_document(
+    document_id: int,
+    body: DocumentPatchIn,
+    session: AsyncSession = Depends(get_session),
+) -> DocumentDetailOut:
+    """Partial update: rename and/or move to a folder (docs/ingestion.md 文
+    件管理). Only fields actually present in the request body are touched —
+    `folder_id` is nullable (`null` unfiles the document), so
+    `model_fields_set` tells "omitted" and "explicitly null" apart. An
+    unknown `folder_id` is rejected with 404, the same convention this API
+    already uses for "referenced row doesn't exist" (see `document not
+    found` above, `category not found` in `/v1/categories`)."""
+    document = await _get_document_or_404(document_id, session)
+
+    fields_set = body.model_fields_set
+    if "title" in fields_set:
+        assert body.title is not None  # validator rejects an explicit null title
+        document.title = body.title
+    if "folder_id" in fields_set:
+        if body.folder_id is not None:
+            folder = await session.get(Folder, body.folder_id)
+            if folder is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="folder not found"
+                )
+        document.folder_id = body.folder_id
+
+    await session.commit()
+    await session.refresh(document)
+    return await _document_detail(session, document)
 
 
 @router.post(
@@ -239,9 +310,7 @@ async def rechunk_document(
     """Enqueue a `rechunk_document` job (docs/ingestion.md 補頁後...手動重
     建). 409 unless the document has at least one `ready` page — with none,
     there is no page markdown to chunk from at all."""
-    document = await session.get(Document, document_id)
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+    await _get_document_or_404(document_id, session)
 
     ready_page_count = (
         await session.execute(
@@ -269,9 +338,7 @@ async def delete_document(document_id: int, session: AsyncSession = Depends(get_
     category GC in the same transaction (docs/ingestion.md 文件刪除) and
     delete its stored files. Questions are untouched — see docs/ingestion.md
     文件刪除 for why `source_chunk_ids` is allowed to dangle."""
-    document = await session.get(Document, document_id)
-    if document is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+    document = await _get_document_or_404(document_id, session)
 
     settings = get_settings()
     await session.delete(document)

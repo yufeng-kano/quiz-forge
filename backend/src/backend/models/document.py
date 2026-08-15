@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.db.base import Base
@@ -21,6 +21,12 @@ class Document(Base):
     raw_file_path: Mapped[str | None] = mapped_column(String(1024))
     source_url: Mapped[str | None] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text)
+    # Flat, user-managed folder (docs/data-model.md 設計決定) — nullable,
+    # `ON DELETE SET NULL` so deleting a folder unfiles its documents instead
+    # of blocking the delete or cascading into document rows.
+    folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("folders.id", ondelete="SET NULL"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

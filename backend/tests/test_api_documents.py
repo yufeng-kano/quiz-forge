@@ -20,6 +20,7 @@ from backend.db.session import AsyncSessionLocal
 from backend.models.asset import Asset
 from backend.models.category import Category
 from backend.models.document import Document
+from backend.models.folder import Folder
 from backend.models.job import Job
 from backend.models.page import Page
 
@@ -116,6 +117,58 @@ async def test_list_documents_reports_status_and_page_counts(client: TestClient)
     assert items[document.id]["status"] == "ready"
     assert items[document.id]["page_count"] == 2
     assert items[document.id]["latest_job"] is None
+    assert items[document.id]["folder_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/documents -- folder_id / unfiled filter (docs/ingestion.md 文件管理)
+# ---------------------------------------------------------------------------
+
+
+async def _make_folder(name: str) -> int:
+    async with AsyncSessionLocal() as session:
+        folder = Folder(name=name)
+        session.add(folder)
+        await session.commit()
+        await session.refresh(folder)
+        return folder.id
+
+
+async def test_list_documents_filters_by_folder_id(client: TestClient) -> None:
+    folder_id = await _make_folder("教材")
+    async with AsyncSessionLocal() as session:
+        filed = Document(source_type="upload", title="filed", status="ready", folder_id=folder_id)
+        unfiled = Document(source_type="upload", title="unfiled", status="ready")
+        session.add_all([filed, unfiled])
+        await session.commit()
+        await session.refresh(filed)
+        await session.refresh(unfiled)
+
+    response = client.get("/v1/documents", params={"folder_id": folder_id})
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()}
+    assert ids == {filed.id}
+
+
+async def test_list_documents_filters_unfiled(client: TestClient) -> None:
+    folder_id = await _make_folder("教材")
+    async with AsyncSessionLocal() as session:
+        filed = Document(source_type="upload", title="filed", status="ready", folder_id=folder_id)
+        unfiled = Document(source_type="upload", title="unfiled", status="ready")
+        session.add_all([filed, unfiled])
+        await session.commit()
+        await session.refresh(filed)
+        await session.refresh(unfiled)
+
+    response = client.get("/v1/documents", params={"unfiled": "true"})
+    assert response.status_code == 200
+    ids = {item["id"] for item in response.json()}
+    assert ids == {unfiled.id}
+
+
+def test_list_documents_rejects_folder_id_and_unfiled_together(client: TestClient) -> None:
+    response = client.get("/v1/documents", params={"folder_id": 1, "unfiled": "true"})
+    assert response.status_code == 422
 
 
 async def test_list_and_detail_expose_latest_parse_document_job(client: TestClient) -> None:
@@ -193,6 +246,7 @@ async def test_get_document_detail_includes_pages_and_chunks(client: TestClient)
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == document.id
+    assert body["folder_id"] is None
     assert len(body["pages"]) == 1
     assert body["pages"][0]["markdown"] == "# 標題\n內容"
     assert len(body["chunks"]) == 1
@@ -205,6 +259,144 @@ async def test_get_document_detail_includes_pages_and_chunks(client: TestClient)
 def test_get_document_404_for_missing_document(client: TestClient) -> None:
     response = client.get("/v1/documents/999999999")
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PATCH /v1/documents/{id} -- rename / move to a folder (docs/ingestion.md 文件管理)
+# ---------------------------------------------------------------------------
+
+
+async def _make_document(title: str = "doc", folder_id: int | None = None) -> int:
+    async with AsyncSessionLocal() as session:
+        document = Document(
+            source_type="upload", title=title, status="ready", folder_id=folder_id
+        )
+        session.add(document)
+        await session.commit()
+        await session.refresh(document)
+        return document.id
+
+
+async def test_patch_document_renames_and_returns_document_detail_shape(
+    client: TestClient,
+) -> None:
+    document_id = await _make_document("舊標題")
+
+    response = client.patch(f"/v1/documents/{document_id}", json={"title": "新標題"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "新標題"
+    # Same shape GET /v1/documents/{id} returns.
+    assert set(body.keys()) == {
+        "id",
+        "source_type",
+        "title",
+        "status",
+        "source_url",
+        "summary",
+        "folder_id",
+        "created_at",
+        "pages",
+        "chunks",
+        "latest_job",
+    }
+
+    async with AsyncSessionLocal() as session:
+        document = await session.get(Document, document_id)
+        assert document is not None
+        assert document.title == "新標題"
+
+
+async def test_patch_document_strips_whitespace_from_title(client: TestClient) -> None:
+    document_id = await _make_document("舊標題")
+
+    response = client.patch(f"/v1/documents/{document_id}", json={"title": "  新標題  "})
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "新標題"
+
+
+async def test_patch_document_rejects_blank_title(client: TestClient) -> None:
+    document_id = await _make_document("舊標題")
+
+    response = client.patch(f"/v1/documents/{document_id}", json={"title": "   "})
+
+    assert response.status_code == 422
+    async with AsyncSessionLocal() as session:
+        document = await session.get(Document, document_id)
+        assert document is not None
+        assert document.title == "舊標題"  # untouched
+
+
+def test_patch_document_rejects_null_title(client: TestClient) -> None:
+    response = client.patch("/v1/documents/1", json={"title": None})
+    assert response.status_code == 422
+
+
+async def test_patch_document_rejects_title_over_max_length(client: TestClient) -> None:
+    document_id = await _make_document("舊標題")
+    settings = get_settings()
+
+    too_long_title = "A" * (settings.webpage_title_max_length + 1)
+    response = client.patch(f"/v1/documents/{document_id}", json={"title": too_long_title})
+
+    assert response.status_code == 422
+
+
+def test_patch_document_404_for_missing_document(client: TestClient) -> None:
+    response = client.patch("/v1/documents/999999999", json={"title": "新標題"})
+    assert response.status_code == 404
+
+
+async def test_patch_document_moves_to_folder(client: TestClient) -> None:
+    document_id = await _make_document("doc")
+    folder_id = await _make_folder("教材")
+
+    response = client.patch(f"/v1/documents/{document_id}", json={"folder_id": folder_id})
+
+    assert response.status_code == 200
+    assert response.json()["folder_id"] == folder_id
+    async with AsyncSessionLocal() as session:
+        document = await session.get(Document, document_id)
+        assert document is not None
+        assert document.folder_id == folder_id
+
+
+async def test_patch_document_unfiles_with_explicit_null_folder_id(client: TestClient) -> None:
+    folder_id = await _make_folder("教材")
+    document_id = await _make_document("doc", folder_id=folder_id)
+
+    response = client.patch(f"/v1/documents/{document_id}", json={"folder_id": None})
+
+    assert response.status_code == 200
+    assert response.json()["folder_id"] is None
+    async with AsyncSessionLocal() as session:
+        document = await session.get(Document, document_id)
+        assert document is not None
+        assert document.folder_id is None
+
+
+async def test_patch_document_omitted_folder_id_leaves_it_untouched(client: TestClient) -> None:
+    folder_id = await _make_folder("教材")
+    document_id = await _make_document("舊標題", folder_id=folder_id)
+
+    response = client.patch(f"/v1/documents/{document_id}", json={"title": "新標題"})
+
+    assert response.status_code == 200
+    assert response.json()["folder_id"] == folder_id
+
+
+async def test_patch_document_404_for_unknown_folder_id(client: TestClient) -> None:
+    document_id = await _make_document("doc")
+
+    response = client.patch(f"/v1/documents/{document_id}", json={"folder_id": 999999999})
+
+    assert response.status_code == 404
+    async with AsyncSessionLocal() as session:
+        document = await session.get(Document, document_id)
+        assert document is not None
+        assert document.folder_id is None  # untouched
 
 
 async def test_delete_document_removes_row_and_files(

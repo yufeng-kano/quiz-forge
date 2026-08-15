@@ -11,8 +11,10 @@ Resume semantics for `parse_document` (.rule 反偷懶規則 — 最小單位可
   then chunk+classify+embed.
 - If `pages` rows already exist (a previous run got at least that far — the
   page loop, once started, never stops partway: a per-page failure is caught
-  and recorded as that page's `status`, never raised out of the loop), page
-  parsing is NEVER re-run — only the chunk+classify+embed phase re-runs,
+  and recorded as that page's `status`, never raised out of the loop; a URL
+  webpage's page parsing includes its title+summary call, which degrades to
+  a fallback title on failure instead of raising), page parsing is NEVER
+  re-run — only the chunk+classify+embed phase re-runs,
   from scratch (any partial chunks a previous failed attempt inserted are
   deleted first, since the chunk split is deterministic from the now-fixed
   page markdown and re-running it whole is simpler and safer than resuming
@@ -52,7 +54,7 @@ from backend.ingestion.web import (
     derive_webpage_title,
     extract_main_content,
     fetch_html,
-    summarize_content,
+    generate_title_and_summary,
 )
 from backend.ingestion.word import extract_word_markdown
 from backend.jobs.context import JobContext
@@ -393,8 +395,8 @@ async def _process_url_webpage(
     document: Document, ctx: JobContext, llm: LLMClient, settings: Settings
 ) -> list[Page]:
     """docs/ingestion.md 網址（網頁）— trafilatura extracts the article body
-    locally, one `TEXT_MODEL` call produces the classification/list-only
-    summary."""
+    locally, one `TEXT_MODEL` call produces both the LLM-authored title and
+    the classification/list-only summary."""
     session = ctx.session
     assert document.source_url is not None  # checked by `_process_url_document`
 
@@ -405,8 +407,10 @@ async def _process_url_webpage(
     if document.title == document.source_url:
         # No custom title was given at creation (`POST /v1/documents/url`
         # falls back to the raw URL string when none is given) — derive a
-        # human-readable one instead of leaving the raw, often
-        # percent-encoded URL as the title.
+        # human-readable fallback right away. This is what stays in place if
+        # the LLM title call below fails outright; if it succeeds, it
+        # overwrites this (and any custom title given at creation — see the
+        # LLM title comment below).
         document.title = derive_webpage_title(
             document.source_url,
             metadata_title=metadata_title,
@@ -419,9 +423,26 @@ async def _process_url_webpage(
     await session.refresh(page)
     await ctx.set_progress("1/1 pages")
 
-    # docs/ingestion.md — this summary is ONLY for classification/list
-    # display; question generation must always use full chunk content.
-    document.summary = await summarize_content(llm, markdown)
+    # docs/ingestion.md 網頁線的摘要用途界定 — one TEXT_MODEL call produces
+    # both documents.summary (ONLY for classification/list display; question
+    # generation must always use full chunk content, never this) and the LLM
+    # title, which overwrites documents.title outright (replacing the
+    # fallback set above, and any title given at document creation — there
+    # is no user-set-title tracking, so a rerun re-applies the LLM title).
+    # A failure here (network/schema error, or an empty/whitespace title)
+    # must not fail the whole ingestion job: the document still gets its
+    # page/chunks, just keeps the fallback title set above and no summary.
+    try:
+        result = await generate_title_and_summary(llm, markdown)
+        llm_title = result.title.strip()
+        if llm_title:
+            document.title = llm_title[: settings.webpage_title_max_length]
+        document.summary = result.summary
+    except Exception:
+        logger.exception(
+            "title/summary generation failed for document %d; keeping fallback title",
+            document.id,
+        )
     await session.commit()
     return [page]
 

@@ -19,7 +19,9 @@
 
 ## API
 
-- `POST /api/v1/exports`（question_ids + paper_size，全部必須 `approved`，否則 job 失敗並列出違規 id）→ export job。
+- `POST /api/v1/exports`（question_ids + paper_size + 配分與表頭選項，全部必須 `approved`，否則 job 失敗並列出違規 id）→ export job。
+- 配分參數：每題型預設配分（既有）＋ `question_points`（`{question_id: 分數}`，逐題覆寫，優先於題型預設）。
+- 表頭選項 `header_fields`：`class`／`seat`／`name`／`score`（總分欄）四個布林，預設全開；控制卷首學生資訊列與總分顯示。
 - `GET /api/v1/exports` 歷次紀錄；`GET /api/v1/exports/{id}/questions.docx`、`.../answers.docx` 下載。
 - 檔案落在 `DATA_DIR/exports/{id}-questions.docx` 與 `{id}-answers.docx`。
 
@@ -31,8 +33,9 @@
 
 ## 卷面結構
 
-- 卷首：考卷標題（`exports.title`）、學生資訊列（班級／座號／姓名）；有配分時印總分。
-- 題目依題型分節（一、選擇題…固定順序），節內連續編號；設定配分的節標題印「每題 X 分」。
+- 卷首：考卷標題（`exports.title`）、學生資訊列（僅列 `header_fields` 勾選的欄位；全不勾則整列省略）；任一題有配分且 `score` 開啟時印總分（= 全卷配分合計）。
+- 題目依題型分節（一、選擇題…固定順序），節內連續編號。
+- 配分印法：節內每題分數一致時節標題印「每題 X 分」；不一致時各題題號後印「（X 分）」。有配分資料的題目不再印「配分：______分」手填欄；完全沒設配分維持現行手填欄行為。
 - 配分等其餘匯出參數存 job payload，不落 exports 資料欄。
 
 ## 待確認
