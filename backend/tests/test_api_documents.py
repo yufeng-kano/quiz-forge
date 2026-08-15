@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select, text
 
 from backend.core.config import get_settings
 from backend.db.session import AsyncSessionLocal
@@ -50,6 +51,11 @@ async def test_upload_pdf_creates_document_and_enqueues_job(
     assert body["document"]["status"] == "pending"
     assert body["document"]["page_count"] == 0
     assert isinstance(body["job_id"], int)
+    assert body["document"]["latest_job"] == {
+        "id": body["job_id"],
+        "status": "pending",
+        "error": None,
+    }
 
     async with AsyncSessionLocal() as session:
         document = await session.get(Document, body["document"]["id"])
@@ -108,6 +114,50 @@ async def test_list_documents_reports_status_and_page_counts(client: TestClient)
     items = {item["id"]: item for item in response.json()}
     assert items[document.id]["status"] == "ready"
     assert items[document.id]["page_count"] == 2
+    assert items[document.id]["latest_job"] is None
+
+
+async def test_list_and_detail_expose_latest_parse_document_job(client: TestClient) -> None:
+    async with AsyncSessionLocal() as session:
+        document = Document(source_type="upload", title="doc-g", status="failed")
+        session.add(document)
+        await session.commit()
+        await session.refresh(document)
+
+        # An older, already-superseded job for the same document, plus the
+        # current (failed) one -- the endpoint must surface the latter.
+        session.add(Job(kind="parse_document", payload={"document_id": document.id}, status="done"))
+        await session.commit()
+        stale_job = (await session.execute(select(Job))).scalars().first()
+        assert stale_job is not None
+        await session.execute(
+            text("UPDATE jobs SET created_at = created_at - interval '1 hour' WHERE id = :id"),
+            {"id": stale_job.id},
+        )
+        latest_job = Job(
+            kind="parse_document",
+            payload={"document_id": document.id},
+            status="failed",
+            error="vision call timed out",
+        )
+        session.add(latest_job)
+        await session.commit()
+        await session.refresh(latest_job)
+
+    list_response = client.get("/v1/documents")
+    list_item = next(item for item in list_response.json() if item["id"] == document.id)
+    assert list_item["latest_job"] == {
+        "id": latest_job.id,
+        "status": "failed",
+        "error": "vision call timed out",
+    }
+
+    detail_response = client.get(f"/v1/documents/{document.id}")
+    assert detail_response.json()["latest_job"] == {
+        "id": latest_job.id,
+        "status": "failed",
+        "error": "vision call timed out",
+    }
 
 
 async def test_get_document_detail_includes_pages_and_chunks(client: TestClient) -> None:

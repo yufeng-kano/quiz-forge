@@ -22,7 +22,7 @@ async def _clean_tables() -> None:
     async with AsyncSessionLocal() as session:
         await session.execute(
             text(
-                "TRUNCATE TABLE jobs, llm_usage, documents, categories "
+                "TRUNCATE TABLE jobs, llm_usage, documents, categories, questions "
                 "RESTART IDENTITY CASCADE"
             )
         )

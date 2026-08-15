@@ -31,11 +31,20 @@ from backend.schemas.document import (
     PageOut,
     UrlUploadIn,
 )
+from backend.schemas.job import JobSummaryOut
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-def _to_list_item(document: Document, page_count: int) -> DocumentListItemOut:
+def _job_summary(job: Job | None) -> JobSummaryOut | None:
+    if job is None:
+        return None
+    return JobSummaryOut(id=job.id, status=job.status, error=job.error)
+
+
+def _to_list_item(
+    document: Document, page_count: int, latest_job: Job | None = None
+) -> DocumentListItemOut:
     return DocumentListItemOut(
         id=document.id,
         source_type=document.source_type,
@@ -44,7 +53,36 @@ def _to_list_item(document: Document, page_count: int) -> DocumentListItemOut:
         source_url=document.source_url,
         created_at=document.created_at,
         page_count=page_count,
+        latest_job=_job_summary(latest_job),
     )
+
+
+async def _latest_parse_document_jobs_map(
+    session: AsyncSession, document_ids: list[int]
+) -> dict[int, Job]:
+    """The most recent `parse_document` job per document id, keyed by
+    `document_id` — one query for as many documents as `GET /v1/documents`
+    needs, so the list endpoint stays O(1) queries instead of N+1."""
+    if not document_ids:
+        return {}
+    rows = (
+        (
+            await session.execute(
+                select(Job)
+                .where(Job.kind == "parse_document")
+                .where(Job.payload["document_id"].as_integer().in_(document_ids))
+                .order_by(Job.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    latest: dict[int, Job] = {}
+    for job in rows:
+        raw_document_id = job.payload.get("document_id")
+        if isinstance(raw_document_id, int) and raw_document_id not in latest:
+            latest[raw_document_id] = job
+    return latest
 
 
 def _to_chunk_out(chunk: Chunk) -> ChunkOut:
@@ -95,7 +133,9 @@ async def upload_document(
 
     job = await _enqueue_parse_document(session, document.id)
 
-    return DocumentUploadOut(document=_to_list_item(document, page_count=0), job_id=job.id)
+    return DocumentUploadOut(
+        document=_to_list_item(document, page_count=0, latest_job=job), job_id=job.id
+    )
 
 
 @router.post("/url", response_model=DocumentUploadOut, status_code=status.HTTP_201_CREATED)
@@ -116,7 +156,9 @@ async def create_url_document(
 
     job = await _enqueue_parse_document(session, document.id)
 
-    return DocumentUploadOut(document=_to_list_item(document, page_count=0), job_id=job.id)
+    return DocumentUploadOut(
+        document=_to_list_item(document, page_count=0, latest_job=job), job_id=job.id
+    )
 
 
 @router.get("", response_model=list[DocumentListItemOut])
@@ -132,7 +174,15 @@ async def list_documents(
         select(Page.document_id, func.count()).group_by(Page.document_id)
     )
     page_counts: dict[int, int] = {document_id: count for document_id, count in count_rows.all()}
-    return [_to_list_item(document, page_counts.get(document.id, 0)) for document in documents]
+    latest_jobs = await _latest_parse_document_jobs_map(
+        session, [document.id for document in documents]
+    )
+    return [
+        _to_list_item(
+            document, page_counts.get(document.id, 0), latest_job=latest_jobs.get(document.id)
+        )
+        for document in documents
+    ]
 
 
 @router.get("/{document_id}", response_model=DocumentDetailOut)
@@ -142,6 +192,8 @@ async def get_document(
     document = await session.get(Document, document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+
+    latest_job = (await _latest_parse_document_jobs_map(session, [document_id])).get(document_id)
 
     pages = (
         (
@@ -172,6 +224,7 @@ async def get_document(
         created_at=document.created_at,
         pages=[PageOut.model_validate(page) for page in pages],
         chunks=[_to_chunk_out(chunk) for chunk in chunks],
+        latest_job=_job_summary(latest_job),
     )
 
 

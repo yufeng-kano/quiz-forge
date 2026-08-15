@@ -2,7 +2,17 @@
 
 from fastapi import APIRouter
 
-from backend.api.v1 import assets, documents, health, jobs, pages, usage
+from backend.api.v1 import (
+    assets,
+    categories,
+    documents,
+    generate,
+    health,
+    jobs,
+    pages,
+    questions,
+    usage,
+)
 
 router = APIRouter(prefix="/v1")
 router.include_router(health.router)
@@ -11,3 +21,6 @@ router.include_router(usage.router)
 router.include_router(documents.router)
 router.include_router(pages.router)
 router.include_router(assets.router)
+router.include_router(categories.router)
+router.include_router(generate.router)
+router.include_router(questions.router)

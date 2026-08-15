@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, HttpUrl
 
+from backend.schemas.job import JobSummaryOut
+
 
 class CategoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -38,6 +40,10 @@ class DocumentListItemOut(BaseModel):
     source_url: str | None
     created_at: datetime
     page_count: int
+    # The most recent `parse_document` job for this document, if any —
+    # lets the UI show/retry a failed ingestion without needing a job id
+    # that only ever appeared in the original upload/retry response.
+    latest_job: JobSummaryOut | None = None
 
 
 class DocumentDetailOut(BaseModel):
@@ -50,6 +56,7 @@ class DocumentDetailOut(BaseModel):
     created_at: datetime
     pages: list[PageOut]
     chunks: list[ChunkOut]
+    latest_job: JobSummaryOut | None = None
 
 
 class DocumentUploadOut(BaseModel):

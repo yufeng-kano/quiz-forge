@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     job_worker_count: int = 2
     job_poll_interval_seconds: float = 1.0
 
+    # 出題：比較題配對用的 cosine 相似度中間帶（docs/question-bank.md —
+    # 「相關但不相同」）。低於 min 視為不相關，高於 max 視為幾乎重複。
+    comparison_similarity_min: float = 0.35
+    comparison_similarity_max: float = 0.75
+
     # 基礎設施
     database_url: str = "postgresql+asyncpg://quizforge:quizforge@localhost:5432/quizforge"
     data_dir: Path = Path("/data")

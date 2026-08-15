@@ -67,9 +67,9 @@
 
 ## 出題流程
 
-1. 使用者選定範圍（文件／分類）、題型與數量，建立出題 job。
-2. 素材選取：
-   - **比較題**：在同分類內用 embedding 找相似度中等的 chunk 配對（相關但不相同），兩段一起餵給 `TEXT_MODEL`。
+1. 使用者選定範圍（文件／分類）、題型與數量，建立出題 job（`POST /api/v1/generate`）。
+2. 素材選取（實作在 `backend/src/backend/questions/selection.py`）：
+   - **比較題**：在**同科目**（分類階層的第一層；同主題反而配不出「相關但不相同」）內用 embedding 找相似度中段的 chunk 配對，區間由 `COMPARISON_SIMILARITY_MIN/MAX` 設定（預設 0.35–0.75），兩段一起餵給 `TEXT_MODEL`。
    - **類比題**：從單一 chunk 內的概念關係抽取。
    - 其他題型：單一 chunk 直接生成。
 3. 生成一律 `response_format: json_schema` 強制輸出對應題型 schema，附 `source_chunk_ids`。
@@ -79,6 +79,17 @@
 
 目的：LLM 出題必有爛題（答案錯誤、選項含糊、題幹引用不存在的上下文、重複題），必須人工把關後才能進入列印範圍。
 
-1. 「待審題目」頁列出所有 `draft` 題目，可對照 `source_chunk_ids` 原文。
-2. 使用者可直接編輯題幹／選項／答案，然後「採用」（`approved`）或「丟棄」（`rejected`）。
+1. 「待審題目」頁列出所有 `draft` 題目，可對照 `source_chunk_ids` 原文（`GET /api/v1/questions/{id}` 內含來源 chunk 全文）。
+2. 使用者可直接編輯題幹／選項／答案（`PATCH`，經 discriminated union 驗證），然後「採用」（`approved`）或「丟棄」（`rejected`）。
 3. 只有 `approved` 題目出現在題庫瀏覽與 Word 匯出的選題範圍。
+
+### 狀態機
+
+- `approve`：僅 `draft → approved`，其他狀態回 409。
+- `reject`：任何狀態皆可按——`draft/approved → rejected`；對已是 `rejected` 的題目再按一次會回到 `draft`（復原誤丟棄）。
+- 單題生成失敗不會使整個出題 job 失敗；job 結束時把失敗摘要記在 `jobs.error`，全部失敗才標 `failed`。
+
+### 相關 API
+
+- `GET /api/v1/categories`：全部分類（flat，`id/name/parent_id`），供出題範圍選擇與分類路徑顯示。
+- `GET /api/v1/documents*` 帶 `latest_job`（id/status/error），供前端顯示歷史失敗與重試。
