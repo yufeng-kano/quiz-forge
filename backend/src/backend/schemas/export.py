@@ -2,21 +2,37 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.export.paper import SUPPORTED_PAPER_SIZES
 from backend.questions.schemas import QUESTION_TYPE_MODELS
 
 
+class HeaderFieldsIn(BaseModel):
+    """卷首學生資訊列 + 總分欄 開關 (docs/export.md 表頭選項)，四個布林全部預
+    設開啟，維持匯出功能加入前的既有版面。`class` 是 Python 關鍵字，欄位名用
+    `class_`，經 alias 對外仍收/送 `class`。"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    class_: bool = Field(default=True, alias="class")
+    seat: bool = True
+    name: bool = True
+    score: bool = True
+
+
 class ExportIn(BaseModel):
     """`POST /v1/exports` body — which approved questions, on which paper,
-    under which title, with optional per-question-type scoring
-    (docs/export.md 卷面結構)."""
+    under which title, with optional per-question-type scoring and
+    per-question overrides, and configurable header fields (docs/export.md
+    卷面結構)."""
 
     question_ids: list[int] = Field(min_length=1)
     paper_size: str
     title: str = Field(min_length=1)
     points: dict[str, int] | None = None
+    question_points: dict[int, int] | None = None
+    header_fields: HeaderFieldsIn = Field(default_factory=HeaderFieldsIn)
 
     @field_validator("paper_size")
     @classmethod
@@ -43,6 +59,20 @@ class ExportIn(BaseModel):
                 raise ValueError(f"points key {question_type!r} is not a known question type")
             if amount <= 0:
                 raise ValueError(f"points value for {question_type!r} must be positive")
+        return self
+
+    @model_validator(mode="after")
+    def _question_points_keys_in_question_ids_and_values_positive(self) -> "ExportIn":
+        if self.question_points is None:
+            return self
+        allowed_ids = set(self.question_ids)
+        for question_id, amount in self.question_points.items():
+            if question_id not in allowed_ids:
+                raise ValueError(
+                    f"question_points key {question_id} is not in question_ids {self.question_ids}"
+                )
+            if amount <= 0:
+                raise ValueError(f"question_points value for {question_id} must be positive")
         return self
 
 

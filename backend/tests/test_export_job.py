@@ -364,3 +364,259 @@ async def test_sections_grouped_headed_and_renumbered_with_points_and_total_scor
         assert "總分：10 分" in paragraphs  # 2 single_choice * 5 分; true_false contributes 0
 
     get_settings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# question_points (逐題覆寫) / header_fields (docs/export.md 卷面結構)
+# ---------------------------------------------------------------------------
+
+
+async def test_rejects_question_points_key_outside_question_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    approved_id = await _make_question(status="approved")
+    outside_id = approved_id + 999999
+
+    job_id = await _run_job(
+        {
+            "question_ids": [approved_id],
+            "paper_size": "A4",
+            "question_points": {str(outside_id): 5},
+        }
+    )
+    job = await _get_job(job_id)
+
+    assert job.status == "failed"
+    assert job.error is not None
+    assert "question_points" in job.error
+    assert str(outside_id) in job.error
+
+    get_settings.cache_clear()
+
+
+async def test_rejects_non_positive_question_points_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    approved_id = await _make_question(status="approved")
+
+    job_id = await _run_job(
+        {
+            "question_ids": [approved_id],
+            "paper_size": "A4",
+            "question_points": {str(approved_id): 0},
+        }
+    )
+    job = await _get_job(job_id)
+
+    assert job.status == "failed"
+    assert job.error is not None
+    assert "positive" in job.error
+
+    get_settings.cache_clear()
+
+
+async def test_question_points_override_wins_over_type_points_in_total_and_heading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two single_choice questions with a 5-point type default, one of them
+    overridden to 9 -- the section becomes non-uniform (5 vs 9) so the
+    heading drops "每題 X 分" and each question gets its own suffix instead,
+    and the total sums the *resolved* per-question values (9 + 5), not
+    2 * the type default."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    single_choice_a = await _make_question(status="approved")
+    single_choice_b = await _make_question(status="approved")
+
+    job_id = await _run_job(
+        {
+            "question_ids": [single_choice_a, single_choice_b],
+            "paper_size": "A4",
+            "points": {"single_choice": 5},
+            "question_points": {str(single_choice_a): 9},
+        }
+    )
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        export = (await session.execute(select(Export))).scalars().one()
+    assert export.docx_path is not None
+    assert export.answer_docx_path is not None
+
+    for path_str in (export.docx_path, export.answer_docx_path):
+        document = open_docx(str(Path(path_str)))
+        paragraphs = [paragraph.text for paragraph in document.paragraphs]
+
+        assert "一、選擇題" in paragraphs  # not uniform -> no "（每題 X 分）"
+        assert "一、選擇題（每題 5 分）" not in paragraphs
+        stem_lines = [p for p in paragraphs if p[:1].isdigit()]
+        assert any(line.startswith("1（9 分）.") for line in stem_lines)
+        assert any(line.startswith("2（5 分）.") for line in stem_lines)
+        assert "配分：" not in "\n".join(stem_lines)  # resolved points -> no hand-fill blank
+
+        assert "總分：14 分" in paragraphs  # 9 (override) + 5 (type default)
+
+    get_settings.cache_clear()
+
+
+async def test_uniform_section_prints_per_type_heading_without_per_question_suffix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    single_choice_a = await _make_question(status="approved")
+    single_choice_b = await _make_question(status="approved")
+
+    job_id = await _run_job(
+        {
+            "question_ids": [single_choice_a, single_choice_b],
+            "paper_size": "A4",
+            "points": {"single_choice": 5},
+        }
+    )
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        export = (await session.execute(select(Export))).scalars().one()
+    assert export.docx_path is not None
+
+    document = open_docx(str(Path(export.docx_path)))
+    paragraphs = [paragraph.text for paragraph in document.paragraphs]
+    assert "一、選擇題（每題 5 分）" in paragraphs
+    stem_lines = [p for p in paragraphs if p[:1].isdigit()]
+    assert stem_lines[0].startswith("1. ")  # uniform -> plain number, no suffix
+    assert stem_lines[1].startswith("2. ")
+    assert "（" not in stem_lines[0].split(".", 1)[0]
+
+    get_settings.cache_clear()
+
+
+async def test_questions_without_any_points_keep_the_blank_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    approved_id = await _make_question(status="approved")
+
+    job_id = await _run_job({"question_ids": [approved_id], "paper_size": "A4"})
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        export = (await session.execute(select(Export))).scalars().one()
+    assert export.docx_path is not None
+    assert export.answer_docx_path is not None
+
+    for path_str in (export.docx_path, export.answer_docx_path):
+        document = open_docx(str(Path(path_str)))
+        text = _all_text(document)
+        assert "配分：______分" in text
+        assert "總分" not in text  # nothing scored -> no total line at all
+
+    get_settings.cache_clear()
+
+
+async def test_header_line_shows_only_the_checked_field_subset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    approved_id = await _make_question(status="approved")
+
+    job_id = await _run_job(
+        {
+            "question_ids": [approved_id],
+            "paper_size": "A4",
+            "header_fields": {"class": False, "seat": True, "name": True, "score": True},
+        }
+    )
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        export = (await session.execute(select(Export))).scalars().one()
+    assert export.docx_path is not None
+    assert export.answer_docx_path is not None
+
+    for path_str in (export.docx_path, export.answer_docx_path):
+        text = _all_text(open_docx(str(Path(path_str))))
+        assert "班級" not in text
+        assert "座號" in text
+        assert "姓名" in text
+
+    get_settings.cache_clear()
+
+
+async def test_header_line_omitted_entirely_when_no_field_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    approved_id = await _make_question(status="approved")
+
+    job_id = await _run_job(
+        {
+            "question_ids": [approved_id],
+            "paper_size": "A4",
+            "header_fields": {"class": False, "seat": False, "name": False, "score": True},
+        }
+    )
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        export = (await session.execute(select(Export))).scalars().one()
+    assert export.docx_path is not None
+    assert export.answer_docx_path is not None
+
+    for path_str in (export.docx_path, export.answer_docx_path):
+        text = _all_text(open_docx(str(Path(path_str))))
+        assert "班級" not in text
+        assert "座號" not in text
+        assert "姓名" not in text
+
+    get_settings.cache_clear()
+
+
+async def test_total_score_hidden_when_score_field_is_off_even_with_points(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    approved_id = await _make_question(status="approved")
+
+    job_id = await _run_job(
+        {
+            "question_ids": [approved_id],
+            "paper_size": "A4",
+            "points": {"single_choice": 5},
+            "header_fields": {"class": True, "seat": True, "name": True, "score": False},
+        }
+    )
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        export = (await session.execute(select(Export))).scalars().one()
+    assert export.docx_path is not None
+    assert export.answer_docx_path is not None
+
+    for path_str in (export.docx_path, export.answer_docx_path):
+        text = _all_text(open_docx(str(Path(path_str))))
+        assert "總分" not in text
+
+    get_settings.cache_clear()

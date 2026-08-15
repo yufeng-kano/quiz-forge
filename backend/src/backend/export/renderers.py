@@ -46,10 +46,15 @@ def _lettered_options(options: list[str]) -> list[str]:
 
 
 def render_comparison(
-    document: Document, number: int, question: ComparisonQuestion, mode: ExportMode
+    document: Document,
+    number: int,
+    question: ComparisonQuestion,
+    mode: ExportMode,
+    *,
+    points_suffix: int | None = None,
 ) -> None:
     """比較題 — 答案卷 render 成異同表（面向 x A x B），見 docs/question-bank.md。"""
-    style.add_numbered_stem(document, number, question.stem)
+    style.add_numbered_stem(document, number, question.stem, points_suffix=points_suffix)
     if mode == "answers":
         headers = ["面向", question.subject_a, question.subject_b]
         rows = [
@@ -64,12 +69,17 @@ def render_comparison(
 
 
 def render_analogy(
-    document: Document, number: int, question: AnalogyQuestion, mode: ExportMode
+    document: Document,
+    number: int,
+    question: AnalogyQuestion,
+    mode: ExportMode,
+    *,
+    points_suffix: int | None = None,
 ) -> None:
     """類比題 — 題幹由 a/b/c 槽位組成「A 之於 B，猶如 C 之於＿＿」，恆一致；
     `options` 有值 render 成單選，`None` 則維持題幹本身的填空形式。"""
     stem_text = f"{question.a} 之於 {question.b}，猶如 {question.c} 之於＿＿"
-    style.add_numbered_stem(document, number, stem_text)
+    style.add_numbered_stem(document, number, stem_text, points_suffix=points_suffix)
     if question.options is not None:
         for line in _lettered_options(question.options):
             style.add_body_paragraph(document, line, indent=True)
@@ -86,8 +96,11 @@ def render_single_choice(
     mode: ExportMode,
     *,
     show_points_blank: bool = True,
+    points_suffix: int | None = None,
 ) -> None:
-    style.add_numbered_stem(document, number, question.stem, points_field=show_points_blank)
+    style.add_numbered_stem(
+        document, number, question.stem, points_field=show_points_blank, points_suffix=points_suffix
+    )
     for line in _lettered_options(question.options):
         style.add_body_paragraph(document, line, indent=True)
     if mode == "answers":
@@ -105,8 +118,11 @@ def render_true_false(
     mode: ExportMode,
     *,
     show_points_blank: bool = True,
+    points_suffix: int | None = None,
 ) -> None:
-    style.add_numbered_stem(document, number, question.stem, points_field=show_points_blank)
+    style.add_numbered_stem(
+        document, number, question.stem, points_field=show_points_blank, points_suffix=points_suffix
+    )
     if mode == "answers":
         answer_text = "○（正確）" if question.answer else "×（錯誤）"
         style.add_body_paragraph(document, f"答案：{answer_text}")
@@ -115,11 +131,16 @@ def render_true_false(
 
 
 def render_fill_blank(
-    document: Document, number: int, question: FillBlankQuestion, mode: ExportMode
+    document: Document,
+    number: int,
+    question: FillBlankQuestion,
+    mode: ExportMode,
+    *,
+    points_suffix: int | None = None,
 ) -> None:
     """填充題 — `stem` 內的 `____` 標記在題目卷／答案卷都原樣保留，答案只在
     答案卷內依空格順序另列。"""
-    style.add_numbered_stem(document, number, question.stem)
+    style.add_numbered_stem(document, number, question.stem, points_suffix=points_suffix)
     if mode == "answers":
         answer_text = "、".join(
             f"{index}. {answer}" for index, answer in enumerate(question.answers, start=1)
@@ -128,9 +149,14 @@ def render_fill_blank(
 
 
 def render_short_answer(
-    document: Document, number: int, question: ShortAnswerQuestion, mode: ExportMode
+    document: Document,
+    number: int,
+    question: ShortAnswerQuestion,
+    mode: ExportMode,
+    *,
+    points_suffix: int | None = None,
 ) -> None:
-    style.add_numbered_stem(document, number, question.stem)
+    style.add_numbered_stem(document, number, question.stem, points_suffix=points_suffix)
     if mode == "answers":
         style.add_body_paragraph(document, f"參考答案：{question.model_answer}")
         for point in question.key_points:
@@ -144,24 +170,43 @@ def render_question(
     mode: ExportMode,
     *,
     show_points_blank: bool = True,
+    points_suffix: int | None = None,
 ) -> None:
     """Dispatch to the render function matching `question`'s concrete type.
 
     `show_points_blank` only ever reaches `single_choice`/`true_false` — the
     only two types the old per-question 配分 blank ever applied to
     (docs/export.md); the other four types' renderers don't take it at all.
+    `points_suffix` (the 「（X 分）」 resolved-points suffix,
+    docs/export.md 節內配分不一致時各題題號後印) can reach every type, since
+    both `points`（每題型配分）and `question_points`（逐題覆寫）can be set for
+    any question type.
     """
     if isinstance(question, ComparisonQuestion):
-        render_comparison(document, number, question, mode)
+        render_comparison(document, number, question, mode, points_suffix=points_suffix)
     elif isinstance(question, AnalogyQuestion):
-        render_analogy(document, number, question, mode)
+        render_analogy(document, number, question, mode, points_suffix=points_suffix)
     elif isinstance(question, SingleChoiceQuestion):
-        render_single_choice(document, number, question, mode, show_points_blank=show_points_blank)
+        render_single_choice(
+            document,
+            number,
+            question,
+            mode,
+            show_points_blank=show_points_blank,
+            points_suffix=points_suffix,
+        )
     elif isinstance(question, TrueFalseQuestion):
-        render_true_false(document, number, question, mode, show_points_blank=show_points_blank)
+        render_true_false(
+            document,
+            number,
+            question,
+            mode,
+            show_points_blank=show_points_blank,
+            points_suffix=points_suffix,
+        )
     elif isinstance(question, FillBlankQuestion):
-        render_fill_blank(document, number, question, mode)
+        render_fill_blank(document, number, question, mode, points_suffix=points_suffix)
     elif isinstance(question, ShortAnswerQuestion):
-        render_short_answer(document, number, question, mode)
+        render_short_answer(document, number, question, mode, points_suffix=points_suffix)
     else:
         raise ValueError(f"no renderer for question type {question.type!r}")

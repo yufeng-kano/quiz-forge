@@ -14,6 +14,7 @@ from docx.document import Document
 
 from backend.export.builder import ExamPaperBuilder
 from backend.export.paper import PAGE_MARGIN_MM, PAPER_SIZES_MM
+from backend.export.style import HeaderFields
 from backend.questions.schemas import (
     AnalogyQuestion,
     ComparisonDifference,
@@ -222,3 +223,79 @@ def test_page_dimensions_match_mm_constants_for_every_supported_size(
         assert abs(bottom_margin.mm - PAGE_MARGIN_MM) < 0.1
         assert abs(left_margin.mm - PAGE_MARGIN_MM) < 0.1
         assert abs(right_margin.mm - PAGE_MARGIN_MM) < 0.1
+
+
+# ---------------------------------------------------------------------------
+# header_fields (docs/export.md 表頭選項) / points_suffix (docs/export.md
+# 節內配分不一致時各題題號後印「（X 分）」)
+# ---------------------------------------------------------------------------
+
+
+def test_header_fields_default_prints_the_full_student_info_line(tmp_path: Path) -> None:
+    builder = ExamPaperBuilder("A4", "測試考卷")
+    builder.render_question(1, SINGLE_CHOICE)
+    questions_path = tmp_path / "q.docx"
+    answers_path = tmp_path / "a.docx"
+    builder.save(questions_path, answers_path)
+
+    text = _all_text(open_docx(str(questions_path)))
+    assert "班級：" in text
+    assert "座號：" in text
+    assert "姓名：" in text
+
+
+def test_header_fields_subset_omits_unchecked_fields_on_both_papers(tmp_path: Path) -> None:
+    header_fields = HeaderFields(class_=False, seat=True, name=True, score=True)
+    builder = ExamPaperBuilder("A4", "測試考卷", header_fields)
+    builder.render_question(1, SINGLE_CHOICE)
+    questions_path = tmp_path / "q.docx"
+    answers_path = tmp_path / "a.docx"
+    builder.save(questions_path, answers_path)
+
+    for path in (questions_path, answers_path):
+        text = _all_text(open_docx(str(path)))
+        assert "班級：" not in text
+        assert "座號：" in text
+        assert "姓名：" in text
+
+
+def test_header_fields_all_off_omits_the_student_info_line_entirely(tmp_path: Path) -> None:
+    header_fields = HeaderFields(class_=False, seat=False, name=False, score=True)
+    builder = ExamPaperBuilder("A4", "測試考卷", header_fields)
+    builder.render_question(1, SINGLE_CHOICE)
+    questions_path = tmp_path / "q.docx"
+    answers_path = tmp_path / "a.docx"
+    builder.save(questions_path, answers_path)
+
+    for path in (questions_path, answers_path):
+        text = _all_text(open_docx(str(path)))
+        assert "班級" not in text
+        assert "座號" not in text
+        assert "姓名" not in text
+
+
+def test_points_suffix_prints_after_the_question_number_on_both_papers(tmp_path: Path) -> None:
+    builder = ExamPaperBuilder("A4", "測試考卷")
+    builder.render_question(3, SINGLE_CHOICE, show_points_blank=False, points_suffix=7)
+    questions_path = tmp_path / "q.docx"
+    answers_path = tmp_path / "a.docx"
+    builder.save(questions_path, answers_path)
+
+    for path in (questions_path, answers_path):
+        paragraphs = [p.text for p in open_docx(str(path)).paragraphs]
+        stem = next(p for p in paragraphs if p.startswith("3"))
+        assert stem.startswith("3（7 分）. ")
+        assert "配分：" not in stem  # resolved points -> no hand-fill blank alongside it
+
+
+def test_points_suffix_reaches_every_question_type_not_only_choice_and_true_false(
+    tmp_path: Path,
+) -> None:
+    builder = ExamPaperBuilder("A4", "測試考卷")
+    builder.render_question(1, SHORT_ANSWER, points_suffix=4)
+    questions_path = tmp_path / "q.docx"
+    answers_path = tmp_path / "a.docx"
+    builder.save(questions_path, answers_path)
+
+    text = _all_text(open_docx(str(questions_path)))
+    assert "1（4 分）. " in text

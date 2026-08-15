@@ -33,6 +33,8 @@ async def create_export_job(
             "paper_size": body.paper_size,
             "title": body.title,
             "points": body.points,
+            "question_points": body.question_points,
+            "header_fields": body.header_fields.model_dump(by_alias=True),
         },
     )
     session.add(job)

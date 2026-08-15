@@ -15,14 +15,16 @@ drives `ExamPaperBuilder` through what that module already worked out.
 """
 
 import asyncio
+from collections.abc import Sequence
 
 from sqlalchemy import select
 
 from backend.core.config import get_settings
+from backend.export import style
 from backend.export.builder import ExamPaperBuilder
 from backend.export.paper import SUPPORTED_PAPER_SIZES
 from backend.export.paths import answers_docx_path, questions_docx_path
-from backend.export.sections import build_sections, total_score
+from backend.export.sections import IdentifiedQuestion, build_sections, resolve_points, total_score
 from backend.jobs.context import JobContext
 from backend.jobs.registry import register_handler
 from backend.models.export import Export
@@ -66,6 +68,66 @@ def _parse_points(payload: dict[str, object]) -> dict[str, int] | None:
     return points
 
 
+def _parse_question_points(
+    payload: dict[str, object], question_ids: Sequence[int]
+) -> dict[int, int] | None:
+    """`payload["question_points"]` (optional 逐題覆寫, docs/export.md，優先
+    於 `points` 的題型預設) validated into `{question_id: positive_int}`, or
+    `None` when omitted. Keys arrive as JSON-object strings once the payload
+    has round-tripped through the `jobs.payload` JSONB column, so they're
+    parsed back to `int` here rather than assumed already-int."""
+    value = payload.get("question_points")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"job payload field question_points must be an object: {payload!r}")
+    allowed_ids = set(question_ids)
+    question_points: dict[int, int] = {}
+    for raw_key, raw_amount in value.items():
+        try:
+            question_id = int(raw_key)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"question_points key {raw_key!r} must be an integer question id"
+            ) from None
+        if question_id not in allowed_ids:
+            raise ValueError(
+                f"question_points key {question_id} is not in question_ids {sorted(allowed_ids)}"
+            )
+        if not isinstance(raw_amount, int) or isinstance(raw_amount, bool) or raw_amount <= 0:
+            raise ValueError(
+                f"question_points value for {question_id} must be a positive "
+                f"integer, got {raw_amount!r}"
+            )
+        question_points[question_id] = raw_amount
+    return question_points
+
+
+def _parse_header_fields(payload: dict[str, object]) -> style.HeaderFields:
+    """`payload["header_fields"]` (optional 表頭選項, docs/export.md，控制卷
+    首學生資訊列與總分顯示) validated into a `HeaderFields`, defaulting every
+    field to `True` when the key or a sub-field is omitted — same default as
+    `schemas.export.HeaderFieldsIn`."""
+    value = payload.get("header_fields")
+    if value is None:
+        return style.DEFAULT_HEADER_FIELDS
+    if not isinstance(value, dict):
+        raise ValueError(f"job payload field header_fields must be an object: {payload!r}")
+
+    def _flag(key: str) -> bool:
+        raw = value.get(key, True)
+        if not isinstance(raw, bool):
+            raise ValueError(f"header_fields.{key} must be a boolean, got {raw!r}")
+        return raw
+
+    return style.HeaderFields(
+        class_=_flag("class"),
+        seat=_flag("seat"),
+        name=_flag("name"),
+        score=_flag("score"),
+    )
+
+
 def _require_question_ids(payload: dict[str, object]) -> list[int]:
     value = payload.get("question_ids")
     if not isinstance(value, list) or not value:
@@ -98,6 +160,8 @@ async def export_docx(ctx: JobContext) -> None:
     title = _require_title(payload)
     points = _parse_points(payload)
     question_ids = _require_question_ids(payload)
+    question_points = _parse_question_points(payload, question_ids)
+    header_fields = _parse_header_fields(payload)
 
     rows = (
         (await session.execute(select(Question).where(Question.id.in_(question_ids))))
@@ -120,6 +184,10 @@ async def export_docx(ctx: JobContext) -> None:
 
     questions = [by_id[qid] for qid in question_ids]
     models = [parse_question(question.type, question.payload) for question in questions]
+    identified = [
+        IdentifiedQuestion(question_id, model)
+        for question_id, model in zip(question_ids, models, strict=True)
+    ]
 
     export = Export(title=title, paper_size=paper_size, question_ids=question_ids)
     session.add(export)
@@ -129,20 +197,22 @@ async def export_docx(ctx: JobContext) -> None:
     total = len(questions)
     await ctx.set_progress(f"0/{total}")
 
-    builder = await asyncio.to_thread(ExamPaperBuilder, paper_size, title)
-    total_points = total_score(models, points)
-    if total_points is not None:
+    builder = await asyncio.to_thread(ExamPaperBuilder, paper_size, title, header_fields)
+    resolved_points = resolve_points(identified, points, question_points)
+    total_points = total_score(resolved_points)
+    if total_points is not None and header_fields.score:
         await asyncio.to_thread(builder.add_total_score, total_points)
 
     rendered = 0
-    for section in build_sections(models, points):
+    for section in build_sections(identified, resolved_points):
         await asyncio.to_thread(builder.add_section_heading, section.heading)
-        for number, model in section.numbered_questions:
+        for section_question in section.questions:
             await asyncio.to_thread(
                 builder.render_question,
-                number,
-                model,
-                show_points_blank=section.show_points_blank,
+                section_question.number,
+                section_question.question,
+                show_points_blank=section_question.show_points_blank,
+                points_suffix=section_question.points_suffix,
             )
             rendered += 1
             await ctx.set_progress(f"{rendered}/{total}")

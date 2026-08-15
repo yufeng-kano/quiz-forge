@@ -86,6 +86,8 @@ async def test_create_export_job_enqueues_export_docx_job(client: TestClient) ->
             "paper_size": "B4",
             "title": "第一次段考",
             "points": None,
+            "question_points": None,
+            "header_fields": {"class": True, "seat": True, "name": True, "score": True},
         }
 
 
@@ -159,6 +161,138 @@ def test_create_export_job_rejects_non_positive_points_value(client: TestClient)
         },
     )
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# question_points (逐題覆寫)
+# ---------------------------------------------------------------------------
+
+
+async def test_create_export_job_forwards_question_points(client: TestClient) -> None:
+    question_id = await _make_question()
+
+    response = client.post(
+        "/v1/exports",
+        json={
+            "question_ids": [question_id],
+            "paper_size": "A4",
+            "title": "小考",
+            "question_points": {str(question_id): 8},
+        },
+    )
+
+    assert response.status_code == 201
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, response.json()["job_id"])
+        assert job is not None
+        assert job.payload["question_points"] == {str(question_id): 8}
+
+
+def test_create_export_job_rejects_question_points_key_outside_question_ids(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/v1/exports",
+        json={
+            "question_ids": [1],
+            "paper_size": "A4",
+            "title": "考卷",
+            "question_points": {"2": 5},
+        },
+    )
+    assert response.status_code == 422
+    assert "question_points" in response.text
+
+
+def test_create_export_job_rejects_non_positive_question_points_value(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/v1/exports",
+        json={
+            "question_ids": [1],
+            "paper_size": "A4",
+            "title": "考卷",
+            "question_points": {"1": 0},
+        },
+    )
+    assert response.status_code == 422
+
+
+async def test_create_export_job_question_points_override_wins_over_points(
+    client: TestClient,
+) -> None:
+    question_id = await _make_question()
+
+    response = client.post(
+        "/v1/exports",
+        json={
+            "question_ids": [question_id],
+            "paper_size": "A4",
+            "title": "小考",
+            "points": {"single_choice": 5},
+            "question_points": {str(question_id): 9},
+        },
+    )
+
+    assert response.status_code == 201
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, response.json()["job_id"])
+        assert job is not None
+        assert job.payload["points"] == {"single_choice": 5}
+        assert job.payload["question_points"] == {str(question_id): 9}
+
+
+# ---------------------------------------------------------------------------
+# header_fields (卷首欄位開關)
+# ---------------------------------------------------------------------------
+
+
+async def test_create_export_job_defaults_header_fields_to_all_true(client: TestClient) -> None:
+    question_id = await _make_question()
+
+    response = client.post(
+        "/v1/exports",
+        json={"question_ids": [question_id], "paper_size": "A4", "title": "小考"},
+    )
+
+    assert response.status_code == 201
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, response.json()["job_id"])
+        assert job is not None
+        assert job.payload["header_fields"] == {
+            "class": True,
+            "seat": True,
+            "name": True,
+            "score": True,
+        }
+
+
+async def test_create_export_job_forwards_partial_header_fields_using_class_alias(
+    client: TestClient,
+) -> None:
+    question_id = await _make_question()
+
+    response = client.post(
+        "/v1/exports",
+        json={
+            "question_ids": [question_id],
+            "paper_size": "A4",
+            "title": "小考",
+            "header_fields": {"class": False, "score": False},
+        },
+    )
+
+    assert response.status_code == 201
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, response.json()["job_id"])
+        assert job is not None
+        assert job.payload["header_fields"] == {
+            "class": False,
+            "seat": True,
+            "name": True,
+            "score": False,
+        }
 
 
 @pytest.mark.parametrize("paper_size", ["A4", "B4", "B3"])

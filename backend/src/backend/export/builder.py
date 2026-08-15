@@ -29,16 +29,20 @@ TITLE_QUESTIONS = "題目卷"
 TITLE_ANSWERS = "答案卷"
 
 
-def _new_paper(paper_size: str, exam_title: str, mode_label: str) -> Document:
+def _new_paper(
+    paper_size: str, exam_title: str, mode_label: str, header_fields: style.HeaderFields
+) -> Document:
     """A fresh paper with the full docs/export.md 卷首 header already in
     place: the exam's own title (dominant), the 題目卷/答案卷 label under
-    it, and the 班級／座號／姓名 student-info line."""
+    it, and the 班級／座號／姓名 student-info line — the line only shows the
+    `header_fields` subset that's checked, and is omitted entirely when none
+    are (docs/export.md 卷首：...學生資訊列)."""
     document = new_document()
     apply_page_setup(document, paper_size)
     style.apply_base_style(document)
     style.add_title(document, exam_title)
     style.add_subtitle(document, mode_label)
-    style.add_student_info_line(document)
+    style.add_student_info_line(document, header_fields)
     return document
 
 
@@ -46,16 +50,23 @@ class ExamPaperBuilder:
     """Owns one in-progress 題目卷/答案卷 pair for a single `paper_size` and
     `title` (docs/export.md 卷首：考卷標題)."""
 
-    def __init__(self, paper_size: str, title: str) -> None:
+    def __init__(
+        self,
+        paper_size: str,
+        title: str,
+        header_fields: style.HeaderFields = style.DEFAULT_HEADER_FIELDS,
+    ) -> None:
         self.paper_size = paper_size
         self.title = title
-        self.question_doc: Document = _new_paper(paper_size, title, TITLE_QUESTIONS)
-        self.answer_doc: Document = _new_paper(paper_size, title, TITLE_ANSWERS)
+        self.header_fields = header_fields
+        self.question_doc: Document = _new_paper(paper_size, title, TITLE_QUESTIONS, header_fields)
+        self.answer_doc: Document = _new_paper(paper_size, title, TITLE_ANSWERS, header_fields)
 
     def add_total_score(self, total: int) -> None:
-        """卷首總分 (docs/export.md 有配分時印總分) — the job handler calls
-        this once, right after construction, only when at least one 題型 in
-        the export's `points` was actually assigned."""
+        """卷首總分 (docs/export.md 任一題有配分且 score 開啟時印總分) — the
+        job handler calls this once, right after construction, only when at
+        least one question actually resolved to points *and*
+        `header_fields.score` is on."""
         style.add_total_score_line(self.question_doc, total)
         style.add_total_score_line(self.answer_doc, total)
 
@@ -66,17 +77,32 @@ class ExamPaperBuilder:
         style.add_section_heading(self.answer_doc, heading)
 
     def render_question(
-        self, number: int, question: QuestionModel, *, show_points_blank: bool = True
+        self,
+        number: int,
+        question: QuestionModel,
+        *,
+        show_points_blank: bool = True,
+        points_suffix: int | None = None,
     ) -> None:
         """Render one already-validated question, numbered `number` *within
         its section* (docs/export.md 節內連續編號), into both papers —
         `questions` mode into the 題目卷, `answers` mode (stem +
         answer/explanation) into the 答案卷."""
         render_question(
-            self.question_doc, number, question, "questions", show_points_blank=show_points_blank
+            self.question_doc,
+            number,
+            question,
+            "questions",
+            show_points_blank=show_points_blank,
+            points_suffix=points_suffix,
         )
         render_question(
-            self.answer_doc, number, question, "answers", show_points_blank=show_points_blank
+            self.answer_doc,
+            number,
+            question,
+            "answers",
+            show_points_blank=show_points_blank,
+            points_suffix=points_suffix,
         )
 
     def save(self, questions_path: Path, answers_path: Path) -> None:

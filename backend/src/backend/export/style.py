@@ -7,7 +7,7 @@ properties directly, so font/size/spacing changes happen in exactly one
 place.
 """
 
-from typing import Final
+from typing import Final, NamedTuple
 
 from docx.document import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
@@ -38,9 +38,29 @@ LINE_SPACING: Final[float] = 1.5
 # author to fill in by hand; the system has no per-question point-value data.
 POINTS_FIELD_LABEL: Final[str] = "（配分：______分）"
 
-# 卷首學生資訊列（docs/export.md 卷首固定印學生資訊列：班級／座號／姓名）。
-STUDENT_INFO_LINE_TEXT: Final[str] = (
-    "班級：______________　座號：______________　姓名：______________"
+# 卷首學生資訊列（docs/export.md 僅列 header_fields 勾選的欄位；順序固定為
+# 班級／座號／姓名，全不勾則整列省略）。`class_` avoids shadowing the `class`
+# keyword — the API-facing name (`class`) lives only in `schemas/export.py`'s
+# alias, this module only ever deals with the plain Python field name.
+_STUDENT_INFO_FIELD_LABELS: Final[list[tuple[str, str]]] = [
+    ("class_", "班級：______________"),
+    ("seat", "座號：______________"),
+    ("name", "姓名：______________"),
+]
+
+
+class HeaderFields(NamedTuple):
+    """Which 卷首 fields to print (docs/export.md 表頭選項) — `class_`/
+    `seat`/`name` gate the student-info line, `score` gates the 總分 line."""
+
+    class_: bool
+    seat: bool
+    name: bool
+    score: bool
+
+
+DEFAULT_HEADER_FIELDS: Final[HeaderFields] = HeaderFields(
+    class_=True, seat=True, name=True, score=True
 )
 
 
@@ -97,11 +117,19 @@ def add_subtitle(document: Document, text: str) -> Paragraph:
     return paragraph
 
 
-def add_student_info_line(document: Document) -> Paragraph:
-    """卷首學生資訊列：班級／座號／姓名 (docs/export.md), printed on every
-    exported paper regardless of paper size or scoring settings."""
+def add_student_info_line(document: Document, header_fields: HeaderFields) -> Paragraph | None:
+    """卷首學生資訊列：僅印 `header_fields` 勾選的欄位（班級／座號／姓名子
+    集，固定順序，既有間距）；全不勾時整列省略，回傳 `None`（docs/export.md）。
+    """
+    parts = [
+        label
+        for field_name, label in _STUDENT_INFO_FIELD_LABELS
+        if getattr(header_fields, field_name)
+    ]
+    if not parts:
+        return None
     paragraph = document.add_paragraph()
-    run = paragraph.add_run(STUDENT_INFO_LINE_TEXT)
+    run = paragraph.add_run("　".join(parts))
     _apply_run_font(run, size_pt=BODY_FONT_SIZE_PT)
     return paragraph
 
@@ -127,11 +155,24 @@ def add_section_heading(document: Document, text: str) -> Paragraph:
 
 
 def add_numbered_stem(
-    document: Document, number: int, text: str, *, points_field: bool = False
+    document: Document,
+    number: int,
+    text: str,
+    *,
+    points_field: bool = False,
+    points_suffix: int | None = None,
 ) -> Paragraph:
-    """`{number}. {text}`, optionally followed by the 配分 blank field."""
+    """`{number}. {text}`, optionally followed by the 配分 blank field
+    (`points_field`) or preceded by a 「（X 分）」 resolved-points suffix
+    right after the number (`points_suffix`, docs/export.md 節內配分不一致
+    時各題題號後印「（X 分）」) — the two are mutually exclusive by
+    construction (a question either still has the old hand-fill blank, or it
+    already has a resolved points value, never both)."""
     paragraph = document.add_paragraph()
-    prefix = f"{number}. "
+    prefix = f"{number}"
+    if points_suffix is not None:
+        prefix = f"{prefix}（{points_suffix} 分）"
+    prefix = f"{prefix}. "
     if points_field:
         prefix = f"{prefix}{POINTS_FIELD_LABEL}　"
     run = paragraph.add_run(prefix + text)
