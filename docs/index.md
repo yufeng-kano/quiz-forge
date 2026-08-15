@@ -31,10 +31,10 @@
 | `docs/overview.md` | 系統定位、核心流程、範圍界定、使用模型 |
 | `docs/architecture.md` | Docker Compose 拓撲、nginx 設定、pg-as-queue、後端技術、LLM 介接、`.env` 變數 |
 | `docs/data-model.md` | 資料表邏輯定義與設計決定 |
-| `docs/ingestion.md` | 文件輸入管線：vision 解析契約（Markdown + bbox）、圖表裁切、網頁抽取、chunk 與分類 |
+| `docs/ingestion.md` | 文件輸入管線：vision 解析契約（Markdown + bbox）、圖表裁切、網頁抽取、chunk 與分類、文件刪除與分類 GC |
 | `docs/question-bank.md` | 六題型 payload schema、出題流程、審題流程 |
 | `docs/export.md` | Word 匯出：題目卷／答案卷、紙張尺寸、render 設計 |
-| `docs/frontend.md` | 前端技術（router/Pinia/i18n 規範）、頁面清單、視覺風格（白色簡潔）、互動原則 |
+| `docs/frontend.md` | 前端技術（router/Pinia/i18n 規範）、頁面清單、視覺風格（白色簡潔）、清單有界原則、互動原則 |
 | `docs/data-inventory.md` | `data/` 內資料清單與用途 |
 
 ## 決策文件
