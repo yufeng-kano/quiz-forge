@@ -37,9 +37,15 @@ from backend.ingestion import storage
 from backend.ingestion.bbox import bbox_to_pixels
 from backend.ingestion.chunking import split_markdown_into_chunks
 from backend.ingestion.classification import classify_chunk, get_or_create_category
-from backend.ingestion.kind import detect_upload_kind
+from backend.ingestion.kind import UploadKind, detect_upload_kind
 from backend.ingestion.pdf import RenderedPage, load_single_image_page, render_pdf_pages
 from backend.ingestion.prompts import VISION_PAGE_PROMPT
+from backend.ingestion.url_fetch import (
+    classify_url_content,
+    derive_filename,
+    download_url_file,
+    probe_content_type,
+)
 from backend.ingestion.vision import VisionPageResult, rewrite_figure_placeholders
 from backend.ingestion.web import extract_main_content, fetch_html, summarize_content
 from backend.ingestion.word import extract_word_markdown
@@ -125,7 +131,9 @@ async def parse_page(ctx: JobContext) -> None:
     try:
         await _delete_page_assets(session, page.id)
 
-        if document.source_type == "url":
+        if document.raw_file_path is None:
+            # Pure web-page URL (docs/ingestion.md 網址（網頁）) — no file was
+            # ever downloaded, so re-parsing means re-fetching + re-extracting.
             if document.source_url is None:
                 raise ValueError(f"document {document.id} has source_type=url but no source_url")
             html = await asyncio.to_thread(fetch_html, document.source_url)
@@ -134,8 +142,10 @@ async def parse_page(ctx: JobContext) -> None:
             )
             page.markdown = markdown
         elif page.image_path is None:
-            if document.raw_file_path is None:
-                raise ValueError(f"document {document.id} has no raw_file_path to re-extract")
+            # Word — an upload OR a 網址（檔案） URL that resolved to Word:
+            # both stored a real `.docx` at `raw_file_path`, so re-extraction
+            # is identical either way (docs/ingestion.md ...進上傳檔案同一
+            # 條管線).
             page.markdown = await asyncio.to_thread(
                 extract_word_markdown, Path(document.raw_file_path)
             )
@@ -223,11 +233,24 @@ async def _delete_page_assets(session: AsyncSession, page_id: int) -> None:
 async def _process_upload_document(
     document: Document, ctx: JobContext, llm: LLMClient, settings: Settings
 ) -> list[Page]:
-    session = ctx.session
     if document.raw_file_path is None:
         raise ValueError(f"document {document.id} has source_type=upload but no raw_file_path")
+    kind = detect_upload_kind(Path(document.raw_file_path).name)
+    return await _process_document_by_kind(document, kind, ctx, llm, settings)
+
+
+async def _process_document_by_kind(
+    document: Document, kind: UploadKind, ctx: JobContext, llm: LLMClient, settings: Settings
+) -> list[Page]:
+    """Parse `document.raw_file_path` (already on disk) as `kind` — the one
+    path both `source_type=upload` and a `source_type=url` document that
+    turned out to point at a file (docs/ingestion.md 網址（檔案）...進上傳
+    檔案同一條管線) end up running; the only difference between the two
+    origins is how `raw_file_path` got populated."""
+    session = ctx.session
+    if document.raw_file_path is None:
+        raise ValueError(f"document {document.id} has no raw_file_path to parse")
     raw_path = Path(document.raw_file_path)
-    kind = detect_upload_kind(raw_path.name)
 
     if kind == "word":
         markdown = await asyncio.to_thread(extract_word_markdown, raw_path)
@@ -343,9 +366,31 @@ async def _crop_figures_and_rewrite(
 async def _process_url_document(
     document: Document, ctx: JobContext, llm: LLMClient, settings: Settings
 ) -> list[Page]:
-    session = ctx.session
+    """docs/ingestion.md 網址（檔案）／網址（網頁）— decide, from the actual
+    response Content-Type (falling back to the URL's extension), whether
+    `document.source_url` points at a downloadable file or a web page, and
+    dispatch to the matching branch below."""
     if document.source_url is None:
         raise ValueError(f"document {document.id} has source_type=url but no source_url")
+
+    content_type, final_url = await asyncio.to_thread(
+        probe_content_type, document.source_url, settings.url_fetch_timeout_seconds
+    )
+    kind = classify_url_content(content_type, final_url)
+
+    if kind is None:
+        return await _process_url_webpage(document, ctx, llm)
+    return await _process_url_file(document, kind, final_url, ctx, llm, settings)
+
+
+async def _process_url_webpage(
+    document: Document, ctx: JobContext, llm: LLMClient
+) -> list[Page]:
+    """docs/ingestion.md 網址（網頁）— unchanged from before the 網址（檔案）
+    feature existed: trafilatura extracts the article body locally, one
+    `TEXT_MODEL` call produces the classification/list-only summary."""
+    session = ctx.session
+    assert document.source_url is not None  # checked by `_process_url_document`
 
     html = await asyncio.to_thread(fetch_html, document.source_url)
     markdown, title = await asyncio.to_thread(extract_main_content, html, document.source_url)
@@ -363,6 +408,44 @@ async def _process_url_document(
     document.summary = await summarize_content(llm, markdown)
     await session.commit()
     return [page]
+
+
+async def _process_url_file(
+    document: Document,
+    kind: UploadKind,
+    final_url: str,
+    ctx: JobContext,
+    llm: LLMClient,
+    settings: Settings,
+) -> list[Page]:
+    """docs/ingestion.md 網址（檔案）— download the file (capped at
+    `URL_FETCH_MAX_BYTES`), record it exactly like an upload would
+    (`raw_file_path`, a filename-derived title when none was given), then
+    reuse `_process_document_by_kind` — the exact same per-kind parse path
+    an uploaded file of that kind takes (.rule 反偷懶規則 — 不得重複核心邏輯).
+    `source_type` stays `url`; `source_url` is left as the original URL."""
+    session = ctx.session
+    file_bytes = await asyncio.to_thread(
+        download_url_file,
+        final_url,
+        max_bytes=settings.url_fetch_max_bytes,
+        timeout=settings.url_fetch_timeout_seconds,
+    )
+    filename = derive_filename(final_url, kind)
+
+    dest_path = storage.raw_file_path(settings.data_dir, document.id, filename)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    await asyncio.to_thread(dest_path.write_bytes, file_bytes)
+
+    document.raw_file_path = str(dest_path)
+    if document.title == document.source_url:
+        # No custom title was given at creation (`POST /v1/documents/url`
+        # falls back to the raw URL string) — now that a real file is on
+        # disk, a filename beats the bare URL as a title.
+        document.title = filename
+    await session.commit()
+
+    return await _process_document_by_kind(document, kind, ctx, llm, settings)
 
 
 async def _run_chunk_phase(
