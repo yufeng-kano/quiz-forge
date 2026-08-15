@@ -5,10 +5,19 @@ import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { DOCUMENT_POLL_INTERVAL_MS, isReadyEntityStatus, type DocumentListItem } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import DocumentActiveList from '@/components/documents/DocumentActiveList.vue'
+import DocumentFolderSidebar from '@/components/documents/DocumentFolderSidebar.vue'
 import DocumentIntakePanel from '@/components/documents/DocumentIntakePanel.vue'
+import DocumentMoveModal from '@/components/documents/DocumentMoveModal.vue'
+import DocumentRenameModal from '@/components/documents/DocumentRenameModal.vue'
 import DocumentRowActions from '@/components/documents/DocumentRowActions.vue'
 import DocumentStatusCell from '@/components/documents/DocumentStatusCell.vue'
 import DocumentTitleCell from '@/components/documents/DocumentTitleCell.vue'
+import {
+  matchesFolderFilter,
+  setDocumentDragPayload,
+  type FolderFilter,
+  type FolderTarget,
+} from '@/components/documents/folders'
 import AppTabs from '@/components/ui/AppTabs.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -19,6 +28,7 @@ import { useAppI18n } from '@/i18n'
 import { formatDateTime } from '@/i18n/datetime'
 import { translateApiError } from '@/i18n/errors'
 import { useDocumentsStore } from '@/stores/documents'
+import { useFoldersStore } from '@/stores/folders'
 import { useToastsStore } from '@/stores/toasts'
 import { matchesQuery, normalizeQuery } from '@/utils/search'
 
@@ -35,14 +45,17 @@ import { matchesQuery, normalizeQuery } from '@/utils/search'
  * page rather than to a tab, so a parse started under 上傳 keeps being watched
  * while 文件庫 is on screen.
  *
- * The search box narrows the rows client-side: `GET /api/v1/documents` returns
- * the whole list in one response, so filtering it here is instant and a server
- * round trip would only add latency.
+ * The search box and the folder column narrow the rows client-side:
+ * `GET /api/v1/documents` returns the whole list in one response, so filtering
+ * it here is instant and a server round trip (`?folder_id=`, `?unfiled=true`)
+ * would only add latency — and it keeps the folder counts derived from exactly
+ * the rows being filtered, so a move updates both at once.
  */
 const { t } = useAppI18n()
 const route = useRoute()
 const router = useRouter()
 const store = useDocumentsStore()
+const folders = useFoldersStore()
 const toasts = useToastsStore()
 const { confirm } = useConfirm()
 
@@ -88,13 +101,20 @@ const activeTab = computed<DocumentsTab>({
 
 const search = ref('')
 
+/** Which folder the 文件庫 list is showing; owned here, driven by the sidebar. */
+const folderFilter = ref<FolderFilter>('all')
+
 const query = computed(() => normalizeQuery(search.value))
 
 const visibleDocuments = computed<DocumentListItem[]>(() =>
-  store.documents.filter((document) => matchesQuery(document.title, query.value)),
+  store.documents.filter(
+    (document) =>
+      matchesFolderFilter(document, folderFilter.value) &&
+      matchesQuery(document.title, query.value),
+  ),
 )
 
-const isFiltering = computed(() => query.value !== '')
+const isFiltering = computed(() => query.value !== '' || folderFilter.value !== 'all')
 
 /** Everything the pipeline has not finished: parsing, queued, or failed. */
 const inProgressDocuments = computed<DocumentListItem[]>(() =>
@@ -166,12 +186,92 @@ const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
     labelHidden: true,
     align: 'end',
     width: '13rem',
-    nowrap: true,
   },
 ])
 
 function openDetail(item: DocumentListItem): void {
   void router.push({ name: 'document-detail', params: { id: String(item.id) } })
+}
+
+/* -------------------------------------------------------- move to folder */
+
+/** Puts the row's id into the drag, which the folder column reads on drop. */
+function onRowDragStart(item: DocumentListItem, event: DragEvent): void {
+  if (event.dataTransfer !== null) {
+    setDocumentDragPayload(event.dataTransfer, item.id)
+  }
+}
+
+/**
+ * The one move handler, shared by a drop on the folder column and by the row
+ * menu's 移至資料夾 dialog. A dropped id that no longer matches a row (a stale
+ * drag, a foreign payload that happened to parse) is ignored, and a move to
+ * where the document already is is not sent at all.
+ */
+async function moveDocument(documentId: number, target: FolderTarget): Promise<void> {
+  const item = store.documents.find((document) => document.id === documentId)
+  if (item === undefined || item.folder_id === target) {
+    return
+  }
+  const title = item.title
+  try {
+    await store.move(documentId, target)
+    if (target === null) {
+      toasts.success(t('documents.folders.movedToUnfiled', { title }))
+      return
+    }
+    const name = folders.nameOf(target)
+    toasts.success(
+      name === null
+        ? t('documents.folders.movedToUnknown', { title })
+        : t('documents.folders.moved', { title, folder: name }),
+    )
+  } catch (error) {
+    // A folder deleted in the meantime comes back as 404 — say so rather than
+    // leaving the row looking moved.
+    toasts.error(translateApiError(error))
+  }
+}
+
+const movingDocument = ref<DocumentListItem | null>(null)
+
+function openMove(item: DocumentListItem): void {
+  movingDocument.value = item
+}
+
+async function onMoveSelected(target: FolderTarget): Promise<void> {
+  const item = movingDocument.value
+  movingDocument.value = null
+  if (item !== null) {
+    await moveDocument(item.id, target)
+  }
+}
+
+/* ---------------------------------------------------------------- rename */
+
+const renamingDocument = ref<DocumentListItem | null>(null)
+const renaming = ref(false)
+
+function openRename(item: DocumentListItem): void {
+  renamingDocument.value = item
+}
+
+async function onRenameSubmit(title: string): Promise<void> {
+  const item = renamingDocument.value
+  if (item === null) {
+    return
+  }
+  renaming.value = true
+  try {
+    const updated = await store.rename(item.id, title)
+    toasts.success(t('documents.rename.renamed', { title: updated.title }))
+    renamingDocument.value = null
+  } catch (error) {
+    // Kept open on failure so the rejected title can be corrected in place.
+    toasts.error(translateApiError(error))
+  } finally {
+    renaming.value = false
+  }
 }
 
 async function onDelete(item: DocumentListItem): Promise<void> {
@@ -271,52 +371,78 @@ onUnmounted(clearTimer)
       </template>
 
       <template #library>
-        <div class="documents__toolbar">
-          <input
-            v-model="search"
-            class="form-input documents__search"
-            type="search"
-            :aria-label="t('documents.list.search')"
-            :placeholder="t('documents.list.searchPlaceholder')"
-          />
-        </div>
+        <div class="library">
+          <DocumentFolderSidebar v-model="folderFilter" @move="moveDocument" />
 
-        <DataTable
-          :columns="columns"
-          :rows="visibleDocuments"
-          :row-key="(item: DocumentListItem) => item.id"
-          :loading="store.loading"
-          :empty-title="
-            isFiltering ? t('documents.list.noMatchTitle') : t('documents.list.emptyTitle')
-          "
-          :empty-description="
-            isFiltering
-              ? t('documents.list.noMatchDescription')
-              : t('documents.list.emptyDescription')
-          "
-          clickable-rows
-          @row-click="openDetail"
-        >
-          <template #title="{ row }">
-            <DocumentTitleCell :document="row" />
-          </template>
-
-          <template #status="{ row }">
-            <DocumentStatusCell :document="row" :job-id="store.parseJobIdOf(row.id)" />
-          </template>
-
-          <template #actions="{ row }">
-            <div @click.stop>
-              <DocumentRowActions
-                :document="row"
-                :job-id="store.parseJobIdOf(row.id)"
-                @delete="onDelete"
+          <div class="library__main">
+            <div class="documents__toolbar">
+              <input
+                v-model="search"
+                class="form-input documents__search"
+                type="search"
+                :aria-label="t('documents.list.search')"
+                :placeholder="t('documents.list.searchPlaceholder')"
               />
             </div>
-          </template>
-        </DataTable>
+
+            <DataTable
+              :columns="columns"
+              :rows="visibleDocuments"
+              :row-key="(item: DocumentListItem) => item.id"
+              :loading="store.loading"
+              :empty-title="
+                isFiltering ? t('documents.list.noMatchTitle') : t('documents.list.emptyTitle')
+              "
+              :empty-description="
+                isFiltering
+                  ? t('documents.list.noMatchDescription')
+                  : t('documents.list.emptyDescription')
+              "
+              clickable-rows
+              draggable-rows
+              @row-click="openDetail"
+              @row-drag-start="onRowDragStart"
+            >
+              <template #title="{ row }">
+                <DocumentTitleCell :document="row" />
+              </template>
+
+              <template #status="{ row }">
+                <DocumentStatusCell :document="row" :job-id="store.parseJobIdOf(row.id)" />
+              </template>
+
+              <template #actions="{ row }">
+                <div @click.stop>
+                  <DocumentRowActions
+                    :document="row"
+                    :job-id="store.parseJobIdOf(row.id)"
+                    organizable
+                    @rename="openRename"
+                    @move="openMove"
+                    @delete="onDelete"
+                  />
+                </div>
+              </template>
+            </DataTable>
+          </div>
+        </div>
       </template>
     </AppTabs>
+
+    <DocumentRenameModal
+      :open="renamingDocument !== null"
+      :title="renamingDocument?.title ?? ''"
+      :busy="renaming"
+      @close="renamingDocument = null"
+      @submit="onRenameSubmit"
+    />
+
+    <DocumentMoveModal
+      :open="movingDocument !== null"
+      :document="movingDocument"
+      @close="movingDocument = null"
+      @select="onMoveSelected"
+    />
   </div>
 </template>
 
@@ -336,5 +462,26 @@ onUnmounted(clearTimer)
 
 .documents__search {
   width: min(18rem, 60vw);
+}
+
+/* 資料夾欄 left, library table right */
+.library {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.library__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .library {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

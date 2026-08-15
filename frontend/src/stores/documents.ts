@@ -23,6 +23,7 @@ import {
   importDocumentFromUrl,
   isActiveEntityStatus,
   listDocuments,
+  patchDocument,
   uploadDocument,
   type DocumentDetail,
   type DocumentListItem,
@@ -38,6 +39,7 @@ function toListItem(detail: DocumentDetail): DocumentListItem {
     title: detail.title,
     status: detail.status,
     source_url: detail.source_url,
+    folder_id: detail.folder_id,
     created_at: detail.created_at,
     page_count: detail.pages.length,
   }
@@ -120,6 +122,30 @@ export const useDocumentsStore = defineStore('documents', () => {
     return result
   }
 
+  /**
+   * Rename one document (`PATCH` with `title` only). The server's own row is
+   * written back rather than the requested text, so a title it trimmed is what
+   * the list then shows; a blank or over-long title comes back as 422 and is
+   * thrown to the caller. The full detail is returned so a detail page can
+   * update its header without a second request.
+   */
+  async function rename(documentId: number, title: string): Promise<DocumentDetail> {
+    const updated = await patchDocument(documentId, { title })
+    replaceRow(toListItem(updated))
+    return updated
+  }
+
+  /**
+   * Move one document into a folder, or out of every folder with `null`
+   * (`PATCH` with `folder_id` only). A folder that no longer exists is a 404
+   * and is thrown, so a stale sidebar cannot silently drop the document.
+   */
+  async function move(documentId: number, folderId: number | null): Promise<DocumentDetail> {
+    const updated = await patchDocument(documentId, { folder_id: folderId })
+    replaceRow(toListItem(updated))
+    return updated
+  }
+
   async function remove(documentId: number): Promise<void> {
     await deleteDocument(documentId)
     documents.value = documents.value.filter((item) => item.id !== documentId)
@@ -142,6 +168,8 @@ export const useDocumentsStore = defineStore('documents', () => {
     refreshDocument,
     upload,
     importUrl,
+    rename,
+    move,
     remove,
     parseJobIdOf,
   }

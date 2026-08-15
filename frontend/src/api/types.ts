@@ -133,8 +133,50 @@ export interface DocumentListItem {
   title: string
   status: string
   source_url: string | null
+  /** Library folder the document sits in; `null` means 未分類. */
+  folder_id: number | null
   created_at: string
   page_count: number
+}
+
+/**
+ * One row of `GET /api/v1/folders` (`backend.schemas.folder.FolderOut`) — a
+ * flat, user-managed library folder, unrelated to the LLM `Category` tree.
+ *
+ * `document_count` is the server's own count. The 文件庫 sidebar does not
+ * display it: that page already holds every document, so it derives the counts
+ * from the list it is filtering, which keeps a badge and the rows next to it
+ * from disagreeing after a move (see `DocumentFolderSidebar.vue`).
+ */
+export interface Folder {
+  id: number
+  name: string
+  created_at: string
+  document_count: number
+}
+
+/**
+ * Body of `POST /api/v1/folders` and `PATCH /api/v1/folders/{id}`
+ * (`backend.schemas.folder.FolderIn`). The name is trimmed server-side and must
+ * not be blank; another folder with the same name is a 409.
+ */
+export interface FolderInput {
+  name: string
+}
+
+/**
+ * Body of `PATCH /api/v1/documents/{id}` (`backend.schemas.document.
+ * DocumentPatchIn`) — a partial update, so only the fields actually sent are
+ * touched.
+ *
+ * `title` is trimmed and must be non-blank and within the server's length
+ * limit. `folder_id` is nullable on purpose: `null` unfiles the document, an
+ * unknown id is a 404. Leaving a field out of the object is what "do not
+ * change it" looks like on the wire, since `JSON.stringify` drops `undefined`.
+ */
+export interface DocumentPatch {
+  title?: string
+  folder_id?: number | null
 }
 
 /** One `pages` row as exposed on the document detail response. */
@@ -179,6 +221,7 @@ export interface DocumentDetail {
   status: string
   source_url: string | null
   summary: string | null
+  folder_id: number | null
   created_at: string
   pages: DocumentPage[]
   chunks: DocumentChunk[]

@@ -1,17 +1,35 @@
 /** Document ingestion and per-page retry endpoints, see docs/ingestion.md. */
 
-import { apiDelete, apiGet, apiPost, apiUpload } from './client'
+import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from './client'
 import type {
   DocumentDetail,
   DocumentListItem,
+  DocumentPatch,
   DocumentUploadResult,
   Job,
   RechunkResult,
 } from './types'
 
-/** `GET /api/v1/documents` — newest first. */
+/**
+ * `GET /api/v1/documents` — newest first, every document regardless of folder.
+ *
+ * The endpoint also accepts `folder_id` / `unfiled`, but the frontend does not
+ * use them: this is a single-user library the app already loads in full (the
+ * 上傳 tab, the 出題 picker and the folder counts all need the whole list), so
+ * the 文件庫 folder filter narrows what is in memory instead of refetching.
+ */
 export function listDocuments(): Promise<DocumentListItem[]> {
   return apiGet<DocumentListItem[]>('/documents')
+}
+
+/**
+ * `PATCH /api/v1/documents/{id}` — rename and/or move (docs/ingestion.md 文件
+ * 管理). Only the fields present in `patch` are changed; `folder_id: null`
+ * unfiles the document and an unknown folder id comes back as 404. The
+ * response is the same full detail shape as `GET /api/v1/documents/{id}`.
+ */
+export function patchDocument(documentId: number, patch: DocumentPatch): Promise<DocumentDetail> {
+  return apiPatch<DocumentDetail>(`/documents/${encodeURIComponent(documentId)}`, patch)
 }
 
 /** `GET /api/v1/documents/{id}` — document with its pages and chunks. */

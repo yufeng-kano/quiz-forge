@@ -33,11 +33,18 @@ const props = withDefaults(
     emptyDescription?: string
     /** Rows react to hover and emit `rowClick`; the caller still provides a real link in a cell. */
     clickableRows?: boolean
+    /**
+     * Rows can be picked up and dropped somewhere else on the page. The table
+     * only marks them `draggable` and forwards `rowDragStart` — what travels in
+     * the `DataTransfer` is the caller's business, since only it knows what a
+     * row means (see the 文件庫 folder column).
+     */
+    draggableRows?: boolean
   }>(),
-  { loading: false, skeletonRowCount: 5, clickableRows: false },
+  { loading: false, skeletonRowCount: 5, clickableRows: false, draggableRows: false },
 )
 
-const emit = defineEmits<{ rowClick: [row: T] }>()
+const emit = defineEmits<{ rowClick: [row: T]; rowDragStart: [row: T, event: DragEvent] }>()
 
 const { t } = useAppI18n()
 
@@ -117,6 +124,12 @@ function onRowClick(row: T): void {
     emit('rowClick', row)
   }
 }
+
+function onRowDragStart(row: T, event: DragEvent): void {
+  if (props.draggableRows) {
+    emit('rowDragStart', row, event)
+  }
+}
 </script>
 
 <template>
@@ -183,8 +196,13 @@ function onRowClick(row: T): void {
           <tr
             v-for="row in visibleRows"
             :key="props.rowKey(row)"
-            :class="{ 'data-table__row--clickable': props.clickableRows }"
+            :class="{
+              'data-table__row--clickable': props.clickableRows,
+              'data-table__row--draggable': props.draggableRows,
+            }"
+            :draggable="props.draggableRows"
             @click="onRowClick(row)"
+            @dragstart="onRowDragStart(row, $event)"
           >
             <td
               v-for="column in props.columns"
@@ -258,6 +276,12 @@ function onRowClick(row: T): void {
 
 .data-table__row--clickable {
   cursor: pointer;
+}
+
+/* A draggable row that is also clickable keeps the pointer cursor: the grab
+   affordance would promise dragging is the only thing a row does */
+.data-table__row--draggable:not(.data-table__row--clickable) {
+  cursor: grab;
 }
 
 .data-table__cell--end {

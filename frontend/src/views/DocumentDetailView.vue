@@ -9,6 +9,7 @@ import ProgressText from '@/components/ProgressText.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import DocumentChunkCard from '@/components/documents/DocumentChunkCard.vue'
 import DocumentPageCard from '@/components/documents/DocumentPageCard.vue'
+import DocumentRenameModal from '@/components/documents/DocumentRenameModal.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useDocumentDetail } from '@/composables/useDocumentDetail'
@@ -116,6 +117,34 @@ watch(jobIsActive, (active, wasActive) => {
     void refresh()
   }
 })
+
+/**
+ * 改名 from the header (docs/frontend.md: 文件改名於列內動作與詳情頁 header
+ * 提供). The `PATCH` answers with the whole document, so the header title is
+ * replaced from the response instead of refetching, and the list row in the
+ * store is updated by the same store action.
+ */
+const renameOpen = ref(false)
+const renaming = ref(false)
+
+async function onRenameSubmit(title: string): Promise<void> {
+  const id = documentId.value
+  if (id === null) {
+    return
+  }
+  renaming.value = true
+  try {
+    const updated = await store.rename(id, title)
+    detail.value = updated
+    toasts.success(t('documents.rename.renamed', { title: updated.title }))
+    renameOpen.value = false
+  } catch (cause) {
+    // Kept open on failure so the rejected title can be corrected in place.
+    toasts.error(translateApiError(cause))
+  } finally {
+    renaming.value = false
+  }
+}
 
 async function onRetryPage(pageId: number): Promise<void> {
   retryingPageId.value = pageId
@@ -225,6 +254,9 @@ async function onDelete(): Promise<void> {
         </template>
 
         <template #actions>
+          <AppButton v-if="detail !== null" variant="secondary" @click="renameOpen = true">
+            {{ t('documents.row.rename') }}
+          </AppButton>
           <AppButton
             v-if="jobFailed"
             variant="secondary"
@@ -366,6 +398,14 @@ async function onDelete(): Promise<void> {
           </section>
         </div>
       </div>
+
+      <DocumentRenameModal
+        :open="renameOpen"
+        :title="detail?.title ?? ''"
+        :busy="renaming"
+        @close="renameOpen = false"
+        @submit="onRenameSubmit"
+      />
     </template>
   </div>
 </template>
