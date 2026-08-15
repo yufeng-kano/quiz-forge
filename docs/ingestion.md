@@ -53,4 +53,4 @@
 - 頁面圖存 `DATA_DIR/uploads/{doc_id}/pages/`，裁切圖存 `DATA_DIR/assets/`。
 - 單頁重試（`POST /api/v1/pages/{id}/retry`）重用已存的頁面 PNG，不重新 render PDF。
 - chunk 階段失敗重試時整段 chunk 階段重跑（頁面解析不重跑）；不做 chunk 中斷點續跑。
-- 已知限制：單頁重試成功後不會自動重跑 chunk 階段；若文件 chunk 已完成，補頁內容不會進 chunk。後續視需要補「重新 chunk」操作。
+- 單頁重試成功後不會自動重跑 chunk；補頁後用 `POST /api/v1/documents/{id}/rechunk` 手動重建（以 job 刪舊 chunk 重跑整個 chunk 階段，頁面解析不動）。

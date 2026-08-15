@@ -89,7 +89,13 @@
 - `reject`：任何狀態皆可按——`draft/approved → rejected`；對已是 `rejected` 的題目再按一次會回到 `draft`（復原誤丟棄）。
 - 單題生成失敗不會使整個出題 job 失敗；job 結束時把失敗摘要記在 `jobs.error`，全部失敗才標 `failed`。
 
+### 手動建題與複製
+
+- `POST /api/v1/questions`：手動建題（同一份 union 驗證），預設 `approved`、可指定 `draft`，`source_chunk_ids` 為空。
+- `POST /api/v1/questions/{id}/duplicate`：複製為 `draft` 改造變體。
+
 ### 相關 API
 
-- `GET /api/v1/categories`：全部分類（flat，`id/name/parent_id`），供出題範圍選擇與分類路徑顯示。
+- `GET /api/v1/questions` 支援 `limit/offset`（回傳含 `total` 的分頁封包）與 `q` 全文搜尋（payload 文字 ILIKE）。
+- `GET /api/v1/categories`：全部分類（flat，`id/name/parent_id`），供出題範圍選擇與分類路徑顯示；`PATCH .../{id}` 改名、`DELETE .../{id}`（有 chunk 引用或子分類時 409）。
 - `GET /api/v1/documents*` 帶 `latest_job`（id/status/error），供前端顯示歷史失敗與重試。

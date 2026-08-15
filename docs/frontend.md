@@ -32,8 +32,10 @@
 
 | 路由 | 頁面 | 說明 |
 |---|---|---|
-| `/` | 文件列表 | 所有 documents 與處理狀態；入口含上傳與網址匯入 |
-| `/documents/:id` | 文件詳情 | 逐頁渲染 Markdown（含裁切圖表）、chunk 與分類結果、失敗頁重試 |
+| `/` | Dashboard | 總覽：文件/題目各狀態計數、待審 CTA、最近任務、累計 token |
+| `/documents` | 文件列表 | 所有 documents 與處理狀態；入口含上傳與網址匯入 |
+| `/documents/:id` | 文件詳情 | 逐頁渲染 Markdown（含裁切圖表）、chunk 與分類結果、失敗頁重試、重新 chunk |
+| `/jobs` | 任務中心 | 全域 job 列表（篩狀態/種類）、失敗重試 |
 | `/review` | 審題 | `draft` 題目列表，對照來源 chunk 原文，可編輯後採用／丟棄 |
 | `/questions` | 題庫 | `approved` 題目瀏覽，依分類／題型／難度篩選，勾選送匯出 |
 | `/generate` | 出題 | 選範圍（文件／分類）、題型、數量，建立出題 job |
@@ -44,6 +46,8 @@
 
 - 白色簡潔風：白底、留白充足、低彩度點綴色，不用深色主題。
 - 移除 scaffold 預設的示範樣式與深色 media query，全站以淺色為唯一主題。
+- 專業商業佈局：側邊欄導覽 + 每頁標題列（標題左、主要動作右），內容區依頁面性質用全寬 data table 或分欄，不再是置中單欄。
+- 設計系統層：DataTable（可排序、hover、sticky header）、Toast（操作回饋）、ConfirmDialog、Modal、Skeleton loading；所有寫入操作必有成功/失敗回饋。
 
 ## 互動原則
 

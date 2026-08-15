@@ -42,3 +42,4 @@
 | 文件 | 摘要 |
 |---|---|
 | `docs/decisions/2026-08-15-initial-system-design.md` | 初始系統設計：D1–D11 技術決策、待確認事項、開發順序 |
+| `docs/decisions/2026-08-15-ux-overhaul-feature-expansion.md` | UX 大改與功能補強：手動建題、匯出卷面、搜尋分頁、分類管理、Dashboard/任務中心、rechunk、專業版面 |
