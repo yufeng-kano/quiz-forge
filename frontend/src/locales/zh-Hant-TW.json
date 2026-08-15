@@ -18,8 +18,7 @@
     },
     "documentDetail": {
       "title": "文件詳情",
-      "subtitle": "文件 #{id}",
-      "description": "逐頁 Markdown（含裁切圖表）、chunk 與分類結果，失敗頁可單頁重試。"
+      "subtitle": "文件 #{id}"
     },
     "review": {
       "title": "審題",
@@ -46,16 +45,95 @@
     "title": "此頁面尚未實作",
     "description": "版面與共用元件已就緒，功能會在後續任務接上對應 API。"
   },
+  "status": {
+    "pending": "等待中",
+    "running": "處理中",
+    "processing": "處理中",
+    "done": "已完成",
+    "ready": "已完成",
+    "failed": "失敗"
+  },
   "job": {
-    "status": {
-      "pending": "等待中",
-      "running": "處理中",
-      "done": "已完成",
-      "failed": "失敗"
-    },
     "progress": {
       "notStarted": "尚未開始",
-      "ratio": "{current} / {total}（{percent}%）"
+      "ratio": "{current} / {total}（{percent}%）",
+      "ratioWithUnit": "{current} / {total} {unit}（{percent}%）",
+      "unit": {
+        "pages": "頁",
+        "chunks": "個段落"
+      }
+    }
+  },
+  "documents": {
+    "intake": {
+      "title": "新增文件",
+      "fileLabel": "上傳檔案",
+      "fileHint": "支援 PDF、PNG、JPG、DOCX。",
+      "uploading": "上傳中…",
+      "urlLabel": "網址匯入",
+      "urlPlaceholder": "https://example.com/article",
+      "urlSubmit": "匯入",
+      "importing": "匯入中…"
+    },
+    "list": {
+      "loading": "載入文件中…",
+      "count": "共 {count} 份文件",
+      "reload": "重新載入",
+      "emptyTitle": "尚未有任何文件",
+      "emptyDescription": "上傳掃描件、PDF、Word、圖片，或貼上網址匯入網頁內容。"
+    },
+    "row": {
+      "pageCount": "{count} 頁",
+      "delete": "刪除",
+      "deleting": "刪除中…",
+      "deleteConfirmQuestion": "確定刪除這份文件？頁面、分段與裁切圖會一併移除。",
+      "deleteConfirm": "確定刪除",
+      "deleteCancel": "取消",
+      "retryJob": "重試解析",
+      "retrying": "重新排入中…",
+      "jobFailed": "解析失敗：{error}",
+      "jobFailedNoDetail": "解析失敗，未取得失敗原因。"
+    },
+    "sourceType": {
+      "upload": "上傳檔案",
+      "url": "網址匯入"
+    }
+  },
+  "documentDetail": {
+    "back": "回文件列表",
+    "loading": "載入文件中…",
+    "invalidId": "文件編號無效",
+    "invalidIdDescription": "網址中的文件編號必須是正整數。",
+    "reload": "重新載入",
+    "createdAt": "建立於 {datetime}",
+    "sourceUrl": "來源網址",
+    "summary": "摘要",
+    "jobProgress": "解析進度",
+    "jobFailed": "解析失敗：{error}",
+    "jobFailedNoDetail": "解析失敗，未取得失敗原因。",
+    "retryJob": "重試解析",
+    "pages": {
+      "title": "頁面",
+      "count": "共 {count} 頁",
+      "emptyTitle": "尚未產生頁面",
+      "emptyDescription": "解析完成後，每一頁的 Markdown 會顯示在這裡。",
+      "pageNo": "第 {no} 頁",
+      "retry": "重試此頁",
+      "retrying": "重新排入中…",
+      "noContent": "此頁尚未產生內容。"
+    },
+    "chunks": {
+      "title": "分段與分類",
+      "count": "共 {count} 段",
+      "emptyTitle": "尚未產生分段",
+      "emptyDescription": "頁面解析完成後，系統會切分內容並標註分類與標籤。",
+      "chunkNo": "分段 {no}",
+      "uncategorized": "未分類",
+      "categorySeparator": " › ",
+      "embedded": "已建立向量",
+      "notEmbedded": "尚無向量",
+      "expand": "展開全文",
+      "collapse": "收合"
     }
   },
   "errors": {

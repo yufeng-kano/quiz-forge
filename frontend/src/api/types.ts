@@ -43,6 +43,22 @@ export interface Job {
 export type DocumentSourceType = 'upload' | 'url'
 
 /**
+ * `documents.status` / `pages.status` values that mean "the pipeline is still
+ * working on this row", so a view knows when to keep polling.
+ *
+ * Both columns are plain `String(30)` on the backend with no CHECK constraint;
+ * `backend.ingestion.pipeline` writes `pending` / `processing` / `ready` /
+ * `failed`. Only the two working states are listed here, and the check takes a
+ * plain string: an unexpected value counts as settled and stops the polling
+ * loop rather than being forced into a union the server does not guarantee.
+ */
+export const ACTIVE_ENTITY_STATUSES = ['pending', 'processing'] as const
+
+export function isActiveEntityStatus(status: string): boolean {
+  return ACTIVE_ENTITY_STATUSES.some((active) => active === status)
+}
+
+/**
  * One row of `GET /api/v1/documents`.
  *
  * `status` is a plain string rather than a union: docs/data-model.md does not

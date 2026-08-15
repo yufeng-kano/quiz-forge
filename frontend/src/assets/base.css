@@ -32,6 +32,11 @@
   --color-status-failed-bg: #f8eeee;
   --color-status-failed-border: #ecd9d9;
 
+  /* Fallback for a status string the frontend does not know yet */
+  --color-status-unknown-text: #71717a;
+  --color-status-unknown-bg: #ffffff;
+  --color-status-unknown-border: #e4e4e7;
+
   --section-gap: 2.5rem;
   --content-max-width: 1080px;
 }
