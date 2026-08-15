@@ -6,6 +6,7 @@ it requeues any job left `running` by a previous crash, starts
 shutdown.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -14,12 +15,25 @@ from fastapi import FastAPI
 from backend.api.v1 import router as v1_router
 from backend.core.config import get_settings
 from backend.db.session import AsyncSessionLocal
-from backend.jobs import JobWorkerPool
+from backend.ingestion.pipeline import parse_document, parse_page
+from backend.jobs import JobWorkerPool, registered_kinds
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
+    # Importing `backend.ingestion.pipeline` above registers `parse_document`/
+    # `parse_page` as job handlers (the `@register_handler` decorator runs at
+    # import time) — referenced here so a worker pool never starts without
+    # them, and confirmed in the startup log.
+    logger.info(
+        "ingestion handlers loaded: %s, %s -- registered job kinds: %s",
+        parse_document.__name__,
+        parse_page.__name__,
+        registered_kinds(),
+    )
     worker_pool = JobWorkerPool(
         session_factory=AsyncSessionLocal,
         worker_count=settings.job_worker_count,

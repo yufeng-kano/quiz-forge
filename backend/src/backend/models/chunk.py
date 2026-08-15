@@ -6,10 +6,11 @@ The embedding column's dimension comes from `settings.embedding_dim`
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import ARRAY, ForeignKey, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.config import get_settings
 from backend.db.base import Base
+from backend.models.category import Category
 
 settings = get_settings()
 
@@ -27,3 +28,7 @@ class Chunk(Base):
     )
     tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(settings.embedding_dim))
+
+    # Read-only convenience for the API layer (GET /v1/documents/{id}) to
+    # serialize a chunk's subject/topic without a manual second query.
+    category: Mapped[Category | None] = relationship(viewonly=True, lazy="selectin")

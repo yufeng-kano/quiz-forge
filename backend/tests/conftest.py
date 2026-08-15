@@ -2,8 +2,8 @@
 
 Tests in this suite run against a real Postgres — point `DATABASE_URL` at a
 throwaway database before invoking pytest (see backend/README.md for the
-exact commands). `jobs` and `llm_usage` are truncated before every test so
-one test never sees rows left behind by another.
+exact commands). Every table a test might write to is truncated before every
+test so one test never sees rows left behind by another.
 """
 
 from collections.abc import Iterator
@@ -20,7 +20,12 @@ from backend.main import app
 @pytest.fixture(autouse=True)
 async def _clean_tables() -> None:
     async with AsyncSessionLocal() as session:
-        await session.execute(text("TRUNCATE TABLE jobs, llm_usage RESTART IDENTITY CASCADE"))
+        await session.execute(
+            text(
+                "TRUNCATE TABLE jobs, llm_usage, documents, categories "
+                "RESTART IDENTITY CASCADE"
+            )
+        )
         await session.commit()
 
 

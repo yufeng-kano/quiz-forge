@@ -42,7 +42,15 @@
 
 ## Chunk 與分類
 
-1. 解析完成的 Markdown 依標題結構 + 長度上限切 chunk。
-2. 每個 chunk 由 `TEXT_MODEL` 依分類 schema 標註：科目／主題／難度／標籤（`categories` 支援階層）。
+1. 解析完成的 Markdown 依標題結構 + 長度上限（`CHUNK_MAX_CHARS`，預設 4000）切 chunk。
+2. 每個 chunk 由 `TEXT_MODEL` 依分類 schema 標註：科目／主題／難度／標籤（`categories` 支援階層，主題的 parent 為科目，get-or-create 跨文件去重）。難度不設獨立欄位，以 `難度:{值}` 併入 `tags[]`。
 3. 每個 chunk 呼叫 `EMBEDDING_MODEL` 計算 embedding，存 pgvector（維度 `EMBEDDING_DIM`）。
 4. embedding 用途：比較題的相關 chunk 配對（見 `question-bank.md`）。
+
+## 實作備註與已知限制
+
+- 實作在 `backend/src/backend/ingestion/`；所有 LLM prompt 集中在 `prompts.py`。
+- 頁面圖存 `DATA_DIR/uploads/{doc_id}/pages/`，裁切圖存 `DATA_DIR/assets/`。
+- 單頁重試（`POST /api/v1/pages/{id}/retry`）重用已存的頁面 PNG，不重新 render PDF。
+- chunk 階段失敗重試時整段 chunk 階段重跑（頁面解析不重跑）；不做 chunk 中斷點續跑。
+- 已知限制：單頁重試成功後不會自動重跑 chunk 階段；若文件 chunk 已完成，補頁內容不會進 chunk。後續視需要補「重新 chunk」操作。

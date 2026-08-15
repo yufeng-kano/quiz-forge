@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     llm_concurrency: int = 4
     ocr_dpi: int = 200
 
+    # 文件解析／chunk（docs/ingestion.md — chunk 依標題結構＋長度上限切分）
+    chunk_max_chars: int = 4000
+
     # 背景任務（pg-as-queue，見 docs/architecture.md）
     job_worker_count: int = 2
     job_poll_interval_seconds: float = 1.0

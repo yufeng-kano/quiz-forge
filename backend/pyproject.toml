@@ -12,10 +12,16 @@ dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.141.1",
     "greenlet>=3.5.5",
+    "mammoth>=1.12.1",
+    "markdownify>=1.2.3",
     "openai>=3.1.0",
     "pgvector>=0.5.0",
+    "pillow>=12.3.0",
     "pydantic-settings>=2.15.0",
+    "pymupdf>=1.28.2",
+    "python-multipart>=0.0.32",
     "sqlalchemy>=2.0",
+    "trafilatura>=2.2.0",
     "uvicorn[standard]>=0.52.3",
 ]
 
@@ -40,10 +46,10 @@ target-version = "py313"
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.flake8-bugbear]
-# FastAPI's `Depends(...)`/`Query(...)` default-argument pattern is the
-# framework's own dependency-injection idiom, not the mutable-default bug
-# B008 exists to catch — this is ruff's documented allowlist for it.
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
+# FastAPI's `Depends(...)`/`Query(...)`/`File(...)` default-argument pattern
+# is the framework's own dependency-injection idiom, not the mutable-default
+# bug B008 exists to catch — this is ruff's documented allowlist for it.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.File"]
 
 [tool.basedpyright]
 include = ["src", "tests", "alembic"]
