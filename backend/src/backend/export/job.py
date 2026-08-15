@@ -7,6 +7,11 @@ request-shape problem, not a per-question one, so unlike `generate_questions`
 it is never "partially" run). Rendering itself (`python-docx`, sync/CPU-bound)
 runs in `asyncio.to_thread` one question at a time so `jobs.progress` reflects
 real per-question progress, matching .rule 使用者體驗規則 (逐頁/逐題進度)。
+
+Rendering order is section-grouped (docs/export.md 題目依題型分節...固定順序，
+節內連續編號), computed once via `backend.export.sections.build_sections` —
+this handler never re-derives that grouping/heading logic itself, it only
+drives `ExamPaperBuilder` through what that module already worked out.
 """
 
 import asyncio
@@ -17,11 +22,12 @@ from backend.core.config import get_settings
 from backend.export.builder import ExamPaperBuilder
 from backend.export.paper import SUPPORTED_PAPER_SIZES
 from backend.export.paths import answers_docx_path, questions_docx_path
+from backend.export.sections import build_sections, total_score
 from backend.jobs.context import JobContext
 from backend.jobs.registry import register_handler
 from backend.models.export import Export
 from backend.models.question import Question
-from backend.questions.schemas import parse_question
+from backend.questions.schemas import QUESTION_TYPE_MODELS, parse_question
 
 
 def _require_paper_size(payload: dict[str, object]) -> str:
@@ -31,6 +37,33 @@ def _require_paper_size(payload: dict[str, object]) -> str:
             f"job payload paper_size must be one of {sorted(SUPPORTED_PAPER_SIZES)}, got {value!r}"
         )
     return value
+
+
+def _require_title(payload: dict[str, object]) -> str:
+    value = payload.get("title")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"job payload missing non-empty string title: {payload!r}")
+    return value
+
+
+def _parse_points(payload: dict[str, object]) -> dict[str, int] | None:
+    """`payload["points"]` (optional 每題型配分, docs/export.md) validated
+    into `{question_type: positive_int}`, or `None` when omitted."""
+    value = payload.get("points")
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"job payload field points must be an object: {payload!r}")
+    points: dict[str, int] = {}
+    for question_type, raw_amount in value.items():
+        if question_type not in QUESTION_TYPE_MODELS:
+            raise ValueError(f"points key {question_type!r} is not a known question type")
+        if not isinstance(raw_amount, int) or isinstance(raw_amount, bool) or raw_amount <= 0:
+            raise ValueError(
+                f"points value for {question_type!r} must be a positive integer, got {raw_amount!r}"
+            )
+        points[question_type] = raw_amount
+    return points
 
 
 def _require_question_ids(payload: dict[str, object]) -> list[int]:
@@ -62,6 +95,8 @@ async def export_docx(ctx: JobContext) -> None:
     payload = ctx.payload
 
     paper_size = _require_paper_size(payload)
+    title = _require_title(payload)
+    points = _parse_points(payload)
     question_ids = _require_question_ids(payload)
 
     rows = (
@@ -84,8 +119,9 @@ async def export_docx(ctx: JobContext) -> None:
         raise ValueError("; ".join(problems))
 
     questions = [by_id[qid] for qid in question_ids]
+    models = [parse_question(question.type, question.payload) for question in questions]
 
-    export = Export(paper_size=paper_size, question_ids=question_ids)
+    export = Export(title=title, paper_size=paper_size, question_ids=question_ids)
     session.add(export)
     await session.commit()
     await session.refresh(export)
@@ -93,11 +129,23 @@ async def export_docx(ctx: JobContext) -> None:
     total = len(questions)
     await ctx.set_progress(f"0/{total}")
 
-    builder = await asyncio.to_thread(ExamPaperBuilder, paper_size)
-    for index, question in enumerate(questions, start=1):
-        model = parse_question(question.type, question.payload)
-        await asyncio.to_thread(builder.render_question, index, model)
-        await ctx.set_progress(f"{index}/{total}")
+    builder = await asyncio.to_thread(ExamPaperBuilder, paper_size, title)
+    total_points = total_score(models, points)
+    if total_points is not None:
+        await asyncio.to_thread(builder.add_total_score, total_points)
+
+    rendered = 0
+    for section in build_sections(models, points):
+        await asyncio.to_thread(builder.add_section_heading, section.heading)
+        for number, model in section.numbered_questions:
+            await asyncio.to_thread(
+                builder.render_question,
+                number,
+                model,
+                show_points_blank=section.show_points_blank,
+            )
+            rendered += 1
+            await ctx.set_progress(f"{rendered}/{total}")
 
     data_dir = settings.data_dir
     questions_path = questions_docx_path(data_dir, export.id)

@@ -28,7 +28,12 @@ async def create_export_job(
 ) -> ExportOut:
     job = Job(
         kind="export_docx",
-        payload={"question_ids": body.question_ids, "paper_size": body.paper_size},
+        payload={
+            "question_ids": body.question_ids,
+            "paper_size": body.paper_size,
+            "title": body.title,
+            "points": body.points,
+        },
     )
     session.add(job)
     await session.commit()
@@ -46,6 +51,7 @@ async def list_exports(session: AsyncSession = Depends(get_session)) -> list[Exp
     return [
         ExportListItemOut(
             id=export.id,
+            title=export.title,
             paper_size=export.paper_size,
             question_count=len(export.question_ids),
             created_at=export.created_at,

@@ -28,6 +28,8 @@ CJK_FONT_NAME: Final[str] = "微軟正黑體"
 LATIN_FONT_NAME: Final[str] = "Times New Roman"
 
 TITLE_FONT_SIZE_PT: Final[float] = 16.0
+SUBTITLE_FONT_SIZE_PT: Final[float] = 13.0
+SECTION_HEADING_FONT_SIZE_PT: Final[float] = 14.0
 BODY_FONT_SIZE_PT: Final[float] = 12.0
 LINE_SPACING: Final[float] = 1.5
 
@@ -35,6 +37,11 @@ LINE_SPACING: Final[float] = 1.5
 # (docs/export.md 選擇/是非題自動編號與配分欄位) — a blank for the paper's
 # author to fill in by hand; the system has no per-question point-value data.
 POINTS_FIELD_LABEL: Final[str] = "（配分：______分）"
+
+# 卷首學生資訊列（docs/export.md 卷首固定印學生資訊列：班級／座號／姓名）。
+STUDENT_INFO_LINE_TEXT: Final[str] = (
+    "班級：______________　座號：______________　姓名：______________"
+)
 
 
 def _apply_run_font(run: Run, *, size_pt: float, bold: bool = False) -> None:
@@ -76,6 +83,46 @@ def add_title(document: Document, text: str) -> Paragraph:
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = paragraph.add_run(text)
     _apply_run_font(run, size_pt=TITLE_FONT_SIZE_PT, bold=True)
+    return paragraph
+
+
+def add_subtitle(document: Document, text: str) -> Paragraph:
+    """Centered, bold, smaller-than-title line under the exam title — used
+    for the 題目卷/答案卷 label so the exam's own title (docs/export.md
+    卷首：考卷標題) stays the visually dominant heading."""
+    paragraph = document.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = paragraph.add_run(text)
+    _apply_run_font(run, size_pt=SUBTITLE_FONT_SIZE_PT, bold=True)
+    return paragraph
+
+
+def add_student_info_line(document: Document) -> Paragraph:
+    """卷首學生資訊列：班級／座號／姓名 (docs/export.md), printed on every
+    exported paper regardless of paper size or scoring settings."""
+    paragraph = document.add_paragraph()
+    run = paragraph.add_run(STUDENT_INFO_LINE_TEXT)
+    _apply_run_font(run, size_pt=BODY_FONT_SIZE_PT)
+    return paragraph
+
+
+def add_total_score_line(document: Document, total: int) -> Paragraph:
+    """卷首總分 (docs/export.md 有配分時印總分) — only ever called when at
+    least one type in the export's `points` mapping was actually assigned."""
+    paragraph = document.add_paragraph()
+    run = paragraph.add_run(f"總分：{total} 分")
+    _apply_run_font(run, size_pt=BODY_FONT_SIZE_PT, bold=True)
+    return paragraph
+
+
+def add_section_heading(document: Document, text: str) -> Paragraph:
+    """One 分節 heading (e.g. 「一、選擇題（每題 2 分）」), left-aligned and
+    bold so it stands out from the numbered stems under it without competing
+    with the exam title's centered/larger styling."""
+    paragraph = document.add_paragraph()
+    paragraph.paragraph_format.space_before = Pt(12)
+    run = paragraph.add_run(text)
+    _apply_run_font(run, size_pt=SECTION_HEADING_FONT_SIZE_PT, bold=True)
     return paragraph
 
 

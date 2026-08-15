@@ -164,6 +164,49 @@ async def parse_page(ctx: JobContext) -> None:
         raise
 
 
+@register_handler("rechunk_document")
+async def rechunk_document(ctx: JobContext) -> None:
+    """`POST /v1/documents/{id}/rechunk` (docs/ingestion.md 補頁後...手動重
+    建) — deletes the document's existing chunks and reruns the chunk/
+    classify/embed phase over its *current* page markdown. Page parsing
+    itself is never touched here; this reuses `_run_chunk_phase` exactly as
+    `parse_document`'s own chunk-phase rerun does (.rule 反偷懶規則 — 不得
+    重複核心邏輯), it is only reachable from a different entrypoint (the API
+    already checked at least one page is `ready` before enqueueing this)."""
+    settings = get_settings()
+    llm = get_llm_client()
+    session = ctx.session
+
+    document_id = _require_int(ctx.payload, "document_id")
+    document = await session.get(Document, document_id)
+    if document is None:
+        raise ValueError(f"document {document_id} not found")
+
+    pages = (
+        (
+            await session.execute(
+                select(Page).where(Page.document_id == document_id).order_by(Page.page_no)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not any(page.status == "ready" for page in pages):
+        raise ValueError(f"document {document_id} has no ready page to rechunk from")
+
+    document.status = "processing"
+    await session.commit()
+
+    try:
+        await _run_chunk_phase(document, list(pages), ctx, llm, settings)
+        document.status = "ready"
+        await session.commit()
+    except Exception:
+        document.status = "failed"
+        await session.commit()
+        raise
+
+
 async def _delete_page_assets(session: AsyncSession, page_id: int) -> None:
     """Delete `page_id`'s existing asset rows and files before re-parsing it."""
     old_assets = (

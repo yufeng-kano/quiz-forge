@@ -39,6 +39,7 @@ async def _make_question(*, status: str = "approved") -> int:
 
 async def _make_export(
     *,
+    title: str = "測試考卷",
     paper_size: str = "A4",
     question_ids: list[int] | None = None,
     docx_path: str | None = None,
@@ -46,6 +47,7 @@ async def _make_export(
 ) -> int:
     async with AsyncSessionLocal() as session:
         export = Export(
+            title=title,
             paper_size=paper_size,
             question_ids=question_ids or [],
             docx_path=docx_path,
@@ -66,7 +68,8 @@ async def test_create_export_job_enqueues_export_docx_job(client: TestClient) ->
     question_id = await _make_question()
 
     response = client.post(
-        "/v1/exports", json={"question_ids": [question_id], "paper_size": "B4"}
+        "/v1/exports",
+        json={"question_ids": [question_id], "paper_size": "B4", "title": "第一次段考"},
     )
 
     assert response.status_code == 201
@@ -78,16 +81,83 @@ async def test_create_export_job_enqueues_export_docx_job(client: TestClient) ->
         assert job is not None
         assert job.kind == "export_docx"
         assert job.status == "pending"
-        assert job.payload == {"question_ids": [question_id], "paper_size": "B4"}
+        assert job.payload == {
+            "question_ids": [question_id],
+            "paper_size": "B4",
+            "title": "第一次段考",
+            "points": None,
+        }
+
+
+async def test_create_export_job_forwards_points(client: TestClient) -> None:
+    question_id = await _make_question()
+
+    response = client.post(
+        "/v1/exports",
+        json={
+            "question_ids": [question_id],
+            "paper_size": "A4",
+            "title": "小考",
+            "points": {"single_choice": 5, "true_false": 2},
+        },
+    )
+
+    assert response.status_code == 201
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, response.json()["job_id"])
+        assert job is not None
+        assert job.payload["points"] == {"single_choice": 5, "true_false": 2}
 
 
 def test_create_export_job_rejects_unsupported_paper_size(client: TestClient) -> None:
-    response = client.post("/v1/exports", json={"question_ids": [1], "paper_size": "Letter"})
+    response = client.post(
+        "/v1/exports", json={"question_ids": [1], "paper_size": "Letter", "title": "考卷"}
+    )
     assert response.status_code == 422
 
 
 def test_create_export_job_rejects_empty_question_ids(client: TestClient) -> None:
-    response = client.post("/v1/exports", json={"question_ids": [], "paper_size": "A4"})
+    response = client.post(
+        "/v1/exports", json={"question_ids": [], "paper_size": "A4", "title": "考卷"}
+    )
+    assert response.status_code == 422
+
+
+def test_create_export_job_rejects_missing_title(client: TestClient) -> None:
+    response = client.post("/v1/exports", json={"question_ids": [1], "paper_size": "A4"})
+    assert response.status_code == 422
+
+
+def test_create_export_job_rejects_blank_title(client: TestClient) -> None:
+    response = client.post(
+        "/v1/exports", json={"question_ids": [1], "paper_size": "A4", "title": "   "}
+    )
+    assert response.status_code == 422
+
+
+def test_create_export_job_rejects_unknown_points_type(client: TestClient) -> None:
+    response = client.post(
+        "/v1/exports",
+        json={
+            "question_ids": [1],
+            "paper_size": "A4",
+            "title": "考卷",
+            "points": {"essay": 5},
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_create_export_job_rejects_non_positive_points_value(client: TestClient) -> None:
+    response = client.post(
+        "/v1/exports",
+        json={
+            "question_ids": [1],
+            "paper_size": "A4",
+            "title": "考卷",
+            "points": {"single_choice": 0},
+        },
+    )
     assert response.status_code == 422
 
 
@@ -95,7 +165,9 @@ def test_create_export_job_rejects_empty_question_ids(client: TestClient) -> Non
 def test_create_export_job_accepts_every_supported_paper_size(
     client: TestClient, paper_size: str
 ) -> None:
-    response = client.post("/v1/exports", json={"question_ids": [1], "paper_size": paper_size})
+    response = client.post(
+        "/v1/exports", json={"question_ids": [1], "paper_size": paper_size, "title": "考卷"}
+    )
     assert response.status_code == 201
 
 
@@ -107,12 +179,13 @@ def test_create_export_job_accepts_every_supported_paper_size(
 async def test_list_exports_reports_question_count_and_paper_size(client: TestClient) -> None:
     q1 = await _make_question()
     q2 = await _make_question()
-    export_id = await _make_export(paper_size="B4", question_ids=[q1, q2])
+    export_id = await _make_export(title="第一次段考", paper_size="B4", question_ids=[q1, q2])
 
     response = client.get("/v1/exports")
 
     assert response.status_code == 200
     item = next(item for item in response.json() if item["id"] == export_id)
+    assert item["title"] == "第一次段考"
     assert item["paper_size"] == "B4"
     assert item["question_count"] == 2
     assert item["questions_available"] is False

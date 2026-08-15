@@ -1,6 +1,7 @@
 """Request/response schemas for `POST /v1/generate` and `/v1/questions`."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -35,6 +36,28 @@ class QuestionListItemOut(BaseModel):
     payload: dict[str, object]
     source_chunk_ids: list[int]
     created_at: datetime
+
+
+class QuestionListOut(BaseModel):
+    """`GET /v1/questions` pagination envelope (docs/question-bank.md
+    limit/offset 分頁封包)."""
+
+    items: list[QuestionListItemOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class QuestionCreateIn(BaseModel):
+    """`POST /v1/questions` body — manual question authoring
+    (docs/question-bank.md 手動建題). Defaults to `approved` (老師自己寫的
+    不需審); `source_chunk_ids` is always empty (see the handler, not
+    settable here — a hand-written question has no LLM source chunk)."""
+
+    type: QuestionType
+    difficulty: str | None = None
+    payload: dict[str, object]
+    status: Literal["draft", "approved"] = "approved"
 
 
 class SourceChunkOut(BaseModel):

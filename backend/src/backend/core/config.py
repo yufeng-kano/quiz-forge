@@ -51,6 +51,14 @@ class Settings(BaseSettings):
     comparison_similarity_min: float = 0.35
     comparison_similarity_max: float = 0.75
 
+    # 分頁：`GET /v1/questions`（docs/question-bank.md limit/offset 分頁封包）
+    # 與 `GET /v1/jobs`（docs/architecture.md 任務列表）共用「預設值 + 上限」
+    # 這組模式——未帶 limit 時用 default，帶了但超過 max 時回 422。
+    questions_list_limit_default: int = 50
+    questions_list_limit_max: int = 200
+    jobs_list_limit_default: int = 50
+    jobs_list_limit_max: int = 200
+
     # 基礎設施
     database_url: str = "postgresql+asyncpg://quizforge:quizforge@localhost:5432/quizforge"
     data_dir: Path = Path("/data")

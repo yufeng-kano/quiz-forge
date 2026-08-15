@@ -29,6 +29,7 @@ from backend.schemas.document import (
     DocumentListItemOut,
     DocumentUploadOut,
     PageOut,
+    RechunkOut,
     UrlUploadIn,
 )
 from backend.schemas.job import JobSummaryOut
@@ -226,6 +227,39 @@ async def get_document(
         chunks=[_to_chunk_out(chunk) for chunk in chunks],
         latest_job=_job_summary(latest_job),
     )
+
+
+@router.post(
+    "/{document_id}/rechunk", response_model=RechunkOut, status_code=status.HTTP_201_CREATED
+)
+async def rechunk_document(
+    document_id: int, session: AsyncSession = Depends(get_session)
+) -> RechunkOut:
+    """Enqueue a `rechunk_document` job (docs/ingestion.md 補頁後...手動重
+    建). 409 unless the document has at least one `ready` page — with none,
+    there is no page markdown to chunk from at all."""
+    document = await session.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+
+    ready_page_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(Page)
+            .where(Page.document_id == document_id, Page.status == "ready")
+        )
+    ).scalar_one()
+    if ready_page_count == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"document {document_id} has no ready page to rechunk from",
+        )
+
+    job = Job(kind="rechunk_document", payload={"document_id": document_id})
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    return RechunkOut(job_id=job.id)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

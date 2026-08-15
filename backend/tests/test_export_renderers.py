@@ -82,7 +82,12 @@ def _all_text(document: Document) -> str:
 def _build_and_reopen(
     tmp_path: Path, paper_size: str, questions: list[QuestionModel]
 ) -> tuple[Document, Document]:
-    builder = ExamPaperBuilder(paper_size)
+    """Renders every question with a single flat "one section" number
+    sequence (1..N) — the renderer-level tests below only care about each
+    type's stem/option/answer content, not about section grouping (that's
+    covered separately in `test_export_sections.py` and end-to-end in
+    `test_export_job.py`)."""
+    builder = ExamPaperBuilder(paper_size, "測試考卷")
     for number, question in enumerate(questions, start=1):
         builder.render_question(number, question)
     questions_path = tmp_path / "questions.docx"

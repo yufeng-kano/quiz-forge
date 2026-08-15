@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from docx import Document as open_docx
+from docx.document import Document
 from factories import create_job
 from sqlalchemy import select
 
@@ -54,8 +55,14 @@ async def _make_question(
         return question.id
 
 
+DEFAULT_TITLE = "測試考卷"
+
+
 async def _run_job(payload: dict[str, object]) -> int:
-    job_id = await create_job("export_docx", payload=payload)
+    """`title` defaults to `DEFAULT_TITLE` for tests that don't care about
+    it — only the title/points-specific tests below override it."""
+    full_payload = {"title": DEFAULT_TITLE, **payload}
+    job_id = await create_job("export_docx", payload=full_payload)
     async with AsyncSessionLocal() as session:
         claimed = await claim_job(session)
         assert claimed is not None
@@ -226,5 +233,134 @@ async def test_duplicate_question_ids_are_deduplicated_and_numbered_once(
     async with AsyncSessionLocal() as session:
         export = (await session.execute(select(Export))).scalars().one()
     assert export.question_ids == [question_id]
+
+    get_settings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# title / sections / points (docs/export.md 卷面結構)
+# ---------------------------------------------------------------------------
+
+
+def _all_text(document: Document) -> str:
+    parts = [paragraph.text for paragraph in document.paragraphs]
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                parts.append(cell.text)
+    return "\n".join(parts)
+
+
+async def test_missing_title_fails_the_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    approved_id = await _make_question(status="approved")
+
+    job_id = await create_job(
+        "export_docx", payload={"question_ids": [approved_id], "paper_size": "A4"}
+    )
+    async with AsyncSessionLocal() as session:
+        claimed = await claim_job(session)
+        assert claimed is not None
+        assert claimed.id == job_id
+    await run_claimed_job(AsyncSessionLocal, job_id)
+    job = await _get_job(job_id)
+
+    assert job.status == "failed"
+    assert job.error is not None
+    assert "title" in job.error
+
+    get_settings.cache_clear()
+
+
+async def test_exports_row_and_docx_header_carry_the_title(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    question_id = await _make_question(status="approved")
+
+    job_id = await _run_job(
+        {"question_ids": [question_id], "paper_size": "A4", "title": "第一次段考"}
+    )
+    job = await _get_job(job_id)
+    assert job.status == "done"
+
+    async with AsyncSessionLocal() as session:
+        export = (await session.execute(select(Export))).scalars().one()
+    assert export.title == "第一次段考"
+    assert export.docx_path is not None
+    assert export.answer_docx_path is not None
+
+    question_doc = open_docx(str(Path(export.docx_path)))
+    answer_doc = open_docx(str(Path(export.answer_docx_path)))
+    for document in (question_doc, answer_doc):
+        text = _all_text(document)
+        assert "第一次段考" in text
+        assert "班級" in text and "座號" in text and "姓名" in text
+
+    get_settings.cache_clear()
+
+
+async def test_sections_grouped_headed_and_renumbered_with_points_and_total_score(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two single_choice + one true_false, requested in an interleaved
+    order, must render as two sections (選擇題 first per the fixed order,
+    regardless of request order), each renumbered from 1, with the
+    single_choice heading carrying its assigned 配分 and the true_false
+    section keeping its old per-question 配分 blank (not assigned points)."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    get_settings.cache_clear()
+
+    true_false_id = await _make_question(
+        status="approved", question_type="true_false", payload=TRUE_FALSE_PAYLOAD
+    )
+    single_choice_a = await _make_question(status="approved")
+    single_choice_b = await _make_question(status="approved")
+
+    job_id = await _run_job(
+        {
+            "question_ids": [true_false_id, single_choice_a, single_choice_b],
+            "paper_size": "A4",
+            "title": "小考",
+            "points": {"single_choice": 5},
+        }
+    )
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        export = (await session.execute(select(Export))).scalars().one()
+    assert export.docx_path is not None
+    assert export.answer_docx_path is not None
+
+    for path_str in (export.docx_path, export.answer_docx_path):
+        document = open_docx(str(Path(path_str)))
+        paragraphs = [paragraph.text for paragraph in document.paragraphs]
+
+        assert "一、選擇題（每題 5 分）" in paragraphs
+        assert "二、是非題" in paragraphs  # no points assigned -> no "每題 X 分"
+
+        section_index = paragraphs.index("一、選擇題（每題 5 分）")
+        true_false_index = paragraphs.index("二、是非題")
+        single_choice_numbers = [
+            paragraph[:1]
+            for paragraph in paragraphs[section_index:true_false_index]
+            if paragraph[:1].isdigit()
+        ]
+        assert single_choice_numbers == ["1", "2"]  # renumbered from 1, not 2/3
+
+        true_false_stem = next(
+            paragraph for paragraph in paragraphs[true_false_index:] if paragraph[:1].isdigit()
+        )
+        assert true_false_stem.startswith("1. ")  # true_false section also restarts at 1
+        assert "配分" in true_false_stem  # kept: true_false has no assigned points
+
+        assert "總分：10 分" in paragraphs  # 2 single_choice * 5 分; true_false contributes 0
 
     get_settings.cache_clear()

@@ -235,6 +235,58 @@ async def test_delete_document_removes_row_and_files(
     get_settings.cache_clear()
 
 
+async def test_rechunk_enqueues_job_when_a_ready_page_exists(client: TestClient) -> None:
+    async with AsyncSessionLocal() as session:
+        document = Document(source_type="upload", title="doc-h", status="ready")
+        session.add(document)
+        await session.commit()
+        await session.refresh(document)
+        session.add(Page(document_id=document.id, page_no=1, status="ready", markdown="內容"))
+        await session.commit()
+
+    response = client.post(f"/v1/documents/{document.id}/rechunk")
+
+    assert response.status_code == 201
+    body = response.json()
+    assert isinstance(body["job_id"], int)
+
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, body["job_id"])
+        assert job is not None
+        assert job.kind == "rechunk_document"
+        assert job.payload == {"document_id": document.id}
+        assert job.status == "pending"
+
+
+async def test_rechunk_409_when_no_page_is_ready(client: TestClient) -> None:
+    async with AsyncSessionLocal() as session:
+        document = Document(source_type="upload", title="doc-i", status="failed")
+        session.add(document)
+        await session.commit()
+        await session.refresh(document)
+        session.add(Page(document_id=document.id, page_no=1, status="failed"))
+        await session.commit()
+
+    response = client.post(f"/v1/documents/{document.id}/rechunk")
+    assert response.status_code == 409
+
+
+async def test_rechunk_409_when_document_has_no_pages_at_all(client: TestClient) -> None:
+    async with AsyncSessionLocal() as session:
+        document = Document(source_type="upload", title="doc-j", status="pending")
+        session.add(document)
+        await session.commit()
+        await session.refresh(document)
+
+    response = client.post(f"/v1/documents/{document.id}/rechunk")
+    assert response.status_code == 409
+
+
+def test_rechunk_404_for_missing_document(client: TestClient) -> None:
+    response = client.post("/v1/documents/999999999/rechunk")
+    assert response.status_code == 404
+
+
 async def test_retry_page_rejects_page_still_processing(client: TestClient) -> None:
     async with AsyncSessionLocal() as session:
         document = Document(source_type="upload", title="doc-c", status="processing")

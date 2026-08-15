@@ -12,6 +12,9 @@ class Export(Base):
     __tablename__ = "exports"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # 考卷標題，印在卷首（docs/export.md 卷面結構）；其餘匯出參數
+    # （配分等）只存 job payload，不落這張表（docs/data-model.md 設計決定）。
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
     paper_size: Mapped[str] = mapped_column(String(20), nullable=False)
     question_ids: Mapped[list[int]] = mapped_column(ARRAY(Integer), nullable=False, default=list)
     docx_path: Mapped[str | None] = mapped_column(String(1024))

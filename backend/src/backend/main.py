@@ -16,7 +16,7 @@ from backend.api.v1 import router as v1_router
 from backend.core.config import get_settings
 from backend.db.session import AsyncSessionLocal
 from backend.export.job import export_docx
-from backend.ingestion.pipeline import parse_document, parse_page
+from backend.ingestion.pipeline import parse_document, parse_page, rechunk_document
 from backend.jobs import JobWorkerPool, registered_kinds
 from backend.questions.generation import generate_questions
 
@@ -32,9 +32,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # so a worker pool never starts without them, and confirmed in the
     # startup log.
     logger.info(
-        "job handlers loaded: %s, %s, %s, %s -- registered job kinds: %s",
+        "job handlers loaded: %s, %s, %s, %s, %s -- registered job kinds: %s",
         parse_document.__name__,
         parse_page.__name__,
+        rechunk_document.__name__,
         generate_questions.__name__,
         export_docx.__name__,
         registered_kinds(),

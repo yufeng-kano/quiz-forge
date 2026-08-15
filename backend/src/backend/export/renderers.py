@@ -80,9 +80,14 @@ def render_analogy(
 
 
 def render_single_choice(
-    document: Document, number: int, question: SingleChoiceQuestion, mode: ExportMode
+    document: Document,
+    number: int,
+    question: SingleChoiceQuestion,
+    mode: ExportMode,
+    *,
+    show_points_blank: bool = True,
 ) -> None:
-    style.add_numbered_stem(document, number, question.stem, points_field=True)
+    style.add_numbered_stem(document, number, question.stem, points_field=show_points_blank)
     for line in _lettered_options(question.options):
         style.add_body_paragraph(document, line, indent=True)
     if mode == "answers":
@@ -94,9 +99,14 @@ def render_single_choice(
 
 
 def render_true_false(
-    document: Document, number: int, question: TrueFalseQuestion, mode: ExportMode
+    document: Document,
+    number: int,
+    question: TrueFalseQuestion,
+    mode: ExportMode,
+    *,
+    show_points_blank: bool = True,
 ) -> None:
-    style.add_numbered_stem(document, number, question.stem, points_field=True)
+    style.add_numbered_stem(document, number, question.stem, points_field=show_points_blank)
     if mode == "answers":
         answer_text = "○（正確）" if question.answer else "×（錯誤）"
         style.add_body_paragraph(document, f"答案：{answer_text}")
@@ -128,17 +138,27 @@ def render_short_answer(
 
 
 def render_question(
-    document: Document, number: int, question: QuestionModel, mode: ExportMode
+    document: Document,
+    number: int,
+    question: QuestionModel,
+    mode: ExportMode,
+    *,
+    show_points_blank: bool = True,
 ) -> None:
-    """Dispatch to the render function matching `question`'s concrete type."""
+    """Dispatch to the render function matching `question`'s concrete type.
+
+    `show_points_blank` only ever reaches `single_choice`/`true_false` — the
+    only two types the old per-question 配分 blank ever applied to
+    (docs/export.md); the other four types' renderers don't take it at all.
+    """
     if isinstance(question, ComparisonQuestion):
         render_comparison(document, number, question, mode)
     elif isinstance(question, AnalogyQuestion):
         render_analogy(document, number, question, mode)
     elif isinstance(question, SingleChoiceQuestion):
-        render_single_choice(document, number, question, mode)
+        render_single_choice(document, number, question, mode, show_points_blank=show_points_blank)
     elif isinstance(question, TrueFalseQuestion):
-        render_true_false(document, number, question, mode)
+        render_true_false(document, number, question, mode, show_points_blank=show_points_blank)
     elif isinstance(question, FillBlankQuestion):
         render_fill_blank(document, number, question, mode)
     elif isinstance(question, ShortAnswerQuestion):

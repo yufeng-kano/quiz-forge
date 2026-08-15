@@ -144,7 +144,8 @@ async def test_list_questions_filters_by_status(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert [item["id"] for item in body] == [draft_id]
+    assert [item["id"] for item in body["items"]] == [draft_id]
+    assert body["total"] == 1
 
 
 async def test_list_questions_filters_by_type(client: TestClient) -> None:
@@ -156,7 +157,7 @@ async def test_list_questions_filters_by_type(client: TestClient) -> None:
     response = client.get("/v1/questions", params={"type": "true_false"})
 
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [tf_id]
+    assert [item["id"] for item in response.json()["items"]] == [tf_id]
 
 
 async def test_list_questions_filters_by_difficulty(client: TestClient) -> None:
@@ -166,7 +167,7 @@ async def test_list_questions_filters_by_difficulty(client: TestClient) -> None:
     response = client.get("/v1/questions", params={"difficulty": "困難"})
 
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [hard_id]
+    assert [item["id"] for item in response.json()["items"]] == [hard_id]
 
 
 async def test_list_questions_filters_by_category_via_source_chunks(client: TestClient) -> None:
@@ -182,7 +183,9 @@ async def test_list_questions_filters_by_category_via_source_chunks(client: Test
     response = client.get("/v1/questions", params={"category_id": category_a})
 
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [in_category_a]
+    body = response.json()
+    assert [item["id"] for item in body["items"]] == [in_category_a]
+    assert body["total"] == 1
 
 
 async def test_list_questions_newest_first(client: TestClient) -> None:
@@ -191,15 +194,110 @@ async def test_list_questions_newest_first(client: TestClient) -> None:
 
     response = client.get("/v1/questions")
 
-    ids = [item["id"] for item in response.json()]
+    ids = [item["id"] for item in response.json()["items"]]
     assert ids.index(second_id) < ids.index(first_id)
 
 
 async def test_list_questions_includes_payload(client: TestClient) -> None:
     question_id = await _make_question()
     response = client.get("/v1/questions")
-    item = next(item for item in response.json() if item["id"] == question_id)
+    item = next(item for item in response.json()["items"] if item["id"] == question_id)
     assert item["payload"]["answer_index"] == 0
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/questions -- pagination (F3)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_questions_pagination_envelope_default_limit(client: TestClient) -> None:
+    question_id = await _make_question()
+
+    response = client.get("/v1/questions")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["offset"] == 0
+    assert body["limit"] > 0  # settings-driven default, not asserting the exact number
+    assert [item["id"] for item in body["items"]] == [question_id]
+
+
+async def test_list_questions_limit_caps_items_but_total_reflects_full_count(
+    client: TestClient,
+) -> None:
+    ids = [await _make_question() for _ in range(3)]
+
+    response = client.get("/v1/questions", params={"limit": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["limit"] == 2
+    assert len(body["items"]) == 2
+    assert [item["id"] for item in body["items"]] == list(reversed(ids))[:2]
+
+
+async def test_list_questions_offset_advances_the_page(client: TestClient) -> None:
+    ids = [await _make_question() for _ in range(3)]
+
+    response = client.get("/v1/questions", params={"limit": 2, "offset": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["offset"] == 2
+    assert [item["id"] for item in body["items"]] == [ids[0]]  # oldest, last page
+
+
+def test_list_questions_rejects_limit_above_settings_max(client: TestClient) -> None:
+    response = client.get("/v1/questions", params={"limit": 999999})
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/questions -- q search (F3)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_questions_q_searches_payload_text_case_insensitively(
+    client: TestClient,
+) -> None:
+    matching_id = await _make_question(
+        payload={
+            "stem": "光合作用發生在哪裡？",
+            "options": ["葉綠體", "粒線體"],
+            "answer_index": 0,
+            "explanation": None,
+        }
+    )
+    await _make_question(
+        payload={
+            "stem": "細胞呼吸的產物是什麼？",
+            "options": ["水", "二氧化碳"],
+            "answer_index": 0,
+            "explanation": None,
+        }
+    )
+
+    response = client.get("/v1/questions", params={"q": "光合作用"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body["items"]] == [matching_id]
+    assert body["total"] == 1
+
+
+async def test_list_questions_q_matches_nothing_returns_empty_envelope(
+    client: TestClient,
+) -> None:
+    await _make_question()
+
+    response = client.get("/v1/questions", params={"q": "不存在的字串xyz"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["total"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -409,4 +507,136 @@ async def test_get_approved_questions_after_approve_flow(client: TestClient) -> 
     response = client.get("/v1/questions", params={"status": "approved"})
 
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()] == [question_id]
+    assert [item["id"] for item in response.json()["items"]] == [question_id]
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/questions -- manual create (F1)
+# ---------------------------------------------------------------------------
+
+
+def test_create_question_defaults_to_approved_with_empty_source_chunks(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/v1/questions",
+        json={
+            "type": "true_false",
+            "difficulty": "簡單",
+            "payload": {"stem": "地球是圓的。", "answer": True, "explanation": None},
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == "approved"
+    assert body["type"] == "true_false"
+    assert body["difficulty"] == "簡單"
+    assert body["source_chunk_ids"] == []
+    assert body["payload"]["stem"] == "地球是圓的。"
+    assert "type" not in body["payload"]
+
+
+def test_create_question_can_specify_draft_status(client: TestClient) -> None:
+    response = client.post(
+        "/v1/questions",
+        json={
+            "type": "true_false",
+            "payload": {"stem": "...", "answer": False, "explanation": None},
+            "status": "draft",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "draft"
+
+
+def test_create_question_rejects_rejected_status(client: TestClient) -> None:
+    """`status` is restricted to draft|approved (docs/question-bank.md 手動
+    建題) -- `rejected` is not a valid starting state for a brand-new
+    question."""
+    response = client.post(
+        "/v1/questions",
+        json={
+            "type": "true_false",
+            "payload": {"stem": "...", "answer": False, "explanation": None},
+            "status": "rejected",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_create_question_rejects_invalid_payload_shape_with_422(client: TestClient) -> None:
+    response = client.post(
+        "/v1/questions",
+        json={
+            "type": "single_choice",
+            "payload": {"stem": "...", "options": ["only-one"], "answer_index": 0},
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_create_question_rejects_unknown_type(client: TestClient) -> None:
+    response = client.post(
+        "/v1/questions",
+        json={"type": "essay", "payload": {"stem": "..."}},
+    )
+    assert response.status_code == 422
+
+
+async def test_created_question_is_persisted_and_listable(client: TestClient) -> None:
+    response = client.post(
+        "/v1/questions",
+        json={
+            "type": "fill_blank",
+            "payload": {"stem": "水的化學式為 ____。", "answers": ["H2O"]},
+        },
+    )
+    question_id = response.json()["id"]
+
+    async with AsyncSessionLocal() as session:
+        stored = await session.get(Question, question_id)
+        assert stored is not None
+        assert stored.status == "approved"
+        assert stored.source_chunk_ids == []
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/questions/{id}/duplicate (F1)
+# ---------------------------------------------------------------------------
+
+
+async def test_duplicate_question_creates_draft_copy(client: TestClient) -> None:
+    document_id = await _make_document()
+    chunk_id = await _make_chunk(document_id, None)
+    original_id = await _make_question(
+        status="approved", difficulty="困難", source_chunk_ids=[chunk_id]
+    )
+
+    response = client.post(f"/v1/questions/{original_id}/duplicate")
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["id"] != original_id
+    assert body["status"] == "draft"  # always draft regardless of original status
+    assert body["type"] == "single_choice"
+    assert body["difficulty"] == "困難"
+    assert body["source_chunk_ids"] == [chunk_id]  # same source chunks as the original
+    assert body["payload"]["answer_index"] == 0
+
+
+async def test_duplicate_question_does_not_mutate_the_original(client: TestClient) -> None:
+    original_id = await _make_question(status="approved")
+
+    client.post(f"/v1/questions/{original_id}/duplicate")
+
+    async with AsyncSessionLocal() as session:
+        original = await session.get(Question, original_id)
+        assert original is not None
+        assert original.status == "approved"
+
+
+def test_duplicate_question_404_for_missing_question(client: TestClient) -> None:
+    response = client.post("/v1/questions/999999999/duplicate")
+    assert response.status_code == 404

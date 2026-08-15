@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
 from backend.schemas.job import JobSummaryOut
 
@@ -13,6 +13,28 @@ class CategoryOut(BaseModel):
     id: int
     name: str
     parent_id: int | None
+
+
+class CategoryPatchIn(BaseModel):
+    """`PATCH /v1/categories/{id}` body — rename only (docs/question-bank.md
+    改名；不做合併)."""
+
+    name: str = Field(min_length=1)
+
+    @field_validator("name")
+    @classmethod
+    def _name_not_blank_after_strip(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("name must not be blank")
+        return stripped
+
+
+class RechunkOut(BaseModel):
+    """`POST /v1/documents/{id}/rechunk` response (docs/ingestion.md 補頁後
+    用...手動重建)."""
+
+    job_id: int
 
 
 class ChunkOut(BaseModel):

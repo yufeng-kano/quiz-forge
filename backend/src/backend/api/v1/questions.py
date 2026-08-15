@@ -18,22 +18,34 @@ the `ck_questions_status` CHECK constraint):
 `category_id` of its own, so filtering by category means "has at least one
 source chunk in that category" (`source_chunk_ids` array-overlap against
 that category's chunk ids).
+
+`GET /v1/questions` also paginates (`limit`/`offset`, envelope with `total`)
+and full-text-ish searches (`q`, case-insensitive `ILIKE` against
+`payload::text` — docs/question-bank.md `q` 全文搜尋). `limit`'s default and
+max come from `Settings` (never hardcoded, per .rule 開發規則), not a
+`Query(...)` default — that would freeze the value at *import* time,
+whereas settings can change per-request in tests (env + `get_settings.
+cache_clear()`) exactly like every other settings-driven handler in this
+codebase (e.g. `backend.ingestion.pipeline`).
 """
 
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.config import get_settings
 from backend.db.session import get_session
 from backend.models.chunk import Chunk
 from backend.models.question import Question
 from backend.questions.schemas import dump_payload, parse_question
 from backend.schemas.question import (
+    QuestionCreateIn,
     QuestionDetailOut,
     QuestionListItemOut,
+    QuestionListOut,
     QuestionPatchIn,
     SourceChunkOut,
 )
@@ -60,14 +72,25 @@ async def _get_question_or_404(question_id: int, session: AsyncSession) -> Quest
     return question
 
 
-@router.get("", response_model=list[QuestionListItemOut])
+@router.get("", response_model=QuestionListOut)
 async def list_questions(
     status_filter: str | None = Query(None, alias="status"),
     type_filter: str | None = Query(None, alias="type"),
     category_id: int | None = Query(None),
     difficulty: str | None = Query(None),
+    q: str | None = Query(None, description="payload::text 的大小寫不敏感 ILIKE 搜尋"),
+    limit: int | None = Query(None, ge=1),
+    offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
-) -> list[QuestionListItemOut]:
+) -> QuestionListOut:
+    settings = get_settings()
+    if limit is not None and limit > settings.questions_list_limit_max:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"limit must be <= {settings.questions_list_limit_max}",
+        )
+    effective_limit = limit if limit is not None else settings.questions_list_limit_default
+
     stmt = select(Question)
     if status_filter is not None:
         stmt = stmt.where(Question.status == status_filter)
@@ -82,16 +105,86 @@ async def list_questions(
             .all()
         )
         if not chunk_ids:
-            return []
+            return QuestionListOut(items=[], total=0, limit=effective_limit, offset=offset)
         # `questions.source_chunk_ids` is a plain `sqlalchemy.ARRAY`, whose
         # comparator (unlike `dialects.postgresql.ARRAY`) has no `.overlap()`
         # helper — `.op("&&")` sends Postgres's own array-overlap operator
         # directly, coerced against the column's `ARRAY(Integer)` type.
         stmt = stmt.where(Question.source_chunk_ids.op("&&")(list(chunk_ids)))
-    stmt = stmt.order_by(Question.created_at.desc(), Question.id.desc())
+    if q:
+        stmt = stmt.where(cast(Question.payload, String).ilike(f"%{q}%"))
 
-    questions = (await session.execute(stmt)).scalars().all()
-    return [_to_list_item(question) for question in questions]
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+
+    list_stmt = (
+        stmt.order_by(Question.created_at.desc(), Question.id.desc())
+        .limit(effective_limit)
+        .offset(offset)
+    )
+    questions = (await session.execute(list_stmt)).scalars().all()
+    return QuestionListOut(
+        items=[_to_list_item(question) for question in questions],
+        total=total,
+        limit=effective_limit,
+        offset=offset,
+    )
+
+
+@router.post("", response_model=QuestionListItemOut, status_code=status.HTTP_201_CREATED)
+async def create_question(
+    body: QuestionCreateIn, session: AsyncSession = Depends(get_session)
+) -> QuestionListItemOut:
+    """Manual question authoring (docs/question-bank.md 手動建題) — `payload`
+    goes through the exact same discriminated-union validation as LLM
+    output and `PATCH`, so a shape violation is a 422 regardless of who
+    wrote the JSON. `source_chunk_ids` is always empty: a hand-written
+    question has no generation source to trace back to."""
+    try:
+        validated = parse_question(body.type, body.payload)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=json.loads(exc.json())
+        ) from exc
+
+    question = Question(
+        type=body.type,
+        difficulty=body.difficulty,
+        status=body.status,
+        payload=dump_payload(validated),
+        source_chunk_ids=[],
+    )
+    session.add(question)
+    await session.commit()
+    await session.refresh(question)
+    return _to_list_item(question)
+
+
+@router.post(
+    "/{question_id}/duplicate",
+    response_model=QuestionListItemOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def duplicate_question(
+    question_id: int, session: AsyncSession = Depends(get_session)
+) -> QuestionListItemOut:
+    """Copy an existing question as a new `draft` (docs/question-bank.md
+    複製為 draft 改造變體) — same `type`/`difficulty`/`payload`/
+    `source_chunk_ids` as the original, so the copy still traces back to
+    whatever generated the original before it gets edited into a variant."""
+    original = await _get_question_or_404(question_id, session)
+    duplicate = Question(
+        type=original.type,
+        difficulty=original.difficulty,
+        status="draft",
+        payload=original.payload,
+        source_chunk_ids=list(original.source_chunk_ids),
+    )
+    session.add(duplicate)
+    await session.commit()
+    await session.refresh(duplicate)
+    return _to_list_item(duplicate)
 
 
 @router.get("/{question_id}", response_model=QuestionDetailOut)

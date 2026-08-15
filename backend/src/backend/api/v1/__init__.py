@@ -12,6 +12,7 @@ from backend.api.v1 import (
     jobs,
     pages,
     questions,
+    stats,
     usage,
 )
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/v1")
 router.include_router(health.router)
 router.include_router(jobs.router)
 router.include_router(usage.router)
+router.include_router(stats.router)
 router.include_router(documents.router)
 router.include_router(pages.router)
 router.include_router(assets.router)
