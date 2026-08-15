@@ -2,20 +2,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import {
-  DEFAULT_PAPER_SIZE,
-  PAPER_SIZES,
-  answersDocxUrl,
-  questionsDocxUrl,
-  type ExportListItem,
-  type ExportPoints,
-  type PaperSize,
-  type QuestionType,
-} from '@/api'
+import { PAPER_SIZES, answersDocxUrl, questionsDocxUrl, type ExportListItem } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ProgressText from '@/components/ProgressText.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import ExportHeaderFieldsField from '@/components/exports/ExportHeaderFieldsField.vue'
+import ExportScoringField from '@/components/exports/ExportScoringField.vue'
 import ExportSelectionList from '@/components/exports/ExportSelectionList.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -27,7 +20,13 @@ import { formatDateTime } from '@/i18n/datetime'
 import { translateApiError } from '@/i18n/errors'
 import { formatCount } from '@/i18n/number'
 import { paperSizeLabel } from '@/export/labels'
-import { QUESTION_TYPE_LABEL_KEYS } from '@/questions/labels'
+import {
+  collectQuestionPoints,
+  collectTypePoints,
+  pruneQuestionPoints,
+  type QuestionPointsDraft,
+} from '@/export/scoring'
+import { useExportPrefsStore } from '@/stores/exportPrefs'
 import { useExportSelectionStore } from '@/stores/exportSelection'
 import { useExportsStore } from '@/stores/exports'
 import { useToastsStore } from '@/stores/toasts'
@@ -44,13 +43,17 @@ import { useToastsStore } from '@/stores/toasts'
  * selection: its `error` names the ids to fix, and nothing else could be done
  * about it here.
  *
- * 每題型配分 is offered only for the types actually in the selection: a score
- * for a type that is not on the paper would print nothing, and the backend
- * rejects a non-positive one, so a blank field simply means "this type carries
- * no marks" and is left out of the request.
+ * 配分 and 表頭欄位 are widgets of their own (`ExportScoringField`,
+ * `ExportHeaderFieldsField`); what stays here is which part of their state is
+ * remembered. The paper size, the 表頭 columns and the per-type defaults are
+ * preferences and live in `exportPrefs` (localStorage); the per-question
+ * overrides describe this one paper and stay in the page, pruned to the
+ * selection so a question removed after being scored cannot leave a key the
+ * backend would reject.
  */
 const { t } = useAppI18n()
 const selection = useExportSelectionStore()
+const prefs = useExportPrefsStore()
 const store = useExportsStore()
 const toasts = useToastsStore()
 
@@ -64,9 +67,8 @@ const {
 } = useSelectedQuestions()
 
 const title = ref('')
-const paperSize = ref<PaperSize>(DEFAULT_PAPER_SIZE)
-/** Raw field text per type; empty means "no score for this type". */
-const pointsInput = ref<Partial<Record<QuestionType, string>>>({})
+/** Per-question point overrides for this paper, keyed by question id. */
+const questionPoints = ref<QuestionPointsDraft>({})
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
 
@@ -81,36 +83,18 @@ const canSubmit = computed(
   () => selection.count > 0 && trimmedTitle.value !== '' && !submitting.value && !isActive.value,
 )
 
-function pointsFor(type: QuestionType): string {
-  return pointsInput.value[type] ?? ''
-}
-
-function setPoints(type: QuestionType, event: Event): void {
-  const target = event.target
-  if (target instanceof HTMLInputElement) {
-    pointsInput.value = { ...pointsInput.value, [type]: target.value }
-  }
-}
-
-/**
- * Only positive whole numbers are sent; anything else (blank, 0, a stray
- * character) means the type carries no marks, which is what the backend's
- * "points value must be positive" rule allows for.
- */
-function collectPoints(): ExportPoints | undefined {
-  const points: ExportPoints = {}
-  for (const type of selectionTypes.value) {
-    const raw = pointsFor(type).trim()
-    if (raw === '') {
-      continue
+// An override for a question that has since been unticked would be a key
+// outside `question_ids`, which the backend answers with 422; dropping it as
+// soon as the selection changes also keeps the modal's total honest.
+watch(
+  () => selection.selectedIds,
+  (ids) => {
+    const kept = pruneQuestionPoints(ids, questionPoints.value)
+    if (Object.keys(kept).length !== Object.keys(questionPoints.value).length) {
+      questionPoints.value = kept
     }
-    const parsed = Number.parseInt(raw, 10)
-    if (Number.isInteger(parsed) && parsed > 0) {
-      points[type] = parsed
-    }
-  }
-  return Object.keys(points).length === 0 ? undefined : points
-}
+  },
+)
 
 const historyColumns = computed<DataTableColumn<ExportListItem>[]>(() => [
   {
@@ -208,8 +192,10 @@ async function onSubmit(): Promise<void> {
   try {
     const jobId = await store.submit(selection.selectedIds, {
       title: trimmedTitle.value,
-      paperSize: paperSize.value,
-      points: collectPoints(),
+      paperSize: prefs.paperSize,
+      points: collectTypePoints(selectionTypes.value, prefs.typePoints),
+      questionPoints: collectQuestionPoints(selection.selectedIds, questionPoints.value),
+      headerFields: prefs.headerFields,
     })
     toasts.success(t('exports.form.queued', { id: jobId }))
   } catch (caught) {
@@ -275,32 +261,22 @@ async function onSubmit(): Promise<void> {
 
         <label class="form-field">
           <span class="form-label">{{ t('exports.form.paperSize') }}</span>
-          <select v-model="paperSize" class="form-select">
+          <select v-model="prefs.paperSize" class="form-select">
             <option v-for="size in PAPER_SIZES" :key="size.name" :value="size.name">
               {{ paperSizeLabel(size.name) }}
             </option>
           </select>
           <span class="form-hint">{{ t('exports.form.paperHint') }}</span>
         </label>
-      </div>
 
-      <div v-if="selectionTypes.length > 0" class="form-field">
-        <span class="form-label">{{ t('exports.form.points') }}</span>
-        <div class="export-form__points">
-          <label v-for="type in selectionTypes" :key="type" class="export-form__point">
-            <span class="export-form__point-label">{{ t(QUESTION_TYPE_LABEL_KEYS[type]) }}</span>
-            <input
-              class="form-input export-form__point-input"
-              type="number"
-              min="1"
-              step="1"
-              inputmode="numeric"
-              :value="pointsFor(type)"
-              @input="setPoints(type, $event)"
-            />
-          </label>
-        </div>
-        <span class="form-hint">{{ t('exports.form.pointsHint') }}</span>
+        <ExportScoringField
+          v-model:type-points="prefs.typePoints"
+          v-model:question-points="questionPoints"
+          :rows="selectionRows"
+          :types="selectionTypes"
+        />
+
+        <ExportHeaderFieldsField v-model="prefs.headerFields" />
       </div>
 
       <p v-if="submitError !== null" class="form-error">{{ submitError }}</p>
@@ -426,27 +402,6 @@ async function onSubmit(): Promise<void> {
   .export-form__title-field {
     grid-column: auto;
   }
-}
-
-.export-form__points {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
-}
-
-.export-form__point {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.export-form__point-label {
-  color: var(--color-text);
-  font-size: var(--font-size-md);
-}
-
-.export-form__point-input {
-  width: 5rem;
 }
 
 .export-job {

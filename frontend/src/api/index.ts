@@ -5,6 +5,7 @@ export {
   DASHBOARD_RECENT_JOB_LIMIT,
   DEFAULT_PAPER_SIZE,
   DOCUMENT_POLL_INTERVAL_MS,
+  EXPORT_HEADER_FIELD_NAMES,
   GENERATE_COUNT_DEFAULT,
   GENERATE_COUNT_MAX,
   GENERATE_COUNT_MIN,
@@ -21,7 +22,7 @@ export {
   UPLOAD_ACCEPT_EXTENSIONS,
   findPaperSize,
 } from './config'
-export type { PaperSize, PaperSizeSpec } from './config'
+export type { ExportHeaderField, PaperSize, PaperSizeSpec } from './config'
 export { ApiError } from './client'
 export type { ApiErrorCode, QueryParams, QueryValue } from './client'
 export { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from './client'

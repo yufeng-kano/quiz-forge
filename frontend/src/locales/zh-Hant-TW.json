@@ -281,6 +281,7 @@
       "identity": "題目 #{id} · 建立於 {datetime}",
       "unknownType": "未知題型（{type}）",
       "unreadableTitle": "題目內容格式無法解析",
+      "emptyStem": "（題幹空白）",
       "unreadableDescription": "此題儲存的欄位不符合題型定義，無法顯示或編輯，建議丟棄後重新出題。"
     },
     "labels": {
@@ -535,11 +536,43 @@
       "paperTitleHint": "會印在考卷第一行，必填。",
       "paperSize": "紙張尺寸",
       "paperHint": "B4、B3 採台灣考卷慣用的 JIS 尺寸，比同名 ISO 尺寸略大。",
-      "points": "每題型配分",
-      "pointsHint": "只列出目前選取題目的題型；留空表示該題型不印配分。",
       "submit": "建立匯出任務",
       "submitting": "建立中…",
       "queued": "匯出任務 #{id} 已建立。"
+    },
+    "scoring": {
+      "label": "配分",
+      "open": "配分設定",
+      "summary": "合計總分 {total} 分（{scored} / {count} 題已配分）",
+      "summaryNone": "尚未設定配分，考卷保留手填配分欄。",
+      "summaryEmpty": "尚未選取題目，選好題目後可設定配分。",
+      "modalTitle": "配分設定",
+      "typeSection": "每題型預設配分",
+      "typeHint": "只列出目前選取題目的題型；留空表示該題型不印配分。",
+      "noTypes": "目前選取的題目尚未載入題型資料。",
+      "distributeSection": "依目標總分平均分配",
+      "targetLabel": "目標總分",
+      "targetPlaceholder": "總分",
+      "distribute": "平均分配",
+      "distributeHint": "把目標總分平均分給選取的 {count} 題（除不盡的餘數配給前面的題目），結果寫入逐題配分；目標總分需大於或等於題數。",
+      "questionSection": "逐題配分（可覆寫題型預設）",
+      "questionHint": "留空表示沿用該題型的預設配分，欄位提示即為沿用的分數。",
+      "questionNo": "第 {no} 題",
+      "questionInputLabel": "第 {no} 題配分",
+      "inheritNone": "未配分",
+      "unavailableType": "無資料",
+      "noRows": "尚未選取題目。",
+      "total": "合計總分 {total} 分",
+      "clear": "清除逐題配分",
+      "done": "完成"
+    },
+    "headerFields": {
+      "label": "表頭欄位",
+      "class": "班級",
+      "seat": "座號",
+      "name": "姓名",
+      "score": "總分欄",
+      "hint": "勾選要印在卷首學生資訊列的欄位；全部取消則整列省略。"
     },
     "job": {
       "title": "匯出進度",

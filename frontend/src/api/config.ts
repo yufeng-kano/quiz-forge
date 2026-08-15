@@ -106,6 +106,19 @@ export const GENERATE_COUNT_DEFAULT = 5
  */
 export const SCOPE_CHIP_VISIBLE_LIMIT = 6
 
+/**
+ * The 卷首 student-information fields `POST /api/v1/exports` accepts as
+ * `header_fields` (docs/export.md 卷面結構). Every one of them defaults to true
+ * server-side, and `score` is the 總分 box rather than a student field — it is
+ * listed last because that is the order the paper prints them in.
+ *
+ * `class` is the wire key exactly as the backend spells it; it is a reserved
+ * word in neither JSON nor TypeScript property position, so it is used as-is.
+ */
+export const EXPORT_HEADER_FIELD_NAMES = ['class', 'seat', 'name', 'score'] as const
+
+export type ExportHeaderField = (typeof EXPORT_HEADER_FIELD_NAMES)[number]
+
 /** Paper size names `POST /api/v1/exports` accepts; anything else is a 422. */
 export const PAPER_SIZE_NAMES = ['A4', 'B4', 'B3'] as const
 

@@ -7,8 +7,20 @@
  * written into a component.
  */
 
-import { findPaperSize } from '@/api'
-import { translate } from '@/i18n'
+import { findPaperSize, type ExportHeaderField } from '@/api'
+import { translate, type MessageKey } from '@/i18n'
+
+/**
+ * Wording of the 表頭 columns. The wire keys (`class`, `seat`, …) never reach
+ * the screen; the checkbox group looks them up here, so the labels stay in the
+ * locale file like every other string.
+ */
+export const EXPORT_HEADER_FIELD_LABEL_KEYS: Record<ExportHeaderField, MessageKey> = {
+  class: 'exports.headerFields.class',
+  seat: 'exports.headerFields.seat',
+  name: 'exports.headerFields.name',
+  score: 'exports.headerFields.score',
+}
 
 /**
  * `A4（210 × 297 mm）`.

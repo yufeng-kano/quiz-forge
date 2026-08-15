@@ -18,8 +18,10 @@ import { defineStore } from 'pinia'
 import {
   createExportJob,
   listExports,
+  type ExportHeaderFields,
   type ExportListItem,
   type ExportPoints,
+  type ExportQuestionPoints,
   type PaperSize,
 } from '@/api'
 import { translateApiError } from '@/i18n/errors'
@@ -30,6 +32,14 @@ export interface ExportSubmission {
   paperSize: PaperSize
   /** Omitted entirely when no type was given a score. */
   points?: ExportPoints
+  /**
+   * Per-question overrides, already restricted to the current selection: a key
+   * outside `question_ids` is a 422 (docs/export.md 配分參數). Omitted when no
+   * question carries one.
+   */
+  questionPoints?: ExportQuestionPoints
+  /** Always sent: the four columns are a complete statement of the 表頭. */
+  headerFields: ExportHeaderFields
 }
 
 export interface ExportJobEntry {
@@ -83,12 +93,14 @@ export const useExportsStore = defineStore('exports', () => {
     questionIds: readonly number[],
     submission: ExportSubmission,
   ): Promise<number> {
-    const { title, paperSize, points } = submission
+    const { title, paperSize, points, questionPoints, headerFields } = submission
     const result = await createExportJob({
       question_ids: [...questionIds],
       paper_size: paperSize,
       title,
       ...(points === undefined ? {} : { points }),
+      ...(questionPoints === undefined ? {} : { question_points: questionPoints }),
+      header_fields: headerFields,
     })
     currentJob.value = {
       jobId: result.job_id,

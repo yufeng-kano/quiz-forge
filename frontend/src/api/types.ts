@@ -6,7 +6,7 @@
  * stores, views) never redeclare shapes of their own.
  */
 
-import type { PaperSize } from './config'
+import type { ExportHeaderField, PaperSize } from './config'
 
 /** `jobs.status`, see the background-task section of docs/architecture.md. */
 export const JOB_STATUSES = ['pending', 'running', 'done', 'failed'] as const
@@ -473,6 +473,27 @@ export interface GenerateResult {
 export type ExportPoints = Partial<Record<QuestionType, number>>
 
 /**
+ * Per-question point overrides (`ExportIn.question_points`, docs/export.md
+ * 配分參數), e.g. `{ "12": 9 }`.
+ *
+ * The key is a question id written as a string, which is what a JSON object key
+ * always is; every id must be one of the request's `question_ids` and every
+ * value a positive integer, or the request is a 422. An override wins over the
+ * per-type `points` entry for that question.
+ */
+export type ExportQuestionPoints = Record<string, number>
+
+/**
+ * The 卷首 student-information row of the paper (`ExportIn.header_fields`,
+ * docs/export.md 卷面結構): 班級／座號／姓名 and the 總分 box.
+ *
+ * All four default to true server-side; sending them explicitly keeps the
+ * request a full statement of what the user chose. Unticking every one omits
+ * the whole row.
+ */
+export type ExportHeaderFields = Record<ExportHeaderField, boolean>
+
+/**
  * Request body of `POST /api/v1/exports`.
  *
  * `question_ids` must be non-empty and every id must be `approved`; a
@@ -481,13 +502,17 @@ export type ExportPoints = Partial<Record<QuestionType, number>>
  * the paper's numbering order.
  *
  * `title` is required and must not be blank — it is printed on the paper's
- * first line. `points` is optional scoring per question type.
+ * first line. `points` is optional scoring per question type,
+ * `question_points` the per-question override on top of it, and
+ * `header_fields` which columns the student-information row carries.
  */
 export interface ExportRequest {
   question_ids: number[]
   paper_size: PaperSize
   title: string
   points?: ExportPoints
+  question_points?: ExportQuestionPoints
+  header_fields?: ExportHeaderFields
 }
 
 /** `POST /api/v1/exports` — the id of the queued `export_docx` job. */
