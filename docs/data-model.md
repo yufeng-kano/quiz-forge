@@ -14,8 +14,8 @@ questions   id, type, difficulty, status(draft/approved/rejected),
             payload jsonb, source_chunk_ids[], created_at
 exports     id, paper_size, question_ids[], docx_path, answer_docx_path,
             created_at
-jobs        id, kind, payload jsonb, status, progress, error,
-            retry_count, created_at, updated_at
+jobs        id, kind, payload jsonb, status, progress(text, 如 "12/40"),
+            error, retry_count, created_at, updated_at
 llm_usage   id, model, purpose, prompt_tokens, completion_tokens, created_at
 ```
 

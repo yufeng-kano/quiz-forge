@@ -30,10 +30,12 @@ Browser ──> nginx (唯一對外 port)
 
 ## 背景任務：Postgres 當 queue（不用 Celery/Redis）
 
-- `jobs` 表 + `SELECT ... FOR UPDATE SKIP LOCKED` 領任務。
-- FastAPI lifespan 啟動 N 個 asyncio worker coroutine 輪詢。
-- job 欄位：`status / progress / error / retry_count`；前端輪詢 `GET /api/v1/jobs/{id}`。
-- 多頁文件逐頁更新 progress，使用者可看到「12/40 頁」。
+- `jobs` 表 + `SELECT ... FOR UPDATE SKIP LOCKED` 領任務（實作在 `backend/src/backend/jobs/`）。
+- FastAPI lifespan 啟動 N 個 asyncio worker coroutine 輪詢；N 由 `JOB_WORKER_COUNT` 設定、輪詢間隔 `JOB_POLL_INTERVAL_SECONDS`。
+- job kind → handler 用 registry 註冊（decorator），新增 job 種類不動 queue 核心。
+- job 欄位：`status / progress / error / retry_count`；前端輪詢 `GET /api/v1/jobs/{id}`，`POST /api/v1/jobs/{id}/retry` 重試失敗 job。
+- `progress` 為文字欄位（如 `12/40`），多頁文件逐頁更新，使用者可看到「12/40 頁」。
+- 啟動時將殘留 `running` 的 job 重排回 `pending`（單機部署的 crash 復原）。
 - LLM 呼叫用 `asyncio.Semaphore` 限流，併發數由 `LLM_CONCURRENCY` 設定。
 - 失敗以最小單位重試（單頁、單題），不整份重跑。
 
@@ -64,6 +66,10 @@ EMBEDDING_MODEL=openai/text-embedding-3-small
 EMBEDDING_DIM=1536
 LLM_CONCURRENCY=4
 OCR_DPI=200
+
+# 背景 job worker
+JOB_WORKER_COUNT=2
+JOB_POLL_INTERVAL_SECONDS=1
 
 # 基礎設施
 DATABASE_URL=postgresql+asyncpg://...

@@ -20,7 +20,9 @@ class Job(Base):
     kind: Mapped[str] = mapped_column(String(50), nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
-    progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Free-form display progress (e.g. "12/40" pages), not a percentage —
+    # see docs/architecture.md 背景任務 section. Empty string = not started yet.
+    progress: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     error: Mapped[str | None] = mapped_column(Text)
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(

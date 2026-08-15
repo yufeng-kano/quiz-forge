@@ -11,6 +11,8 @@ dependencies = [
     "alembic>=1.19.1",
     "asyncpg>=0.31.0",
     "fastapi>=0.141.1",
+    "greenlet>=3.5.5",
+    "openai>=3.1.0",
     "pgvector>=0.5.0",
     "pydantic-settings>=2.15.0",
     "sqlalchemy>=2.0",
@@ -36,6 +38,12 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's `Depends(...)`/`Query(...)` default-argument pattern is the
+# framework's own dependency-injection idiom, not the mutable-default bug
+# B008 exists to catch — this is ruff's documented allowlist for it.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query"]
 
 [tool.basedpyright]
 include = ["src", "tests", "alembic"]

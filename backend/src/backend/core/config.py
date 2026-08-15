@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     llm_concurrency: int = 4
     ocr_dpi: int = 200
 
+    # 背景任務（pg-as-queue，見 docs/architecture.md）
+    job_worker_count: int = 2
+    job_poll_interval_seconds: float = 1.0
+
     # 基礎設施
     database_url: str = "postgresql+asyncpg://quizforge:quizforge@localhost:5432/quizforge"
     data_dir: Path = Path("/data")
