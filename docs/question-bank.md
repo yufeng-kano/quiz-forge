@@ -67,7 +67,7 @@
 
 ## 出題流程
 
-1. 使用者選定範圍（文件／分類）、題型與數量，建立出題 job（`POST /api/v1/generate`）。
+1. 使用者選定範圍（文件／分類），並組合**多個「題型 × 數量」項目**（如單選 10、是非 5、問答 2），一個 job 出完，建立出題 job（`POST /api/v1/generate`，body 帶 `items: [{question_type, count}]`）。progress 以全部題數合計顯示；單一項目全失敗不影響其他項目。
 2. 素材選取（實作在 `backend/src/backend/questions/selection.py`）：
    - **比較題**：在**同科目**（分類階層的第一層；同主題反而配不出「相關但不相同」）內用 embedding 找相似度中段的 chunk 配對，區間由 `COMPARISON_SIMILARITY_MIN/MAX` 設定（預設 0.35–0.75），兩段一起餵給 `TEXT_MODEL`。
    - **類比題**：從單一 chunk 內的概念關係抽取。

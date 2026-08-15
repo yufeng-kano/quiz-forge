@@ -120,6 +120,16 @@ class _Handler(BaseHTTPRequestHandler):
                 "</article></body></html>"
             ).encode("utf-8")
             self._respond(200, "text/html; charset=utf-8", body)
+        elif self.path == "/posts/%E7%B4%B0%E8%83%9E%E5%91%BC%E5%90%B8%E4%BD%9C%E7%94%A8":
+            # No <title>/metadata at all -- exercises the URL-path-segment
+            # fallback. The path segment is itself percent-encoded Chinese
+            # (as a real blog slug often is), so the fallback must decode it.
+            body = (
+                "<html><body><article><p>"
+                + ("細胞呼吸作用發生在粒線體。" * 20)
+                + "</p></article></body></html>"
+            ).encode("utf-8")
+            self._respond(200, "text/html; charset=utf-8", body)
         else:
             self._respond(404, "text/plain", b"not found")
 
@@ -369,7 +379,9 @@ async def test_url_document_webpage_case_is_unchanged(
 ) -> None:
     """docs/ingestion.md 網址（網頁）— an HTML page must still go through
     trafilatura + summary exactly as before this feature, never the file
-    download path."""
+    download path. `document.title` picks up the page's real `<title>` (via
+    trafilatura metadata) instead of staying the raw URL string — the fix
+    for the bug where it always stayed the raw, often percent-encoded URL."""
     url = f"{local_server}/article.html"
     document_id = await _make_url_document(url)
 
@@ -386,6 +398,7 @@ async def test_url_document_webpage_case_is_unchanged(
         assert document.status == "ready"
         assert document.raw_file_path is None  # no file was ever downloaded
         assert document.summary == "光合作用摘要"
+        assert document.title == "光合作用"  # from the page's real <title>, not the raw URL
 
         page_rows = (
             (await session.execute(select(Page).where(Page.document_id == document_id)))
@@ -394,3 +407,26 @@ async def test_url_document_webpage_case_is_unchanged(
         )
         assert len(page_rows) == 1
         assert "光合作用" in (page_rows[0].markdown or "")
+
+
+async def test_url_document_webpage_without_title_falls_back_to_decoded_url_path_segment(
+    local_server: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No `<title>`/metadata on the page at all -- `derive_webpage_title`'s
+    URL-path-segment fallback kicks in, and the percent-encoded Chinese slug
+    in the URL must come out decoded, not as raw `%E7%B4...` gibberish (the
+    exact production bug this task fixes)."""
+    url = f"{local_server}/posts/%E7%B4%B0%E8%83%9E%E5%91%BC%E5%90%B8%E4%BD%9C%E7%94%A8"
+    document_id = await _make_url_document(url)
+
+    dim = Settings().embedding_dim
+    fake_client = _fake_llm_client(_fake_llm_handler(dim))
+    monkeypatch.setattr(pipeline_module, "get_llm_client", lambda: fake_client)
+
+    job = await _run_parse_document_job(document_id)
+    assert job.status == "done", job.error
+
+    async with AsyncSessionLocal() as session:
+        document = await session.get(Document, document_id)
+        assert document is not None
+        assert document.title == "細胞呼吸作用"

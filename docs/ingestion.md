@@ -44,7 +44,7 @@
 ## Chunk 與分類
 
 1. 解析完成的 Markdown 依標題結構 + 長度上限（`CHUNK_MAX_CHARS`，預設 4000）切 chunk。
-2. 每個 chunk 由 `TEXT_MODEL` 依分類 schema 標註：科目／主題／難度／標籤（`categories` 支援階層，主題的 parent 為科目，get-or-create 跨文件去重）。難度不設獨立欄位，以 `難度:{值}` 併入 `tags[]`。
+2. 每個 chunk 由 `TEXT_MODEL` 依分類 schema 標註：科目／主題／難度／標籤（`categories` 支援階層，主題的 parent 為科目，get-or-create 跨文件去重）。難度不設獨立欄位，以 `難度:{值}` 併入 `tags[]`。分類 prompt 必須帶入**既有科目清單**（與該科目下既有主題），引導模型優先重用既有分類、避免同義科目碎裂（如「資訊工程／資訊科技」並存）；只有真的不合適才建新分類。
 3. 每個 chunk 呼叫 `EMBEDDING_MODEL` 計算 embedding，存 pgvector（維度 `EMBEDDING_DIM`）。
 4. embedding 用途：比較題的相關 chunk 配對（見 `question-bank.md`）。
 

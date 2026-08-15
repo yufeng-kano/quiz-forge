@@ -6,14 +6,25 @@ Wires `backend.questions.selection` (which chunk(s) feed each question) to
 specific type's Pydantic model). Every generated question is stored
 `status="draft"` immediately.
 
+One job payload carries `items: [{question_type, count}, ...]` — one or more
+「題型 × 數量」combos generated together (docs/question-bank.md 出題流程 step
+1). Material selection and generation for each item reuses the exact same
+per-type logic a single-type job always used; the only thing multi-item adds
+is an outer loop over `items` and a progress denominator that spans all of
+them (`n/total_all_items`, `total_all_items` = the sum of eligible units
+actually found per item, mirroring how a single-type job's total was already
+"eligible units found", not "units requested").
+
 Failure handling (.rule 反偷懶規則 — 禁止吞例外／禁止部分處理；docs/question-bank.md —
-生成一律逐題進行): one question's generation failure is caught, logged in
-full, and recorded in the job's final error summary — it never aborts the
-remaining questions. The job only ends up `failed` (raises out of the
-handler, per `backend.jobs.worker.run_claimed_job`) when *nothing* in the
-batch succeeded; otherwise it ends `done`, with `jobs.error` carrying a
-summary of whatever went wrong (consistent with 最小單位可重試 — the user
-just requests more of that type instead of retrying the whole job).
+生成一律逐題進行，單一項目全失敗不影響其他項目): both a whole item finding no
+eligible material (or naming an unknown type) and a single question's
+generation call failing are caught, logged in full, and recorded in the
+job's final error summary — neither aborts the remaining items/questions.
+The job only ends up `failed` (raises out of the handler, per
+`backend.jobs.worker.run_claimed_job`) when *nothing* across *any* item
+succeeded; otherwise it ends `done`, with `jobs.error` carrying a summary of
+whatever went wrong (consistent with 最小單位可重試 — the user just requests
+more of that type/item instead of retrying the whole job).
 """
 
 import logging
@@ -69,6 +80,24 @@ def _optional_str(payload: dict[str, object], key: str) -> str | None:
     return value
 
 
+def _require_items(payload: dict[str, object]) -> list[dict[str, object]]:
+    """`payload["items"]` as a non-empty list of `{question_type, count}`
+    dicts. A malformed `items` (missing, empty, wrong shape) is a malformed
+    request rather than a single item's generation failure, so it raises
+    straight out of the handler like the other `_require_*`/`_optional_*`
+    payload parsers — it fails the whole job immediately instead of being
+    retried item-by-item."""
+    value = payload.get("items")
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"job payload missing non-empty list 'items': {payload!r}")
+    items: list[dict[str, object]] = []
+    for entry in value:
+        if not isinstance(entry, dict):
+            raise ValueError(f"job payload 'items' entries must be objects: {payload!r}")
+        items.append(entry)
+    return items
+
+
 async def _generate_one(
     llm: LLMClient,
     model_cls: type[BaseModel],
@@ -98,61 +127,85 @@ async def generate_questions(ctx: JobContext) -> None:
     session = ctx.session
     payload = ctx.payload
 
-    question_type = _require_str(payload, "question_type")
-    count = _require_int(payload, "count")
-    if count <= 0:
-        raise ValueError(f"count must be a positive integer, got {count}")
+    items_payload = _require_items(payload)
     document_ids = _optional_int_list(payload, "document_ids")
     category_ids = _optional_int_list(payload, "category_ids")
     difficulty = _optional_str(payload, "difficulty")
 
-    # Validates question_type up front: an unknown type is a malformed
-    # request, not a per-question failure, so it fails the whole job
-    # immediately rather than being retried question-by-question.
-    model_cls = payload_model_for_type(question_type)
+    # Pass 1: resolve every item's source material up front, so the progress
+    # denominator (total_all_items) is known before any generation call
+    # starts. An item naming an unknown type or whose scope has no eligible
+    # material contributes zero units and a note — exactly like a
+    # single-type job's "no eligible material" case used to fail that job,
+    # except here it only knocks out *this* item, not the rest of `items`.
+    item_plans: list[tuple[str, type[BaseModel], list[GenerationUnit]]] = []
+    notes: list[str] = []
+    for item_index, item_payload in enumerate(items_payload, start=1):
+        question_type = _require_str(item_payload, "question_type")
+        count = _require_int(item_payload, "count")
+        if count <= 0:
+            raise ValueError(
+                f"item {item_index} count must be a positive integer, got {count}"
+            )
 
-    units = await select_units(
-        session,
-        question_type=question_type,
-        document_ids=document_ids,
-        category_ids=category_ids,
-        count=count,
-        settings=settings,
-    )
-    if not units:
-        raise ValueError(
-            f"no eligible source material for type={question_type!r} "
-            f"scope document_ids={document_ids} category_ids={category_ids}"
+        try:
+            model_cls = payload_model_for_type(question_type)
+        except ValueError as exc:
+            notes.append(f"item {item_index} (type={question_type!r}): {exc}")
+            continue
+
+        units = await select_units(
+            session,
+            question_type=question_type,
+            document_ids=document_ids,
+            category_ids=category_ids,
+            count=count,
+            settings=settings,
         )
+        if not units:
+            notes.append(
+                f"item {item_index} (type={question_type!r}): no eligible source material "
+                f"scope document_ids={document_ids} category_ids={category_ids}"
+            )
+            continue
+        if len(units) < count:
+            notes.append(
+                f"item {item_index} (type={question_type!r}): requested {count} but only "
+                f"{len(units)} eligible unit(s) of source material found"
+            )
+        item_plans.append((question_type, model_cls, units))
 
-    total = len(units)
+    total = sum(len(units) for _, _, units in item_plans)
+
+    # Pass 2: generate every unit of every surviving item, in order, sharing
+    # one running index/total across the whole job (docs/question-bank.md —
+    # progress 以全部題數合計顯示).
     success = 0
     failures: list[str] = []
-    for index, unit in enumerate(units, start=1):
-        try:
-            question = await _generate_one(llm, model_cls, question_type, unit, difficulty)
-            session.add(question)
-            await session.commit()
-            success += 1
-        except Exception as exc:
-            await session.rollback()
-            logger.exception(
-                "question %d/%d (type=%s, source chunks=%s) failed to generate",
-                index,
-                total,
-                question_type,
-                unit.chunk_ids,
-            )
-            failures.append(
-                f"unit {index} (chunks={unit.chunk_ids}): {type(exc).__name__}: {exc}"
-            )
-        await ctx.set_progress(f"{index}/{total}")
+    index = 0
+    for question_type, model_cls, units in item_plans:
+        for unit in units:
+            index += 1
+            try:
+                question = await _generate_one(llm, model_cls, question_type, unit, difficulty)
+                session.add(question)
+                await session.commit()
+                success += 1
+            except Exception as exc:
+                await session.rollback()
+                logger.exception(
+                    "question %d/%d (type=%s, source chunks=%s) failed to generate",
+                    index,
+                    total,
+                    question_type,
+                    unit.chunk_ids,
+                )
+                failures.append(
+                    f"unit {index} (type={question_type!r}, chunks={unit.chunk_ids}): "
+                    f"{type(exc).__name__}: {exc}"
+                )
+            await ctx.set_progress(f"{index}/{total}")
 
-    notes: list[str] = []
-    if total < count:
-        notes.append(
-            f"requested {count} but only {total} eligible unit(s) of source material found"
-        )
     if failures:
         notes.append(
             f"{len(failures)}/{total} generation call(s) failed:\n" + "\n".join(failures)

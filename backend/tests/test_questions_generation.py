@@ -210,8 +210,7 @@ async def test_single_choice_generates_drafts_with_correct_json_schema_request(
         {
             "document_ids": [document_id],
             "category_ids": None,
-            "question_type": "single_choice",
-            "count": 2,
+            "items": [{"question_type": "single_choice", "count": 2}],
             "difficulty": "中等",
         }
     )
@@ -286,8 +285,7 @@ async def test_comparison_sends_both_chunk_contents_and_pairs_the_source_chunks(
         {
             "document_ids": [document_id],
             "category_ids": None,
-            "question_type": "comparison",
-            "count": 1,
+            "items": [{"question_type": "comparison", "count": 1}],
             "difficulty": None,
         }
     )
@@ -340,8 +338,7 @@ async def test_one_bad_generation_does_not_abort_the_rest_of_the_batch(monkeypat
         {
             "document_ids": [document_id],
             "category_ids": None,
-            "question_type": "single_choice",
-            "count": 3,
+            "items": [{"question_type": "single_choice", "count": 3}],
             "difficulty": None,
         }
     )
@@ -378,8 +375,7 @@ async def test_all_generations_failing_marks_the_job_failed(monkeypatch) -> None
         {
             "document_ids": [document_id],
             "category_ids": None,
-            "question_type": "single_choice",
-            "count": 1,
+            "items": [{"question_type": "single_choice", "count": 1}],
             "difficulty": None,
         }
     )
@@ -404,8 +400,7 @@ async def test_no_eligible_material_marks_the_job_failed(monkeypatch) -> None:
         {
             "document_ids": [document_id],
             "category_ids": None,
-            "question_type": "single_choice",
-            "count": 2,
+            "items": [{"question_type": "single_choice", "count": 2}],
             "difficulty": None,
         }
     )
@@ -429,8 +424,7 @@ async def test_unknown_question_type_marks_the_job_failed(monkeypatch) -> None:
         {
             "document_ids": [document_id],
             "category_ids": None,
-            "question_type": "essay",
-            "count": 1,
+            "items": [{"question_type": "essay", "count": 1}],
             "difficulty": None,
         }
     )
@@ -439,4 +433,114 @@ async def test_unknown_question_type_marks_the_job_failed(monkeypatch) -> None:
     assert job.status == "failed"
     assert job.error is not None
     assert "unknown question type" in job.error
+    assert captured == []
+
+
+async def test_multi_item_job_generates_every_combo_with_shared_progress_total(
+    monkeypatch,
+) -> None:
+    """docs/question-bank.md 出題流程 step 1 — one job, multiple `{question_type,
+    count}` combos; progress is the running total across every item."""
+    document_id = await _make_document()
+    category_id = await _make_category()
+    for i in range(5):
+        await _make_chunk(document_id=document_id, category_id=category_id, content=f"內容{i}")
+
+    captured: list[httpx2.Request] = []
+    fake_client = _fake_llm_client(_canned_handler(captured))
+    monkeypatch.setattr(generation_module, "get_llm_client", lambda: fake_client)
+
+    job_id = await _run_job(
+        {
+            "document_ids": [document_id],
+            "category_ids": None,
+            "items": [
+                {"question_type": "single_choice", "count": 2},
+                {"question_type": "true_false", "count": 1},
+                {"question_type": "short_answer", "count": 1},
+            ],
+            "difficulty": None,
+        }
+    )
+
+    job = await _get_job(job_id)
+    assert job.status == "done"
+    assert job.progress == "4/4"
+    assert job.error is None
+
+    assert len(await _questions_for_type("single_choice")) == 2
+    assert len(await _questions_for_type("true_false")) == 1
+    assert len(await _questions_for_type("short_answer")) == 1
+
+    schema_names = [
+        json.loads(request.content)["response_format"]["json_schema"]["name"]
+        for request in captured
+    ]
+    assert schema_names.count("SingleChoiceQuestion") == 2
+    assert schema_names.count("TrueFalseQuestion") == 1
+    assert schema_names.count("ShortAnswerQuestion") == 1
+
+
+async def test_one_item_with_no_eligible_material_does_not_abort_the_other_items(
+    monkeypatch,
+) -> None:
+    """The failing item (`comparison` — no embedded chunks exist, so there are
+    no candidate pairs) must not stop the other item (`single_choice`) from
+    generating, and the job still ends `done` with a note about the failed
+    item (docs/question-bank.md — 單一項目全失敗不影響其他項目)."""
+    document_id = await _make_document()
+    category_id = await _make_category()
+    await _make_chunk(document_id=document_id, category_id=category_id, content="內容")
+
+    captured: list[httpx2.Request] = []
+    fake_client = _fake_llm_client(_canned_handler(captured))
+    monkeypatch.setattr(generation_module, "get_llm_client", lambda: fake_client)
+
+    job_id = await _run_job(
+        {
+            "document_ids": [document_id],
+            "category_ids": None,
+            "items": [
+                {"question_type": "comparison", "count": 1},
+                {"question_type": "single_choice", "count": 1},
+            ],
+            "difficulty": None,
+        }
+    )
+
+    job = await _get_job(job_id)
+    assert job.status == "done"
+    assert job.progress == "1/1"
+    assert job.error is not None
+    assert "item 1" in job.error
+    assert "no eligible source material" in job.error
+
+    assert len(await _questions_for_type("comparison")) == 0
+    assert len(await _questions_for_type("single_choice")) == 1
+
+
+async def test_all_items_with_no_eligible_material_marks_the_job_failed(monkeypatch) -> None:
+    document_id = await _make_document()  # no chunks at all
+
+    captured: list[httpx2.Request] = []
+    fake_client = _fake_llm_client(_canned_handler(captured))
+    monkeypatch.setattr(generation_module, "get_llm_client", lambda: fake_client)
+
+    job_id = await _run_job(
+        {
+            "document_ids": [document_id],
+            "category_ids": None,
+            "items": [
+                {"question_type": "single_choice", "count": 1},
+                {"question_type": "true_false", "count": 1},
+            ],
+            "difficulty": None,
+        }
+    )
+
+    job = await _get_job(job_id)
+    assert job.status == "failed"
+    assert job.error is not None
+    assert "item 1" in job.error
+    assert "item 2" in job.error
     assert captured == []

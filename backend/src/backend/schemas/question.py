@@ -8,19 +8,35 @@ from pydantic import BaseModel, Field, model_validator
 from backend.questions.schemas import QuestionType
 
 
+class GenerateItemIn(BaseModel):
+    """One `POST /v1/generate` `items[]` entry — a question type and how many
+    of it to draft (docs/question-bank.md 出題流程 step 1 — 多個「題型 × 數量」
+    項目，一個 job 出完)."""
+
+    question_type: QuestionType
+    count: int = Field(gt=0)
+
+
 class GenerateIn(BaseModel):
-    """`POST /v1/generate` body — scope, type and how many to draft."""
+    """`POST /v1/generate` body — scope, shared difficulty, and one or more
+    `{question_type, count}` combos generated together by a single job."""
 
     document_ids: list[int] | None = None
     category_ids: list[int] | None = None
-    question_type: QuestionType
-    count: int = Field(gt=0)
+    items: list[GenerateItemIn] = Field(min_length=1)
     difficulty: str | None = None
 
     @model_validator(mode="after")
     def _scope_not_empty(self) -> "GenerateIn":
         if not self.document_ids and not self.category_ids:
             raise ValueError("at least one of document_ids or category_ids must be given")
+        return self
+
+    @model_validator(mode="after")
+    def _items_no_duplicate_question_type(self) -> "GenerateIn":
+        types = [item.question_type for item in self.items]
+        if len(types) != len(set(types)):
+            raise ValueError("items must not repeat the same question_type more than once")
         return self
 
 

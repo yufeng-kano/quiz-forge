@@ -47,7 +47,12 @@ from backend.ingestion.url_fetch import (
     probe_content_type,
 )
 from backend.ingestion.vision import VisionPageResult, rewrite_figure_placeholders
-from backend.ingestion.web import extract_main_content, fetch_html, summarize_content
+from backend.ingestion.web import (
+    derive_webpage_title,
+    extract_main_content,
+    fetch_html,
+    summarize_content,
+)
 from backend.ingestion.word import extract_word_markdown
 from backend.jobs.context import JobContext
 from backend.jobs.registry import register_handler
@@ -379,23 +384,33 @@ async def _process_url_document(
     kind = classify_url_content(content_type, final_url)
 
     if kind is None:
-        return await _process_url_webpage(document, ctx, llm)
+        return await _process_url_webpage(document, ctx, llm, settings)
     return await _process_url_file(document, kind, final_url, ctx, llm, settings)
 
 
 async def _process_url_webpage(
-    document: Document, ctx: JobContext, llm: LLMClient
+    document: Document, ctx: JobContext, llm: LLMClient, settings: Settings
 ) -> list[Page]:
-    """docs/ingestion.md 網址（網頁）— unchanged from before the 網址（檔案）
-    feature existed: trafilatura extracts the article body locally, one
-    `TEXT_MODEL` call produces the classification/list-only summary."""
+    """docs/ingestion.md 網址（網頁）— trafilatura extracts the article body
+    locally, one `TEXT_MODEL` call produces the classification/list-only
+    summary."""
     session = ctx.session
     assert document.source_url is not None  # checked by `_process_url_document`
 
     html = await asyncio.to_thread(fetch_html, document.source_url)
-    markdown, title = await asyncio.to_thread(extract_main_content, html, document.source_url)
-    if title and not document.title:
-        document.title = title
+    markdown, metadata_title = await asyncio.to_thread(
+        extract_main_content, html, document.source_url
+    )
+    if document.title == document.source_url:
+        # No custom title was given at creation (`POST /v1/documents/url`
+        # falls back to the raw URL string when none is given) — derive a
+        # human-readable one instead of leaving the raw, often
+        # percent-encoded URL as the title.
+        document.title = derive_webpage_title(
+            document.source_url,
+            metadata_title=metadata_title,
+            max_length=settings.webpage_title_max_length,
+        )
 
     page = Page(document_id=document.id, page_no=1, markdown=markdown, status="ready")
     session.add(page)
@@ -471,7 +486,7 @@ async def _run_chunk_phase(
 
     total = len(chunk_texts)
     for index, content in enumerate(chunk_texts, start=1):
-        classification = await classify_chunk(llm, content)
+        classification = await classify_chunk(llm, session, content, settings)
         subject = await get_or_create_category(session, classification.subject, parent_id=None)
         topic = await get_or_create_category(session, classification.topic, parent_id=subject.id)
         [embedding] = await llm.embed(texts=[content], purpose="embed_chunk")

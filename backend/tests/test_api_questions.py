@@ -83,8 +83,7 @@ async def test_create_generation_job_enqueues_job_with_scope(client: TestClient)
         "/v1/generate",
         json={
             "document_ids": [document_id],
-            "question_type": "single_choice",
-            "count": 3,
+            "items": [{"question_type": "single_choice", "count": 3}],
             "difficulty": "簡單",
         },
     )
@@ -101,16 +100,69 @@ async def test_create_generation_job_enqueues_job_with_scope(client: TestClient)
         assert job.payload == {
             "document_ids": [document_id],
             "category_ids": None,
-            "question_type": "single_choice",
-            "count": 3,
+            "items": [{"question_type": "single_choice", "count": 3}],
             "difficulty": "簡單",
         }
+
+
+async def test_create_generation_job_enqueues_job_with_multiple_combos(
+    client: TestClient,
+) -> None:
+    document_id = await _make_document()
+
+    response = client.post(
+        "/v1/generate",
+        json={
+            "document_ids": [document_id],
+            "items": [
+                {"question_type": "single_choice", "count": 10},
+                {"question_type": "true_false", "count": 5},
+                {"question_type": "short_answer", "count": 2},
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, body["job_id"])
+        assert job is not None
+        assert job.payload["items"] == [
+            {"question_type": "single_choice", "count": 10},
+            {"question_type": "true_false", "count": 5},
+            {"question_type": "short_answer", "count": 2},
+        ]
 
 
 def test_create_generation_job_rejects_empty_scope(client: TestClient) -> None:
     response = client.post(
         "/v1/generate",
-        json={"question_type": "single_choice", "count": 1},
+        json={"items": [{"question_type": "single_choice", "count": 1}]},
+    )
+    assert response.status_code == 422
+
+
+def test_create_generation_job_rejects_empty_items(client: TestClient) -> None:
+    response = client.post(
+        "/v1/generate",
+        json={"document_ids": [1], "items": []},
+    )
+    assert response.status_code == 422
+
+
+def test_create_generation_job_rejects_duplicate_question_type_across_items(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/v1/generate",
+        json={
+            "document_ids": [1],
+            "items": [
+                {"question_type": "single_choice", "count": 3},
+                {"question_type": "single_choice", "count": 2},
+            ],
+        },
     )
     assert response.status_code == 422
 
@@ -118,7 +170,7 @@ def test_create_generation_job_rejects_empty_scope(client: TestClient) -> None:
 def test_create_generation_job_rejects_non_positive_count(client: TestClient) -> None:
     response = client.post(
         "/v1/generate",
-        json={"document_ids": [1], "question_type": "single_choice", "count": 0},
+        json={"document_ids": [1], "items": [{"question_type": "single_choice", "count": 0}]},
     )
     assert response.status_code == 422
 
@@ -126,7 +178,7 @@ def test_create_generation_job_rejects_non_positive_count(client: TestClient) ->
 def test_create_generation_job_rejects_unknown_question_type(client: TestClient) -> None:
     response = client.post(
         "/v1/generate",
-        json={"document_ids": [1], "question_type": "essay", "count": 1},
+        json={"document_ids": [1], "items": [{"question_type": "essay", "count": 1}]},
     )
     assert response.status_code == 422
 

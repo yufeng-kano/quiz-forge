@@ -9,6 +9,8 @@ Both functions do blocking network/parsing work — callers must run them via
 `asyncio.to_thread`.
 """
 
+from urllib.parse import unquote, urlparse
+
 import trafilatura
 from pydantic import BaseModel
 
@@ -41,6 +43,41 @@ def extract_main_content(html: str, url: str) -> tuple[str, str | None]:
     metadata = trafilatura.extract_metadata(html, default_url=url)
     title = metadata.title if metadata is not None and metadata.title else None
     return markdown.strip(), title
+
+
+def derive_webpage_title(url: str, *, metadata_title: str | None, max_length: int) -> str:
+    """The document title for a 網址（網頁）document, in priority order:
+
+    1. `metadata_title` — the page's own title, as trafilatura's metadata
+       extraction found it (`extract_main_content`'s second return value). A
+       real, human-authored title always beats anything derived from the
+       URL itself.
+    2. The URL path's last non-empty segment, percent-decoded (`unquote`) so
+       a title like `%E5%85%89%E5%90%88%E4%BD%9C%E7%94%A8` renders as
+       `光合作用` instead of raw percent-encoded gibberish — most blog/CMS
+       URLs put a readable slug there even when the page has no `<title>`/
+       OpenGraph metadata at all.
+    3. The bare hostname, when the URL has no path segment either (e.g. a
+       bare site root).
+
+    Every candidate is capped at `max_length` characters — even a real page
+    title can be unreasonably long, and `documents.title` is a display
+    field, not free-form storage.
+    """
+    if metadata_title and metadata_title.strip():
+        return metadata_title.strip()[:max_length]
+
+    parsed = urlparse(url)
+    path_segments = [segment for segment in parsed.path.split("/") if segment]
+    if path_segments:
+        decoded = unquote(path_segments[-1]).strip()
+        if decoded:
+            return decoded[:max_length]
+
+    if parsed.hostname:
+        return parsed.hostname[:max_length]
+
+    return url[:max_length]
 
 
 class SummaryResult(BaseModel):

@@ -42,10 +42,21 @@ class Settings(BaseSettings):
     # 文件解析／chunk（docs/ingestion.md — chunk 依標題結構＋長度上限切分）
     chunk_max_chars: int = 4000
 
+    # 分類（docs/ingestion.md — 分類 prompt 必須帶入既有科目清單與該科目下既有主
+    # 題，引導模型優先重用既有分類）：既有科目數量上限，以及每個科目底下帶入的既
+    # 有主題數量上限，避免分類樹變大後把 prompt 撐爆。
+    classification_existing_subjects_limit: int = 50
+    classification_existing_topics_per_subject_limit: int = 30
+
     # 網址（檔案）輸入線（docs/ingestion.md）：判斷為 PDF/Word/圖片時下載檔案的
     # 大小上限（bytes）與連線逾時（秒）。
     url_fetch_max_bytes: int = 100 * 1024 * 1024
     url_fetch_timeout_seconds: float = 30.0
+
+    # 網址（網頁）輸入線標題（docs/ingestion.md）：`documents.title` 的字元數上
+    # 限——不論標題取自 trafilatura metadata、URL 路徑片段還是 hostname，都不
+    # 得整段存進資料庫。
+    webpage_title_max_length: int = 200
 
     # 背景任務（pg-as-queue，見 docs/architecture.md）
     job_worker_count: int = 2

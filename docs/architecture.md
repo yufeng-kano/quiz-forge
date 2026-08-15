@@ -56,36 +56,38 @@ Browser ──> nginx (唯一對外 port)
 
 ## `.env` 變數
 
-```env
-# LLM（全走 OpenAI-compatible，預設 OpenRouter）
-LLM_BASE_URL=https://openrouter.ai/api/v1
-LLM_API_KEY=sk-or-...
-VISION_MODEL=google/gemini-3.6-flash
-TEXT_MODEL=openai/gpt-5.6-luna
-EMBEDDING_MODEL=openai/text-embedding-3-small
-EMBEDDING_DIM=1536
-LLM_CONCURRENCY=4
-OCR_DPI=200
-CHUNK_MAX_CHARS=4000
-COMPARISON_SIMILARITY_MIN=0.35
-COMPARISON_SIMILARITY_MAX=0.75
+權威清單與註解在專案根目錄 `.env.example`。啟動前至少改 `LLM_API_KEY` 與 `POSTGRES_PASSWORD`。依用途分組如下：
 
-# 背景 job worker
-JOB_WORKER_COUNT=2
-JOB_POLL_INTERVAL_SECONDS=1
-
-# 基礎設施
-DATABASE_URL=postgresql+asyncpg://...
-DATA_DIR=/data
-
-# PostgreSQL（db 服務憑證）
-POSTGRES_USER=quizforge
-POSTGRES_PASSWORD=change-me
-POSTGRES_DB=quizforge
-
-# nginx 對外 port
-NGINX_HTTP_PORT=8080
-```
+| 分組 | 變數 | 預設 | 說明 |
+|---|---|---|---|
+| LLM | `LLM_BASE_URL` | `https://openrouter.ai/api/v1` | OpenAI-compatible 端點 |
+| LLM | `LLM_API_KEY` | （必填） | chat 與 embeddings 共用 |
+| LLM | `VISION_MODEL` | `google/gemini-3.6-flash` | 掃描件／PDF／圖片解析 |
+| LLM | `TEXT_MODEL` | `openai/gpt-5.6-luna` | 摘要／分類／出題 |
+| LLM | `EMBEDDING_MODEL` | `openai/text-embedding-3-small` | chunk 向量化 |
+| LLM | `EMBEDDING_DIM` | `1536` | pgvector 建表維度 |
+| LLM | `LLM_CONCURRENCY` | `4` | LLM 呼叫併發上限 |
+| 文件輸入 | `OCR_DPI` | `200` | PDF 轉頁面圖 DPI |
+| 文件輸入 | `CHUNK_MAX_CHARS` | `4000` | 單一 chunk 字元上限 |
+| 文件輸入 | `CLASSIFICATION_EXISTING_SUBJECTS_LIMIT` | `50` | 分類 prompt 帶入的既有科目上限 |
+| 文件輸入 | `CLASSIFICATION_EXISTING_TOPICS_PER_SUBJECT_LIMIT` | `30` | 每個科目底下帶入的既有主題上限 |
+| 文件輸入 | `URL_FETCH_MAX_BYTES` | `104857600` | 網址檔案下載大小上限（100MB） |
+| 文件輸入 | `URL_FETCH_TIMEOUT_SECONDS` | `30.0` | 網址下載逾時（秒） |
+| 文件輸入 | `WEBPAGE_TITLE_MAX_LENGTH` | `200` | 網頁文件標題字元上限 |
+| 出題 | `COMPARISON_SIMILARITY_MIN` | `0.35` | 比較題配對相似度下界 |
+| 出題 | `COMPARISON_SIMILARITY_MAX` | `0.75` | 比較題配對相似度上界 |
+| 分頁 | `QUESTIONS_LIST_LIMIT_DEFAULT` | `50` | `GET /v1/questions` 預設每頁筆數 |
+| 分頁 | `QUESTIONS_LIST_LIMIT_MAX` | `200` | 題目列表 limit 上限（超過 422） |
+| 分頁 | `JOBS_LIST_LIMIT_DEFAULT` | `50` | `GET /v1/jobs` 預設每頁筆數 |
+| 分頁 | `JOBS_LIST_LIMIT_MAX` | `200` | 任務列表 limit 上限（超過 422） |
+| 背景任務 | `JOB_WORKER_COUNT` | `2` | asyncio worker 數量 |
+| 背景任務 | `JOB_POLL_INTERVAL_SECONDS` | `1.0` | worker 空閒輪詢間隔（秒） |
+| 基礎設施 | `DATABASE_URL` | `postgresql+asyncpg://quizforge:change-me@db:5432/quizforge` | backend 連線字串 |
+| 基礎設施 | `DATA_DIR` | `/data` | container 內部資料根目錄 |
+| PostgreSQL | `POSTGRES_USER` | `quizforge` | db 服務帳號 |
+| PostgreSQL | `POSTGRES_PASSWORD` | `change-me` | db 服務密碼，部署時務必更換 |
+| PostgreSQL | `POSTGRES_DB` | `quizforge` | db 服務資料庫名 |
+| nginx | `NGINX_HTTP_PORT` | `8080` | 對外（host）監聽 port |
 
 - Git 只保存 `.env.example`；真正的 `.env` 不入版控。
 - `EMBEDDING_DIM` 是半固定值：pgvector 建表後更換 embedding model 需 re-embed + migration，README 要明講代價。

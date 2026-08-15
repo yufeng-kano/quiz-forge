@@ -19,7 +19,7 @@
 - locale key 群組：`status.*`、`documents.*`、`documentDetail.*`、`questions.*`、`editor.*`、`review.*`、`bank.*`、`generate.*`、`job.progress.*`、`errors.*` 等，全部經型別化 t()。
 - 題目元件：`src/components/questions/` 六題型各一個顯示元件與編輯器，`QuestionDisplay` 依 type 派發，審題與題庫共用；類比題題幹由槽位組出，比較題答案以面向×A×B 表格呈現。
 - 審題編輯 UX：答案用結構選取（單選以 radio 標正解、刪選項自動平移 index）、填充題即時檢查 `____` 數與答案數、空白解析正規化為 null；422 錯誤可讀化呈現。
-- 出題頁：文件/分類雙範圍選擇（分類樹勾科目展開為主題 id）、題型/數量/難度表單、job 進度與本 session 歷史。
+- 出題頁：範圍選擇為兩個獨立 picker widget——「選擇文件」「選擇分類」按鈕開 Modal（搜尋框＋有界捲動清單；文件顯示標題/來源/頁數且僅 ready 可選；分類為科目分組樹、勾科目展開為主題 id），已選項目以可移除 chips 呈現（單行 ellipsis、過多折疊「+N」）。**題型×數量組合列**（可增減列、同題型不重複、合計題數與預估 LLM 呼叫數顯示）、難度、job 進度與本 session 歷史（右欄有界捲動）。
 - 題庫頁：debounce 搜尋（`q`）＋篩選（題型/難度/科目/主題）＋真分頁（`AppPagination`，頁量對齊後端 default limit）；「新增題目」modal 重用六題型編輯器（`QuestionPayloadFields`）、可存草稿；每題可「複製」成草稿改造；「管理分類」modal 支援改名/刪除（409 原因直出）。勾選存 `exportSelection` Pinia store 跨頁保留，供匯出頁消費。
 - 審題頁：伺服器端篩選與分頁、批次採用/丟棄（ConfirmDialog、逐題進度、單題失敗不中斷、總結 toast）。
 - 匯出頁：必填考卷標題、僅對選取中存在的題型顯示配分輸入；歷史為可排序 DataTable。
@@ -54,6 +54,12 @@
 - 移除 scaffold 預設的示範樣式與深色 media query，全站以淺色為唯一主題。
 - 專業商業佈局：側邊欄導覽 + 每頁標題列（標題左、主要動作右），內容區依頁面性質用全寬 data table 或分欄，不再是置中單欄。
 - 設計系統層：DataTable（可排序、hover、sticky header）、Toast（操作回饋）、ConfirmDialog、Modal、Skeleton loading；所有寫入操作必有成功/失敗回饋。
+
+## 清單有界原則
+
+- 任何會隨資料增長的清單都不得讓頁面無限變長：必須用「有界高度＋內部捲動」、分頁、tab 或搜尋其中之一收束。
+- 長標題（尤其 URL 型文件）一律單行 ellipsis 截斷，完整內容放 tooltip（`title` 屬性）；不允許多行折行撐版面。
+- 選擇型控制項（挑文件、挑分類）不得把整份清單攤平在表單裡；一律用「觸發按鈕＋Modal picker（內含搜尋、有界捲動）＋已選 chips」的獨立 widget 形式。
 
 ## 互動原則
 
