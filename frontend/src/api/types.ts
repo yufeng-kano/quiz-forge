@@ -6,6 +6,8 @@
  * stores, views) never redeclare shapes of their own.
  */
 
+import type { PaperSize } from './config'
+
 /** `jobs.status`, see the background-task section of docs/architecture.md. */
 export const JOB_STATUSES = ['pending', 'running', 'done', 'failed'] as const
 
@@ -335,4 +337,39 @@ export interface GenerateRequest {
 /** `POST /api/v1/generate` — the id of the queued `generate_questions` job. */
 export interface GenerateResult {
   job_id: number
+}
+
+/**
+ * Request body of `POST /api/v1/exports`.
+ *
+ * `question_ids` must be non-empty and every id must be `approved`; a
+ * non-approved id is not rejected by the request but fails the job, whose
+ * `error` then lists the offending ids (docs/export.md 選題流程). Their order is
+ * the paper's numbering order.
+ */
+export interface ExportRequest {
+  question_ids: number[]
+  paper_size: PaperSize
+}
+
+/** `POST /api/v1/exports` — the id of the queued `export_docx` job. */
+export interface ExportResult {
+  job_id: number
+}
+
+/**
+ * One row of `GET /api/v1/exports`.
+ *
+ * `paper_size` stays a plain string as the backend declares it: the two
+ * `*_available` flags say whether the file is on disk right now, so a row of a
+ * still-running or failed job renders with its download links disabled instead
+ * of pointing at a 404.
+ */
+export interface ExportListItem {
+  id: number
+  paper_size: string
+  question_count: number
+  created_at: string
+  questions_available: boolean
+  answers_available: boolean
 }

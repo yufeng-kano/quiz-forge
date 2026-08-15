@@ -22,6 +22,9 @@
 - 出題頁：文件/分類雙範圍選擇（分類樹勾科目展開為主題 id）、題型/數量/難度表單、job 進度與本 session 歷史。
 - 題庫頁：篩選（題型/難度/主題分類）、勾選存 `exportSelection` Pinia store 跨頁保留，供匯出頁消費。
 - 難度字彙統一「簡單/中等/困難」（與後端分類 prompt 同組值，見 `src/questions/labels.ts`）。
+- 匯出頁：消費 `exportSelection`（顯示已選題、單筆移除）、紙張選擇（尺寸常數鏡射自 `backend/export/paper.py`，JIS B）、job 進度、歷史紀錄與題目卷/答案卷下載（純 `<a>` 連結、由後端 Content-Disposition 決定檔名）；job 失敗保留選取並顯示違規 id。
+- 用量頁：總計卡片 + 依 model/依用途兩表，purpose 未知值顯示原字串不隱藏。
+- 七頁全部實作完成；尚未加 vitest（純函式模組 `usage/rows.ts` 等暫無單元測試，屬待補項目）。
 - 導覽列 6 項（`/documents/:id` 無獨立入口，由文件列表進入，active 狀態仍標在文件列表）。
 - 尚無前端單元測試（scaffold 未含 vitest）；功能頁落地時再補 vitest。
 

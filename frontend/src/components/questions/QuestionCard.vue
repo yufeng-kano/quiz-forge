@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-import { isQuestionType, type QuestionListItem } from '@/api'
+import type { QuestionListItem } from '@/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useAppI18n } from '@/i18n'
 import { formatDateTime } from '@/i18n/datetime'
-import { QUESTION_TYPE_LABEL_KEYS } from '@/questions/labels'
+import { questionDifficultyLabel, questionTypeLabel } from '@/questions/labels'
 
 /**
  * The card frame shared by 審題 and 題庫: type label, difficulty, status badge
@@ -20,19 +20,9 @@ const props = defineProps<{ question: QuestionListItem }>()
 
 const { t } = useAppI18n()
 
-const typeLabel = computed(() => {
-  const type = props.question.type
-  return isQuestionType(type)
-    ? t(QUESTION_TYPE_LABEL_KEYS[type])
-    : t('questions.card.unknownType', { type })
-})
+const typeLabel = computed(() => questionTypeLabel(props.question.type))
 
-const difficultyLabel = computed(() => {
-  const difficulty = props.question.difficulty
-  return difficulty === null || difficulty === ''
-    ? t('questions.difficulty.unspecified')
-    : t('questions.difficulty.prefix', { difficulty })
-})
+const difficultyLabel = computed(() => questionDifficultyLabel(props.question.difficulty))
 </script>
 
 <template>

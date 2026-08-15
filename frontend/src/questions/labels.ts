@@ -6,8 +6,8 @@
  * stays in `src/locales/`.
  */
 
-import type { QuestionType } from '@/api'
-import type { MessageKey } from '@/i18n'
+import { isQuestionType, type QuestionType } from '@/api'
+import { translate, type MessageKey } from '@/i18n'
 
 export const QUESTION_TYPE_LABEL_KEYS: Record<QuestionType, MessageKey> = {
   comparison: 'questions.type.comparison',
@@ -40,4 +40,21 @@ export const DIFFICULTY_LABEL_KEYS: Record<DifficultyLevel, MessageKey> = {
   easy: 'questions.difficulty.easy',
   medium: 'questions.difficulty.medium',
   hard: 'questions.difficulty.hard',
+}
+
+/**
+ * Name of a `questions.type` value. The column is a plain string, so a type
+ * this build does not know is named with the value itself rather than hidden.
+ */
+export function questionTypeLabel(type: string): string {
+  return isQuestionType(type)
+    ? translate(QUESTION_TYPE_LABEL_KEYS[type])
+    : translate('questions.card.unknownType', { type })
+}
+
+/** `難度：中等`, or the "unspecified" wording when the column is empty. */
+export function questionDifficultyLabel(difficulty: string | null): string {
+  return difficulty === null || difficulty === ''
+    ? translate('questions.difficulty.unspecified')
+    : translate('questions.difficulty.prefix', { difficulty })
 }

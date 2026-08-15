@@ -41,10 +41,6 @@
       "description": "依模型與用途統計 LLM token 累計用量。"
     }
   },
-  "placeholder": {
-    "title": "此頁面尚未實作",
-    "description": "版面與共用元件已就緒，功能會在後續任務接上對應 API。"
-  },
   "status": {
     "pending": "等待中",
     "running": "處理中",
@@ -295,6 +291,80 @@
       "failed": "出題任務失敗：{error}",
       "failedNoDetail": "出題任務失敗，未取得失敗原因。",
       "retry": "重試任務"
+    }
+  },
+  "exports": {
+    "paperOption": "{name}（{width} × {height} mm）",
+    "selection": {
+      "title": "待匯出題目",
+      "count": "已選取 {count} 題",
+      "loading": "載入題目資料中…",
+      "reload": "重新載入",
+      "item": "題目 #{id}",
+      "remove": "移除",
+      "clear": "清除全部選取",
+      "unavailable": "已不在已採用題庫",
+      "unavailableHint": "標示「已不在已採用題庫」的題目會讓匯出任務失敗，請先移除或重新採用。",
+      "emptyTitle": "尚未選取要匯出的題目",
+      "emptyDescription": "到題庫頁勾選已採用的題目，勾選結果會保留到這裡。",
+      "goBank": "前往題庫"
+    },
+    "form": {
+      "title": "建立匯出",
+      "paperSize": "紙張尺寸",
+      "paperHint": "B4、B3 採台灣考卷慣用的 JIS 尺寸，比同名 ISO 尺寸略大。",
+      "submit": "建立匯出任務",
+      "submitting": "建立中…"
+    },
+    "job": {
+      "title": "匯出進度",
+      "meta": "任務 #{id} · {paper} · {count} 題 · 建立於 {datetime}",
+      "done": "匯出完成，可於下方紀錄下載題目卷與答案卷。",
+      "failed": "匯出失敗：{error}",
+      "failedNoDetail": "匯出失敗，未取得失敗原因。",
+      "retry": "重試任務"
+    },
+    "history": {
+      "title": "匯出紀錄",
+      "loading": "載入匯出紀錄中…",
+      "reload": "重新載入",
+      "count": "共 {count} 筆紀錄",
+      "meta": "匯出 #{id} · {paper} · {count} 題 · 建立於 {datetime}",
+      "questions": "下載題目卷",
+      "answers": "下載答案卷",
+      "unavailable": "檔案尚未產生",
+      "emptyTitle": "尚未有任何匯出紀錄",
+      "emptyDescription": "建立匯出任務後，歷次紀錄與下載連結會顯示在這裡。"
+    }
+  },
+  "usage": {
+    "loading": "載入用量統計中…",
+    "refresh": "重新整理",
+    "emptyTitle": "尚未有任何 LLM 用量紀錄",
+    "emptyDescription": "解析文件、分類或出題後，每次呼叫的模型與 token 用量會累計在這裡。",
+    "metric": {
+      "callCount": "呼叫次數",
+      "promptTokens": "輸入 token",
+      "completionTokens": "輸出 token",
+      "totalTokens": "總 token"
+    },
+    "totals": {
+      "title": "累計用量"
+    },
+    "byModel": {
+      "title": "依模型",
+      "column": "模型"
+    },
+    "byPurpose": {
+      "title": "依用途",
+      "column": "用途"
+    },
+    "purpose": {
+      "visionParsePage": "頁面圖像解析",
+      "classifyChunk": "分段分類",
+      "embedChunk": "分段向量化",
+      "summarizeUrlDocument": "網頁內容摘要",
+      "generateQuestion": "出題：{type}"
     }
   },
   "errors": {

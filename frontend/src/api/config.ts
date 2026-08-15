@@ -52,3 +52,39 @@ export const GENERATE_COUNT_MAX = 50
 
 /** What the 數量 field starts at, chosen to be a usable batch without being costly. */
 export const GENERATE_COUNT_DEFAULT = 5
+
+/** Paper size names `POST /api/v1/exports` accepts; anything else is a 422. */
+export const PAPER_SIZE_NAMES = ['A4', 'B4', 'B3'] as const
+
+export type PaperSize = (typeof PAPER_SIZE_NAMES)[number]
+
+export interface PaperSizeSpec {
+  readonly name: PaperSize
+  readonly widthMm: number
+  readonly heightMm: number
+}
+
+/**
+ * The three supported sheets with the dimensions the backend actually renders
+ * them at (`backend/src/backend/export/paper.py` `PAPER_SIZES_MM`). B4 and B3
+ * are the JIS B-series sizes 台灣考卷慣用的尺寸, not the smaller ISO ones — see
+ * docs/export.md — so the numbers are mirrored here rather than guessed, and
+ * the 匯出 form reads them from this one module instead of inlining them.
+ */
+export const PAPER_SIZES = [
+  { name: 'A4', widthMm: 210, heightMm: 297 },
+  { name: 'B4', widthMm: 257, heightMm: 364 },
+  { name: 'B3', widthMm: 364, heightMm: 515 },
+] as const satisfies readonly PaperSizeSpec[]
+
+/** What the 紙張尺寸 field starts at: the everyday sheet of the three. */
+export const DEFAULT_PAPER_SIZE: PaperSize = 'A4'
+
+/**
+ * The spec of a paper size name, or `null` when the name is not one of the
+ * three. `exports.paper_size` is a plain string column, so a history row could
+ * carry a value this build does not know; the caller then shows it verbatim.
+ */
+export function findPaperSize(name: string): PaperSizeSpec | null {
+  return PAPER_SIZES.find((size) => size.name === name) ?? null
+}
