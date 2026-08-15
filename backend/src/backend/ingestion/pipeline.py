@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import Settings, get_settings
 from backend.ingestion import storage
 from backend.ingestion.bbox import bbox_to_pixels
+from backend.ingestion.category_gc import gc_unused_categories
 from backend.ingestion.chunking import split_markdown_into_chunks
 from backend.ingestion.classification import classify_chunk, get_or_create_category
 from backend.ingestion.kind import UploadKind, detect_upload_kind
@@ -506,3 +507,10 @@ async def _run_chunk_phase(
         session.add(chunk)
         await session.commit()
         await ctx.set_progress(f"chunks {index}/{total}")
+
+    # The chunks just deleted above may have been the last reference to some
+    # category (e.g. reclassification renamed a topic) — GC once the new
+    # chunk set is settled, same as `DELETE /v1/documents/{id}`
+    # (docs/ingestion.md 文件刪除; .rule 反偷懶規則 不得重複核心邏輯).
+    await gc_unused_categories(session)
+    await session.commit()

@@ -20,8 +20,10 @@ from sqlalchemy import select
 import backend.ingestion.pipeline as pipeline_module
 from backend.core.config import Settings
 from backend.db.session import AsyncSessionLocal
+from backend.ingestion.classification import get_or_create_category
 from backend.jobs.worker import claim_job, run_claimed_job
 from backend.llm.client import LLMClient
+from backend.models.category import Category
 from backend.models.chunk import Chunk
 from backend.models.document import Document
 from backend.models.job import Job
@@ -122,6 +124,23 @@ async def _make_stale_chunk(document_id: int, content: str) -> int:
         await session.commit()
         await session.refresh(chunk)
         return chunk.id
+
+
+async def _make_stale_chunk_with_category(
+    document_id: int, content: str, category_id: int
+) -> int:
+    async with AsyncSessionLocal() as session:
+        chunk = Chunk(document_id=document_id, content=content, category_id=category_id)
+        session.add(chunk)
+        await session.commit()
+        await session.refresh(chunk)
+        return chunk.id
+
+
+async def _category_ids() -> set[int]:
+    async with AsyncSessionLocal() as session:
+        rows = (await session.execute(select(Category.id))).scalars().all()
+        return set(rows)
 
 
 async def _run_job(payload: dict[str, object]) -> int:
@@ -266,3 +285,93 @@ async def test_rechunk_marks_document_failed_and_reraises_when_chunk_phase_error
         document = await session.get(Document, document_id)
         assert document is not None
         assert document.status == "failed"
+
+
+async def test_rechunk_gc_drops_category_no_longer_referenced_after_reclassification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """docs/ingestion.md 文件刪除 — GC also runs after rechunk's chunk-delete
+    phase re-creates categories: the mocked classifier always returns
+    生物/呼吸作用, so the old chunk's 生物/光合作用 topic is unreferenced once
+    its stale chunk is deleted and must be collected."""
+    dim = Settings().embedding_dim
+    document_id = await _make_document()
+    await _make_page(document_id, 1, "ready", "新的內容")
+
+    async with AsyncSessionLocal() as session:
+        old_subject = await get_or_create_category(session, "生物", parent_id=None)
+        old_topic = await get_or_create_category(session, "光合作用", parent_id=old_subject.id)
+    await _make_stale_chunk_with_category(document_id, "舊分類的舊內容", old_topic.id)
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=dim)
+        content = {
+            "subject": "生物",
+            "topic": "呼吸作用",
+            "difficulty": "中等",
+            "tags": ["粒線體"],
+        }
+        return _chat_completion_response(model=body["model"], content=content)
+
+    fake_client = _fake_llm_client(handler)
+    monkeypatch.setattr(pipeline_module, "get_llm_client", lambda: fake_client)
+
+    job_id = await _run_job({"document_id": document_id})
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    remaining_ids = await _category_ids()
+    # 光合作用 lost its only reference once the stale chunk was deleted.
+    assert old_topic.id not in remaining_ids
+    # 生物 survives: 呼吸作用 (the new classification) still lives under it.
+    assert old_subject.id in remaining_ids
+
+    async with AsyncSessionLocal() as session:
+        new_topic = (
+            await session.execute(
+                select(Category).where(Category.name == "呼吸作用", Category.parent_id.is_not(None))
+            )
+        ).scalar_one()
+        assert new_topic.parent_id == old_subject.id
+
+
+async def test_rechunk_gc_preserves_category_still_referenced_by_another_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same reclassification as above, but a second document's chunk still
+    references 光合作用 -- GC must not touch it."""
+    dim = Settings().embedding_dim
+    document_id = await _make_document()
+    other_document_id = await _make_document()
+    await _make_page(document_id, 1, "ready", "新的內容")
+
+    async with AsyncSessionLocal() as session:
+        old_subject = await get_or_create_category(session, "生物", parent_id=None)
+        old_topic = await get_or_create_category(session, "光合作用", parent_id=old_subject.id)
+    await _make_stale_chunk_with_category(document_id, "舊分類的舊內容", old_topic.id)
+    await _make_stale_chunk_with_category(other_document_id, "另一份文件仍在用", old_topic.id)
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=dim)
+        content = {
+            "subject": "生物",
+            "topic": "呼吸作用",
+            "difficulty": "中等",
+            "tags": ["粒線體"],
+        }
+        return _chat_completion_response(model=body["model"], content=content)
+
+    fake_client = _fake_llm_client(handler)
+    monkeypatch.setattr(pipeline_module, "get_llm_client", lambda: fake_client)
+
+    job_id = await _run_job({"document_id": document_id})
+    job = await _get_job(job_id)
+    assert job.status == "done", job.error
+
+    remaining_ids = await _category_ids()
+    assert old_topic.id in remaining_ids
+    assert old_subject.id in remaining_ids

@@ -48,6 +48,12 @@
 3. 每個 chunk 呼叫 `EMBEDDING_MODEL` 計算 embedding，存 pgvector（維度 `EMBEDDING_DIM`）。
 4. embedding 用途：比較題的相關 chunk 配對（見 `question-bank.md`）。
 
+## 文件刪除
+
+- `DELETE /api/v1/documents/{id}` 級聯刪除 pages、assets、chunks 與磁碟上的原檔/頁圖/裁切圖。
+- 刪除後執行分類垃圾回收：不再被任何 chunk 引用的主題分類刪除；底下主題清空且自身無 chunk 引用的科目分類一併刪除。仍被其他文件 chunk 引用的分類保留。
+- 題目不隨文件刪除：`questions` 是經審題的獨立成品（可能已匯出），`source_chunk_ids` 允許指向已刪除的 chunk（審題「對照原文」顯示原文已不存在）。
+
 ## 實作備註與已知限制
 
 - 實作在 `backend/src/backend/ingestion/`；所有 LLM prompt 集中在 `prompts.py`。

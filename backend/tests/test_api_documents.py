@@ -18,6 +18,7 @@ from sqlalchemy import select, text
 from backend.core.config import get_settings
 from backend.db.session import AsyncSessionLocal
 from backend.models.asset import Asset
+from backend.models.category import Category
 from backend.models.document import Document
 from backend.models.job import Job
 from backend.models.page import Page
@@ -233,6 +234,99 @@ async def test_delete_document_removes_row_and_files(
         assert await session.get(Document, document_id) is None
 
     get_settings.cache_clear()
+
+
+async def test_delete_document_runs_category_gc_and_preserves_shared_categories(
+    client: TestClient,
+) -> None:
+    """docs/ingestion.md 文件刪除 — end-to-end through the real DELETE
+    endpoint: an orphaned topic is collected, a topic shared with another
+    document's chunk survives (and so does its subject, which still has
+    that surviving child), and once the second document is deleted too the
+    now fully-unreferenced, childless subject/topic pair is collected."""
+    from backend.ingestion.classification import get_or_create_category
+    from backend.models.chunk import Chunk
+
+    async with AsyncSessionLocal() as session:
+        doc_a = Document(source_type="upload", title="doc-a", status="ready")
+        doc_b = Document(source_type="upload", title="doc-b", status="ready")
+        session.add_all([doc_a, doc_b])
+        await session.commit()
+        await session.refresh(doc_a)
+        await session.refresh(doc_b)
+
+        subject = await get_or_create_category(session, "生物", parent_id=None)
+        shared_topic = await get_or_create_category(session, "光合作用", parent_id=subject.id)
+        doc_a_only_topic = await get_or_create_category(session, "呼吸作用", parent_id=subject.id)
+
+        session.add_all(
+            [
+                Chunk(document_id=doc_a.id, content="A 內容 1", category_id=shared_topic.id),
+                Chunk(document_id=doc_a.id, content="A 內容 2", category_id=doc_a_only_topic.id),
+                Chunk(document_id=doc_b.id, content="B 內容", category_id=shared_topic.id),
+            ]
+        )
+        await session.commit()
+
+    delete_a_response = client.delete(f"/v1/documents/{doc_a.id}")
+    assert delete_a_response.status_code == 204
+
+    async with AsyncSessionLocal() as session:
+        remaining_ids = {c.id for c in (await session.execute(select(Category))).scalars().all()}
+    # doc_a's own topic is now unreferenced -> collected.
+    assert doc_a_only_topic.id not in remaining_ids
+    # still referenced by doc_b's chunk -> survives, and so does its subject.
+    assert shared_topic.id in remaining_ids
+    assert subject.id in remaining_ids
+
+    delete_b_response = client.delete(f"/v1/documents/{doc_b.id}")
+    assert delete_b_response.status_code == 204
+
+    async with AsyncSessionLocal() as session:
+        remaining_ids = {c.id for c in (await session.execute(select(Category))).scalars().all()}
+    assert shared_topic.id not in remaining_ids
+    assert subject.id not in remaining_ids
+
+
+async def test_delete_document_does_not_touch_questions_with_dangling_source_chunk_ids(
+    client: TestClient,
+) -> None:
+    """docs/ingestion.md 文件刪除 — questions are a separate, already-
+    approved artifact; deleting a document must leave them exactly as they
+    were, `source_chunk_ids` pointing at now-gone chunk ids included."""
+    from backend.models.chunk import Chunk
+    from backend.models.question import Question
+
+    async with AsyncSessionLocal() as session:
+        document = Document(source_type="upload", title="doc-q", status="ready")
+        session.add(document)
+        await session.commit()
+        await session.refresh(document)
+
+        chunk = Chunk(document_id=document.id, content="內容", category_id=None)
+        session.add(chunk)
+        await session.commit()
+        await session.refresh(chunk)
+
+        question = Question(
+            type="single_choice",
+            status="approved",
+            payload={"stem": "題幹", "options": ["A", "B"], "answer": "A"},
+            source_chunk_ids=[chunk.id],
+        )
+        session.add(question)
+        await session.commit()
+        await session.refresh(question)
+        question_id = question.id
+
+    response = client.delete(f"/v1/documents/{document.id}")
+    assert response.status_code == 204
+
+    async with AsyncSessionLocal() as session:
+        kept_question = await session.get(Question, question_id)
+        assert kept_question is not None
+        assert kept_question.source_chunk_ids == [chunk.id]
+        assert await session.get(Chunk, chunk.id) is None
 
 
 async def test_rechunk_enqueues_job_when_a_ready_page_exists(client: TestClient) -> None:

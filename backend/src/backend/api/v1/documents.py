@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.config import get_settings
 from backend.db.session import get_session
 from backend.ingestion import storage
+from backend.ingestion.category_gc import gc_unused_categories
 from backend.ingestion.kind import UnsupportedUploadError, detect_upload_kind
 from backend.models.chunk import Chunk
 from backend.models.document import Document
@@ -264,13 +265,18 @@ async def rechunk_document(
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(document_id: int, session: AsyncSession = Depends(get_session)) -> None:
-    """Delete a document (DB cascade removes pages/assets/chunks) and its stored files."""
+    """Delete a document (DB cascade removes pages/assets/chunks), then run
+    category GC in the same transaction (docs/ingestion.md 文件刪除) and
+    delete its stored files. Questions are untouched — see docs/ingestion.md
+    文件刪除 for why `source_chunk_ids` is allowed to dangle."""
     document = await session.get(Document, document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
 
     settings = get_settings()
     await session.delete(document)
+    await session.flush()
+    await gc_unused_categories(session)
     await session.commit()
 
     upload_dir = storage.document_upload_dir(settings.data_dir, document_id)
