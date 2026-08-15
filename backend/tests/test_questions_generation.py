@@ -26,6 +26,7 @@ from backend.models.document import Document
 from backend.models.job import Job
 from backend.models.llm_usage import LlmUsage
 from backend.models.question import Question
+from backend.questions.prompts import build_prompt
 
 # One valid canned payload per response-model class name (matches
 # `backend.questions.schemas.QUESTION_TYPE_MODELS` values' `__name__`).
@@ -484,6 +485,26 @@ def test_find_banned_phrase_does_not_flag_legitimate_quiz_text() -> None:
         assert generation_module._find_banned_phrase(payload) is None, label
 
 
+def test_corrective_instruction_never_echoes_a_phrase_and_guards_against_meta_questions() -> None:
+    """A live run showed the retry prompt quoting the offending phrase back
+    (e.g. 「根據教材內容」) seeded a meta-question ABOUT the self-containment
+    rule itself instead of a fresh question on the source material. The fix:
+    the corrective instruction never echoes any banned phrase, explicitly
+    asks for a brand-new question on the same subject matter, and tells the
+    model the rules are meta-instructions to itself, not testable content."""
+    instruction = generation_module._corrective_instruction()
+
+    # Never quotes any of the concrete banned strings back at the model.
+    assert generation_module._find_banned_phrase({"instruction": instruction}) is None
+    for phrase in ["根據教材內容", "根據課文", "根據本文", "文中提到", "如上所述"]:
+        assert phrase not in instruction
+
+    # Explicitly asks for a new question on the same subject, not a
+    # discussion of the rules.
+    assert "重新出一題全新的題目" in instruction
+    assert "不是教材要考的知識" in instruction
+
+
 async def test_regeneration_recovers_from_a_banned_first_attempt(monkeypatch) -> None:
     """First response's stem names the source ("根據教材內容") -> triggers one
     regeneration with a corrective instruction naming the phrase; the retry
@@ -504,11 +525,18 @@ async def test_regeneration_recovers_from_a_banned_first_attempt(monkeypatch) ->
                 "stem": "根據教材內容，光合作用發生在細胞的哪個構造？",
             }
             return _chat_completion_response(model=body["model"], content=banned)
-        # The retry prompt must carry the corrective instruction naming the
-        # offending phrase.
+        # The retry prompt must carry the corrective instruction — but the
+        # instruction itself must add no *extra* echo of the offending
+        # phrase beyond whatever the base prompt's own bad/good example
+        # already contains (a live run showed quoting the phrase a second
+        # time, framed as "this is what you just violated", seeded a
+        # meta-question about the rule itself) — and must tell the model to
+        # write a brand-new question rather than discuss the rules.
         prompt_text = body["messages"][0]["content"]
-        assert "根據教材內容" in prompt_text
-        assert "題幹自足原則" in prompt_text
+        base_prompt_only = build_prompt("single_choice", ["第一段內容"], None)
+        assert prompt_text.count("根據教材內容") == base_prompt_only.count("根據教材內容")
+        assert "重新出一題全新的題目" in prompt_text
+        assert "不是教材要考的知識" in prompt_text
         return _chat_completion_response(
             model=body["model"], content=CANNED_PAYLOADS["SingleChoiceQuestion"]
         )

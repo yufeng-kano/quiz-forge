@@ -29,14 +29,25 @@ more of that type/item instead of retrying the whole job).
 題幹自足檢查（docs/question-bank.md 題幹自足原則）: every generated payload is
 scanned for source-referential wording (「根據教材內容」「文中提到」等，see
 `_SOURCE_REFERENTIAL_PATTERNS`) after parsing. A hit triggers exactly one
-regeneration call with a corrective instruction appended naming the offending
-phrase; a hit on the retry too raises `SourceReferentialPhraseError`, which
-falls into the same per-question failure path as any other generation error
-above — the question is not inserted, the job keeps going, and the phrase
-shows up in `jobs.error`. This is pure string/regex matching, no extra LLM
-judge call, and both the first and the retry `llm.chat()` calls record
-`llm_usage` as normal (that recording lives inside `LLMClient`, so it needs
-no special-casing here).
+regeneration call with a corrective instruction appended; a hit on the retry
+too raises `SourceReferentialPhraseError`, which falls into the same
+per-question failure path as any other generation error above — the question
+is not inserted, the job keeps going, and the phrase shows up in
+`jobs.error`. This is pure string/regex matching, no extra LLM judge call,
+and both the first and the retry `llm.chat()` calls record `llm_usage` as
+normal (that recording lives inside `LLMClient`, so it needs no
+special-casing here).
+
+The corrective instruction deliberately does NOT quote the offending phrase
+back at the model, and explicitly frames the self-containment rules as
+meta-instructions rather than subject matter. A live run showed both matter:
+quoting 「根據教材」 back at the model seeded a meta-question ABOUT the rule
+itself (a stem asking which option best follows「題幹自足原則」, with an
+option quoting the very banned phrase) — the string check correctly caught
+it, but only after a wasted regeneration. `_corrective_instruction` instead
+names the violation category, asks for a brand-new question on the same
+source-material subject, and tells the model not to mention, quote, or test
+the writing rules themselves.
 """
 
 import logging
@@ -109,12 +120,28 @@ def _find_banned_phrase(payload: dict[str, object]) -> str | None:
     return None
 
 
-def _corrective_instruction(banned_phrase: str) -> str:
+def _corrective_instruction() -> str:
+    """Appended to the original prompt on the one retry after a banned-phrase
+    hit.
+
+    Deliberately does NOT quote the offending phrase back at the model — a
+    live run showed that echoing 「根據教材」 in the corrective text seeded a
+    meta-question ABOUT the self-containment rule itself (stem asking which
+    option best follows the rule, with an option quoting the banned phrase
+    as an example of what NOT to do — still a hit, but on a question whose
+    entire topic had drifted to "the writing rules" instead of the source
+    material). Describing the violation category instead, and explicitly
+    telling the model these are meta-instructions to itself rather than
+    subject matter to test, avoids both problems at once.
+    """
     return (
-        f"\n\n上一版題目使用了指涉來源文件的措辭「{banned_phrase}」，這違反題幹自足原則。"
-        "請重新出題：完全避免「根據教材／課文／本文／上文／文中」這類指涉來源文件的措辭，"
-        "題幹、選項、答案與解說都要自帶足夠脈絡，讓沒看過原文的人也能理解並作答；若題目"
-        "原本提到教材內部編號（如章節、Lab 編號、表格編號），請改成描述該事物本身的內容。"
+        "\n\n上一次的輸出不合格：它提到了教材、課文、上文或本文本身（指涉來源文件的"
+        "措辭），而不是只講教材要教的知識內容，這樣的題目不能用。\n"
+        "請針對同一個知識主題重新出一題全新的題目（stem、選項、答案、解說都要重寫），"
+        "內容仍然是這份教材在教的知識本身，考的知識範圍不要換掉。\n"
+        "重要：你剛剛看到的這些出題規則，是我對出題者下的寫作指示，不是教材要考的知識"
+        "本身——新題目不能拿這些規則當題目內容、不能問「怎樣才符合這些規則」，也不能"
+        "在題幹、選項或解說裡引用或重複上一版用過的錯誤措辭。"
     )
 
 
@@ -197,7 +224,7 @@ async def _generate_one(
     prompt = build_prompt(question_type, unit.contents, difficulty)
     payload, banned_phrase = await _generate_payload(llm, model_cls, question_type, prompt)
     if banned_phrase is not None:
-        retry_prompt = prompt + _corrective_instruction(banned_phrase)
+        retry_prompt = prompt + _corrective_instruction()
         payload, banned_phrase = await _generate_payload(
             llm, model_cls, question_type, retry_prompt
         )
