@@ -18,7 +18,12 @@ import { useToastsStore } from '@/stores/toasts'
  * A dropped file is checked against the extensions the upload endpoint accepts
  * before it is sent, so an unsupported file fails immediately with a readable
  * message instead of coming back as a 400 from the server.
+ *
+ * `created` fires once the job exists, so the page can bring the 上傳 tab back
+ * up if the user navigated away from it while the request was in flight.
  */
+const emit = defineEmits<{ created: [] }>()
+
 const { t } = useAppI18n()
 const store = useDocumentsStore()
 const toasts = useToastsStore()
@@ -42,6 +47,7 @@ async function uploadFile(file: File): Promise<void> {
   uploading.value = true
   try {
     const result = await store.upload(file)
+    emit('created')
     toasts.success(t('documents.intake.uploaded', { title: result.document.title }))
   } catch (error) {
     toasts.error(translateApiError(error))
@@ -82,6 +88,7 @@ async function onSubmitUrl(): Promise<void> {
   try {
     const result = await store.importUrl(trimmed)
     url.value = ''
+    emit('created')
     toasts.success(t('documents.intake.imported', { title: result.document.title }))
   } catch (error) {
     toasts.error(translateApiError(error))

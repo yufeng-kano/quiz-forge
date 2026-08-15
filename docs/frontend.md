@@ -15,7 +15,7 @@
 - API client：`src/api/`（`config.ts` 的 `API_BASE_PATH`、`client.ts` fetch 包裝與 `ApiError`、`types.ts` 集中型別、各資源模組）。錯誤統一轉 `ApiError` 並抽出 FastAPI `detail`。
 - Job 輪詢：`src/stores/jobs.ts`（Pinia，訂閱計數共用計時器、遞迴 setTimeout 防重疊、done/failed 停止）＋`src/composables/useJobPolling.ts`。
 - 共用元件：`StatusBadge`（同時涵蓋 job 與 document/page 狀態字彙）、`ProgressText`（`3/12 pages`、`chunks 3/10` 本地化為「3 / 12 頁（25%）」）、`AppButton`、`EmptyState`、`MarkdownContent`（markdown-it + DOMPurify，表格橫向捲動、圖片限寬、連結開新分頁）。
-- 文件頁已實作：列表（上傳/網址匯入、逐列 job 輪詢、刪除確認、失敗重試）與詳情（逐頁狀態與單頁重試、markdown 圖文渲染、chunk 分類與標籤）。狀態輪詢規則：有 job id 就輪 job，否則輪 document 本身直到終態。
+- 文件頁已實作：兩 tab（見下）與詳情（逐頁狀態與單頁重試、markdown 圖文渲染、chunk 分類與標籤）。狀態輪詢規則：有 job id 就輪 job，否則輪 document 本身直到終態。
 - locale key 群組：`status.*`、`documents.*`、`documentDetail.*`、`questions.*`、`editor.*`、`review.*`、`bank.*`、`generate.*`、`job.progress.*`、`errors.*` 等，全部經型別化 t()。
 - 題目元件：`src/components/questions/` 六題型各一個顯示元件與編輯器，`QuestionDisplay` 依 type 派發，審題與題庫共用；類比題題幹由槽位組出，比較題答案以面向×A×B 表格呈現。
 - 審題編輯 UX：答案用結構選取（單選以 radio 標正解、刪選項自動平移 index）、填充題即時檢查 `____` 數與答案數、空白解析正規化為 null；422 錯誤可讀化呈現。
@@ -29,9 +29,9 @@
 - 用量頁：總計卡片 + 依 model/依用途兩表，purpose 未知值顯示原字串不隱藏。
 - 七頁全部實作完成；尚未加 vitest（純函式模組 `usage/rows.ts` 等暫無單元測試，屬待補項目）。
 - 佈局：側邊欄導覽（8 項：總覽/文件/出題/審題/題庫/匯出/任務/用量，inline SVG icon，窄幅自動縮為 icon-only）＋每頁 `PageHeader`（標題左、動作右）＋全寬內容區。
-- 設計系統 `src/components/ui/`：`DataTable`（泛型欄位定義、排序、sticky header、skeleton/empty）、`AppModal`/`ConfirmDialog`（`useConfirm` promise 式）、`ToastHost`＋toasts store、`AppSkeleton`、`StatCard`、`AppIcon`。
+- 設計系統 `src/components/ui/`：`DataTable`（泛型欄位定義、排序、sticky header、skeleton/empty）、`AppModal`/`ConfirmDialog`（`useConfirm` promise 式）、`ToastHost`＋toasts store、`AppSkeleton`、`StatCard`、`AppIcon`、`AppTabs`（底線式 tab，ARIA tabs pattern、隱藏面板不掛載內容故不觸發輪詢）。
 - Dashboard（`/`）吃 `GET /v1/stats`；任務中心（`/jobs`）吃 `GET /v1/jobs`，僅在有進行中 job 時輪詢。
-- 文件列表改 DataTable＋拖放上傳；詳情改雙欄（左 sticky 頁面導覽、右內容），header 提供重試解析/重新分段（rechunk，ConfirmDialog 註明會花 LLM 費用）/刪除。
+- 文件區為兩 tab：「上傳」（拖放上傳、網址匯入、進行中/失敗文件的有界清單）與「文件庫」（預設；DataTable 含標題搜尋與欄位排序）。tab 記在路由 query（`?tab=upload`，預設不帶）；上傳/匯入完成自動切回「上傳」tab。詳情改雙欄（左 sticky 頁面導覽、右內容），header 提供重試解析/重新分段（rechunk，ConfirmDialog 註明會花 LLM 費用）/刪除。
 - 尚無前端單元測試（scaffold 未含 vitest）；功能頁落地時再補 vitest。
 
 ## 頁面清單

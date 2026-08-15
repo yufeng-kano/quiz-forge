@@ -147,7 +147,17 @@
     }
   },
   "documents": {
+    "tabs": {
+      "label": "文件區分頁",
+      "upload": "上傳",
+      "library": "文件庫"
+    },
     "intake": {
+      "subtitle": "拖放檔案或貼上網址匯入，解析進度顯示在下方。",
+      "activeTitle": "尚未完成的解析",
+      "activeCount": "{count} 份",
+      "activeEmptyTitle": "沒有尚未完成的解析",
+      "activeEmptyDescription": "上傳檔案或匯入網址後，解析進度會顯示在這裡。",
       "dropTitle": "把檔案拖到這裡上傳",
       "pickFile": "選擇檔案",
       "fileHint": "支援 PDF、PNG、JPG、DOCX。",

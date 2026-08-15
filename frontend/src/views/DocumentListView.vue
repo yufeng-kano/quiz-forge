@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 
-import { DOCUMENT_POLL_INTERVAL_MS, type DocumentListItem } from '@/api'
+import { DOCUMENT_POLL_INTERVAL_MS, isReadyEntityStatus, type DocumentListItem } from '@/api'
 import AppButton from '@/components/AppButton.vue'
+import DocumentActiveList from '@/components/documents/DocumentActiveList.vue'
 import DocumentIntakePanel from '@/components/documents/DocumentIntakePanel.vue'
 import DocumentRowActions from '@/components/documents/DocumentRowActions.vue'
 import DocumentStatusCell from '@/components/documents/DocumentStatusCell.vue'
+import DocumentTitleCell from '@/components/documents/DocumentTitleCell.vue'
+import AppTabs from '@/components/ui/AppTabs.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import type { DataTableColumn } from '@/components/ui/dataTable'
+import type { AppTabItem } from '@/components/ui/tabs'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAppI18n } from '@/i18n'
 import { formatDateTime } from '@/i18n/datetime'
@@ -19,24 +23,68 @@ import { useToastsStore } from '@/stores/toasts'
 import { matchesQuery, normalizeQuery } from '@/utils/search'
 
 /**
- * 文件列表 — the intake card row above the table, then every document with its
- * pipeline state.
+ * 文件區 — two tabs (docs/frontend.md 頁面清單): 上傳 is the intake workspace
+ * (drop zone, URL import and the parses still running), 文件庫 is the whole
+ * library as a sortable table.
  *
  * Rows created in this session carry a job id and refresh themselves through
  * their status cell. This view only covers what job polling cannot see: a
  * document left `pending` / `processing` by an earlier session, whose job id no
  * endpoint can give back. For those, the whole list is refetched on an
- * interval, which stops as soon as none are left.
+ * interval, which stops as soon as none are left. That timer belongs to the
+ * page rather than to a tab, so a parse started under 上傳 keeps being watched
+ * while 文件庫 is on screen.
  *
  * The search box narrows the rows client-side: `GET /api/v1/documents` returns
  * the whole list in one response, so filtering it here is instant and a server
  * round trip would only add latency.
  */
 const { t } = useAppI18n()
+const route = useRoute()
 const router = useRouter()
 const store = useDocumentsStore()
 const toasts = useToastsStore()
 const { confirm } = useConfirm()
+
+const TAB_IDS = ['library', 'upload'] as const
+
+type DocumentsTab = (typeof TAB_IDS)[number]
+
+/** 文件庫 is what `/documents` opens on; `?tab=upload` deep-links the other one. */
+const DEFAULT_TAB: DocumentsTab = 'library'
+const TAB_QUERY_KEY = 'tab'
+
+function isDocumentsTab(value: unknown): value is DocumentsTab {
+  return TAB_IDS.some((tab) => tab === value)
+}
+
+/**
+ * The active tab lives in the route query, so a reload or a back navigation
+ * returns to the tab the user was on. The default tab carries no query
+ * parameter: `/documents` and `/documents?tab=library` must not be two
+ * different-looking URLs for the same view.
+ */
+const activeTab = computed<DocumentsTab>({
+  get: () => {
+    const raw = route.query[TAB_QUERY_KEY]
+    const value = Array.isArray(raw) ? raw[0] : raw
+    return isDocumentsTab(value) ? value : DEFAULT_TAB
+  },
+  set: (tab) => {
+    if (tab === activeTab.value) {
+      return
+    }
+    const query: LocationQueryRaw = { ...route.query }
+    if (tab === DEFAULT_TAB) {
+      delete query[TAB_QUERY_KEY]
+    } else {
+      query[TAB_QUERY_KEY] = tab
+    }
+    // `replace`: switching tabs is not a step the back button should retrace
+    // once per click, it only has to survive a reload.
+    void router.replace({ query })
+  },
+})
 
 const search = ref('')
 
@@ -47,6 +95,33 @@ const visibleDocuments = computed<DocumentListItem[]>(() =>
 )
 
 const isFiltering = computed(() => query.value !== '')
+
+/** Everything the pipeline has not finished: parsing, queued, or failed. */
+const inProgressDocuments = computed<DocumentListItem[]>(() =>
+  store.documents.filter((document) => !isReadyEntityStatus(document.status)),
+)
+
+const tabs = computed<AppTabItem<DocumentsTab>[]>(() => [
+  { id: 'library', label: t('documents.tabs.library') },
+  {
+    id: 'upload',
+    label: t('documents.tabs.upload'),
+    badge:
+      inProgressDocuments.value.length === 0 ? undefined : String(inProgressDocuments.value.length),
+  },
+])
+
+const subtitle = computed(() => {
+  if (activeTab.value === 'upload') {
+    return t('documents.intake.subtitle')
+  }
+  return isFiltering.value
+    ? t('documents.list.filteredCount', {
+        total: store.documents.length,
+        count: visibleDocuments.value.length,
+      })
+    : t('documents.list.count', { count: store.documents.length })
+})
 
 const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
   {
@@ -117,6 +192,11 @@ async function onDelete(item: DocumentListItem): Promise<void> {
   }
 }
 
+/** A new document's job only shows up under 上傳, so that is where the user goes. */
+function onDocumentCreated(): void {
+  activeTab.value = 'upload'
+}
+
 let timer: ReturnType<typeof setTimeout> | null = null
 
 function clearTimer(): void {
@@ -165,32 +245,13 @@ onUnmounted(clearTimer)
 
 <template>
   <div class="page">
-    <PageHeader
-      :title="t('pages.documents.title')"
-      :subtitle="
-        isFiltering
-          ? t('documents.list.filteredCount', {
-              total: store.documents.length,
-              count: visibleDocuments.length,
-            })
-          : t('documents.list.count', { count: store.documents.length })
-      "
-    >
+    <PageHeader :title="t('pages.documents.title')" :subtitle="subtitle">
       <template #actions>
-        <input
-          v-model="search"
-          class="form-input documents__search"
-          type="search"
-          :aria-label="t('documents.list.search')"
-          :placeholder="t('documents.list.searchPlaceholder')"
-        />
         <AppButton variant="secondary" :disabled="store.loading" @click="store.load()">
           {{ t('documents.list.reload') }}
         </AppButton>
       </template>
     </PageHeader>
-
-    <DocumentIntakePanel />
 
     <p v-if="store.loadError !== null" class="error-banner">
       {{ store.loadError }}
@@ -199,75 +260,81 @@ onUnmounted(clearTimer)
       </AppButton>
     </p>
 
-    <DataTable
-      :columns="columns"
-      :rows="visibleDocuments"
-      :row-key="(item: DocumentListItem) => item.id"
-      :loading="store.loading"
-      :empty-title="isFiltering ? t('documents.list.noMatchTitle') : t('documents.list.emptyTitle')"
-      :empty-description="
-        isFiltering ? t('documents.list.noMatchDescription') : t('documents.list.emptyDescription')
-      "
-      clickable-rows
-      @row-click="openDetail"
-    >
-      <template #title="{ row }">
-        <span class="documents__title text-ellipsis" :title="row.title">{{ row.title }}</span>
-        <a
-          v-if="row.source_url !== null"
-          class="documents__source text-ellipsis"
-          :href="row.source_url"
-          :title="row.source_url"
-          target="_blank"
-          rel="noopener noreferrer"
-          @click.stop
-        >
-          {{ row.source_url }}
-        </a>
+    <AppTabs v-model="activeTab" :tabs="tabs" :label="t('documents.tabs.label')">
+      <template #upload>
+        <DocumentIntakePanel @created="onDocumentCreated" />
+        <DocumentActiveList
+          :documents="inProgressDocuments"
+          :loading="store.loading"
+          @delete="onDelete"
+        />
       </template>
 
-      <template #status="{ row }">
-        <DocumentStatusCell :document="row" :job-id="store.parseJobIdOf(row.id)" />
-      </template>
-
-      <template #actions="{ row }">
-        <div @click.stop>
-          <DocumentRowActions
-            :document="row"
-            :job-id="store.parseJobIdOf(row.id)"
-            @delete="onDelete"
+      <template #library>
+        <div class="documents__toolbar">
+          <input
+            v-model="search"
+            class="form-input documents__search"
+            type="search"
+            :aria-label="t('documents.list.search')"
+            :placeholder="t('documents.list.searchPlaceholder')"
           />
         </div>
+
+        <DataTable
+          :columns="columns"
+          :rows="visibleDocuments"
+          :row-key="(item: DocumentListItem) => item.id"
+          :loading="store.loading"
+          :empty-title="
+            isFiltering ? t('documents.list.noMatchTitle') : t('documents.list.emptyTitle')
+          "
+          :empty-description="
+            isFiltering
+              ? t('documents.list.noMatchDescription')
+              : t('documents.list.emptyDescription')
+          "
+          clickable-rows
+          @row-click="openDetail"
+        >
+          <template #title="{ row }">
+            <DocumentTitleCell :document="row" />
+          </template>
+
+          <template #status="{ row }">
+            <DocumentStatusCell :document="row" :job-id="store.parseJobIdOf(row.id)" />
+          </template>
+
+          <template #actions="{ row }">
+            <div @click.stop>
+              <DocumentRowActions
+                :document="row"
+                :job-id="store.parseJobIdOf(row.id)"
+                @delete="onDelete"
+              />
+            </div>
+          </template>
+        </DataTable>
       </template>
-    </DataTable>
+    </AppTabs>
   </div>
 </template>
 
 <style scoped>
-/* The intake row sits above the table, so the table gets less of the viewport
-   than the design system's default assumes */
+/* The tab bar and the search row sit above the table, so it gets less of the
+   viewport than the design system's default assumes */
 .page {
-  --data-table-max-height: max(22rem, calc(100vh - 28rem));
+  --data-table-max-height: max(22rem, calc(100vh - 24rem));
+}
+
+.documents__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .documents__search {
-  width: min(18rem, 40vw);
-}
-
-/* The title cell has no fixed width, so the truncation needs one to bite: this
-   is the widest a title column gets before the rest of the row loses room */
-.documents__title,
-.documents__source {
-  max-width: 34rem;
-}
-
-.documents__title {
-  color: var(--color-heading);
-  font-weight: 600;
-}
-
-.documents__source {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  width: min(18rem, 60vw);
 }
 </style>
