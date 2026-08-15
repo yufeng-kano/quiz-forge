@@ -6,6 +6,7 @@ from backend.api.v1 import (
     assets,
     categories,
     documents,
+    exports,
     generate,
     health,
     jobs,
@@ -24,3 +25,4 @@ router.include_router(assets.router)
 router.include_router(categories.router)
 router.include_router(generate.router)
 router.include_router(questions.router)
+router.include_router(exports.router)

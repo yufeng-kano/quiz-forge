@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from backend.api.v1 import router as v1_router
 from backend.core.config import get_settings
 from backend.db.session import AsyncSessionLocal
+from backend.export.job import export_docx
 from backend.ingestion.pipeline import parse_document, parse_page
 from backend.jobs import JobWorkerPool, registered_kinds
 from backend.questions.generation import generate_questions
@@ -25,15 +26,17 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    # Importing `backend.ingestion.pipeline`/`backend.questions.generation`
-    # above registers their job handlers (the `@register_handler` decorator
-    # runs at import time) — referenced here so a worker pool never starts
-    # without them, and confirmed in the startup log.
+    # Importing `backend.ingestion.pipeline`/`backend.questions.generation`/
+    # `backend.export.job` above registers their job handlers (the
+    # `@register_handler` decorator runs at import time) — referenced here
+    # so a worker pool never starts without them, and confirmed in the
+    # startup log.
     logger.info(
-        "job handlers loaded: %s, %s, %s -- registered job kinds: %s",
+        "job handlers loaded: %s, %s, %s, %s -- registered job kinds: %s",
         parse_document.__name__,
         parse_page.__name__,
         generate_questions.__name__,
+        export_docx.__name__,
         registered_kinds(),
     )
     worker_pool = JobWorkerPool(
