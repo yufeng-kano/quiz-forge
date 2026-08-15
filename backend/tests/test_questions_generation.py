@@ -436,6 +436,181 @@ async def test_unknown_question_type_marks_the_job_failed(monkeypatch) -> None:
     assert captured == []
 
 
+def test_find_banned_phrase_detects_source_referential_wording_in_any_field() -> None:
+    """docs/question-bank.md 題幹自足原則 — the detector walks every
+    user-visible text field generically (stem/options/explanation/answers/
+    key_points/nested comparison fields), not a per-type field list."""
+    cases: dict[str, dict[str, object]] = {
+        "stem, 根據+教材": {"stem": "根據教材內容，光合作用發生在哪裡？", "options": ["a", "b"]},
+        "explanation, 教材指出": {
+            "stem": "光合作用發生在哪裡？",
+            "explanation": "教材指出答案是葉綠體。",
+        },
+        "option text, 文中": {"stem": "何者正確？", "options": ["如文中所述的葉綠體", "b"]},
+        "answers list, 課文提到": {"stem": "____ 是正確答案。", "answers": ["課文提到的答案"]},
+        "key_points, 如上所述": {
+            "stem": "說明光合作用。",
+            "model_answer": "略。",
+            "key_points": ["如上所述，發生在葉綠體"],
+        },
+        "nested comparison field, 依據本文": {
+            "stem": "比較光合作用與呼吸作用。",
+            "model_answer": {
+                "similarities": [],
+                "differences": [{"aspect": "場所", "a": "依據本文的葉綠體", "b": "粒線體"}],
+            },
+        },
+    }
+    for label, payload in cases.items():
+        assert generation_module._find_banned_phrase(payload) is not None, label
+
+
+def test_find_banned_phrase_does_not_flag_legitimate_quiz_text() -> None:
+    """Patterns are anchored to source-words (教材/課文/本文/上文/內文) — bare
+    根據 and bare 內容 must not match on their own."""
+    cases: dict[str, dict[str, object]] = {
+        "bare 內容, no source word": {"stem": "下列內容何者正確？", "options": ["a", "b"]},
+        "根據 + a law, not a source word": {
+            "stem": "根據牛頓第二定律，力等於質量乘以加速度，下列敘述何者正確？",
+            "options": ["a", "b"],
+        },
+        "plain quiz text": {
+            "stem": "在細胞的能量代謝反應中，光合作用發生於下列哪個構造？",
+            "options": ["粒線體", "葉綠體"],
+            "explanation": "葉綠體含有葉綠素，能吸收光能進行光合作用。",
+        },
+    }
+    for label, payload in cases.items():
+        assert generation_module._find_banned_phrase(payload) is None, label
+
+
+async def test_regeneration_recovers_from_a_banned_first_attempt(monkeypatch) -> None:
+    """First response's stem names the source ("根據教材內容") -> triggers one
+    regeneration with a corrective instruction naming the phrase; the retry
+    is clean -> the question is inserted and both LLM calls are recorded."""
+    document_id = await _make_document()
+    category_id = await _make_category()
+    await _make_chunk(document_id=document_id, category_id=category_id, content="第一段內容")
+
+    call_count = 0
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        nonlocal call_count
+        call_count += 1
+        body = json.loads(request.content)
+        if call_count == 1:
+            banned = {
+                **CANNED_PAYLOADS["SingleChoiceQuestion"],
+                "stem": "根據教材內容，光合作用發生在細胞的哪個構造？",
+            }
+            return _chat_completion_response(model=body["model"], content=banned)
+        # The retry prompt must carry the corrective instruction naming the
+        # offending phrase.
+        prompt_text = body["messages"][0]["content"]
+        assert "根據教材內容" in prompt_text
+        assert "題幹自足原則" in prompt_text
+        return _chat_completion_response(
+            model=body["model"], content=CANNED_PAYLOADS["SingleChoiceQuestion"]
+        )
+
+    fake_client = _fake_llm_client(handler)
+    monkeypatch.setattr(generation_module, "get_llm_client", lambda: fake_client)
+
+    job_id = await _run_job(
+        {
+            "document_ids": [document_id],
+            "category_ids": None,
+            "items": [{"question_type": "single_choice", "count": 1}],
+            "difficulty": None,
+        }
+    )
+
+    job = await _get_job(job_id)
+    assert job.status == "done"
+    assert job.error is None
+    assert call_count == 2
+
+    questions = await _questions_for_type("single_choice")
+    assert len(questions) == 1
+    assert questions[0].payload["stem"] == CANNED_PAYLOADS["SingleChoiceQuestion"]["stem"]
+
+    async with AsyncSessionLocal() as session:
+        usage_rows = (
+            (
+                await session.execute(
+                    select(LlmUsage).where(LlmUsage.purpose == "generate_question_single_choice")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert len(usage_rows) == 2
+
+
+async def test_question_fails_when_both_attempts_are_banned(monkeypatch) -> None:
+    """Both the first attempt and the regeneration still name the source ->
+    the question counts as failed (not inserted), the job's error summary
+    names it, and sibling questions from other units are unaffected."""
+    document_id = await _make_document()
+    category_id = await _make_category()
+    for i in range(3):
+        await _make_chunk(document_id=document_id, category_id=category_id, content=f"內容{i}")
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        prompt_text = body["messages"][0]["content"]
+        if "內容0" in prompt_text:
+            banned = {
+                **CANNED_PAYLOADS["SingleChoiceQuestion"],
+                "stem": "根據教材內容，光合作用發生在細胞的哪個構造？",
+            }
+            return _chat_completion_response(model=body["model"], content=banned)
+        return _chat_completion_response(
+            model=body["model"], content=CANNED_PAYLOADS["SingleChoiceQuestion"]
+        )
+
+    fake_client = _fake_llm_client(handler)
+    monkeypatch.setattr(generation_module, "get_llm_client", lambda: fake_client)
+
+    job_id = await _run_job(
+        {
+            "document_ids": [document_id],
+            "category_ids": None,
+            "items": [{"question_type": "single_choice", "count": 3}],
+            "difficulty": None,
+        }
+    )
+
+    job = await _get_job(job_id)
+    # 2 of 3 succeeded -> job still reaches "done"; the failure summary names
+    # both the exception and the offending phrase.
+    assert job.status == "done"
+    assert job.progress == "3/3"
+    assert job.error is not None
+    assert "SourceReferentialPhraseError" in job.error
+    assert "根據教材內容" in job.error
+
+    questions = await _questions_for_type("single_choice")
+    assert len(questions) == 2
+    for question in questions:
+        stem = question.payload["stem"]
+        assert isinstance(stem, str)
+        assert "根據教材內容" not in stem
+
+    async with AsyncSessionLocal() as session:
+        usage_rows = (
+            (
+                await session.execute(
+                    select(LlmUsage).where(LlmUsage.purpose == "generate_question_single_choice")
+                )
+            )
+            .scalars()
+            .all()
+        )
+    # chunk0's question retried once (2 calls) + the other 2 succeeded first try.
+    assert len(usage_rows) == 4
+
+
 async def test_multi_item_job_generates_every_combo_with_shared_progress_total(
     monkeypatch,
 ) -> None:

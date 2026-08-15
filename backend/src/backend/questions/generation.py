@@ -25,9 +25,23 @@ The job only ends up `failed` (raises out of the handler, per
 succeeded; otherwise it ends `done`, with `jobs.error` carrying a summary of
 whatever went wrong (consistent with 最小單位可重試 — the user just requests
 more of that type/item instead of retrying the whole job).
+
+題幹自足檢查（docs/question-bank.md 題幹自足原則）: every generated payload is
+scanned for source-referential wording (「根據教材內容」「文中提到」等，see
+`_SOURCE_REFERENTIAL_PATTERNS`) after parsing. A hit triggers exactly one
+regeneration call with a corrective instruction appended naming the offending
+phrase; a hit on the retry too raises `SourceReferentialPhraseError`, which
+falls into the same per-question failure path as any other generation error
+above — the question is not inserted, the job keeps going, and the phrase
+shows up in `jobs.error`. This is pure string/regex matching, no extra LLM
+judge call, and both the first and the retry `llm.chat()` calls record
+`llm_usage` as normal (that recording lives inside `LLMClient`, so it needs
+no special-casing here).
 """
 
 import logging
+import re
+from collections.abc import Iterator
 
 from pydantic import BaseModel
 
@@ -41,6 +55,67 @@ from backend.questions.schemas import dump_payload, payload_model_for_type
 from backend.questions.selection import GenerationUnit, select_units
 
 logger = logging.getLogger(__name__)
+
+
+class SourceReferentialPhraseError(RuntimeError):
+    """A generated question still names the source document (docs/question-bank.md
+    題幹自足原則) after one regeneration attempt. Raised from `_generate_one` and
+    caught by `generate_questions`'s existing per-question failure handling —
+    same treatment as a schema-validation failure: the question is not
+    inserted, the job's other questions are unaffected, and it is recorded
+    in the job's failure summary."""
+
+
+# docs/question-bank.md 題幹自足原則 — wording that leaks "you had to have read
+# the source document" into a question. Curated to avoid false positives on
+# legitimate quiz text: bare 根據 (e.g. 「根據牛頓第二定律」) and bare 內容
+# (e.g. 「下列內容何者正確」) must NOT match on their own — only 根據/依據
+# immediately followed by a source-word, or a source-word compounded with
+# 指出/提到/中/所述, counts.
+_SOURCE_REFERENTIAL_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"(根據|依據)(教材|課文|本文|上文|內文|內容)"),
+    re.compile(r"教材(內容|指出|提到|中)"),
+    re.compile(r"課文(指出|提到|中)"),
+    re.compile(r"(本|上|全|內)文(提到|指出|中|所述)"),
+    re.compile(r"文中"),
+    re.compile(r"如(前|上)所述"),
+]
+
+
+def _iter_strings(value: object) -> Iterator[str]:
+    """Walk a parsed question payload's dict/list/str tree generically, so
+    every user-visible text field (stem, options, answers, model_answer,
+    key_points, explanation, comparison's nested differences, ...) is
+    covered without a per-type field list — a new question type's fields
+    are covered for free."""
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _iter_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _iter_strings(item)
+
+
+def _find_banned_phrase(payload: dict[str, object]) -> str | None:
+    """The first source-referential phrase found anywhere in `payload`'s
+    text, or `None` if it is clean."""
+    for text in _iter_strings(payload):
+        for pattern in _SOURCE_REFERENTIAL_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                return match.group(0)
+    return None
+
+
+def _corrective_instruction(banned_phrase: str) -> str:
+    return (
+        f"\n\n上一版題目使用了指涉來源文件的措辭「{banned_phrase}」，這違反題幹自足原則。"
+        "請重新出題：完全避免「根據教材／課文／本文／上文／文中」這類指涉來源文件的措辭，"
+        "題幹、選項、答案與解說都要自帶足夠脈絡，讓沒看過原文的人也能理解並作答；若題目"
+        "原本提到教材內部編號（如章節、Lab 編號、表格編號），請改成描述該事物本身的內容。"
+    )
 
 
 def _require_str(payload: dict[str, object], key: str) -> str:
@@ -98,6 +173,20 @@ def _require_items(payload: dict[str, object]) -> list[dict[str, object]]:
     return items
 
 
+async def _generate_payload(
+    llm: LLMClient, model_cls: type[BaseModel], question_type: str, prompt: str
+) -> tuple[dict[str, object], str | None]:
+    """One `llm.chat()` call, parsed to a jsonb-ready payload plus the first
+    banned source-referential phrase found in it (`None` if clean)."""
+    result = await llm.chat(
+        messages=[{"role": "user", "content": prompt}],
+        response_model=model_cls,
+        purpose=f"generate_question_{question_type}",
+    )
+    payload = dump_payload(result)
+    return payload, _find_banned_phrase(payload)
+
+
 async def _generate_one(
     llm: LLMClient,
     model_cls: type[BaseModel],
@@ -106,16 +195,22 @@ async def _generate_one(
     difficulty: str | None,
 ) -> Question:
     prompt = build_prompt(question_type, unit.contents, difficulty)
-    result = await llm.chat(
-        messages=[{"role": "user", "content": prompt}],
-        response_model=model_cls,
-        purpose=f"generate_question_{question_type}",
-    )
+    payload, banned_phrase = await _generate_payload(llm, model_cls, question_type, prompt)
+    if banned_phrase is not None:
+        retry_prompt = prompt + _corrective_instruction(banned_phrase)
+        payload, banned_phrase = await _generate_payload(
+            llm, model_cls, question_type, retry_prompt
+        )
+        if banned_phrase is not None:
+            raise SourceReferentialPhraseError(
+                f"generated {question_type!r} question still contains source-referential "
+                f"phrase {banned_phrase!r} after regeneration: {payload!r}"
+            )
     return Question(
         type=question_type,
         difficulty=difficulty,
         status="draft",
-        payload=dump_payload(result),
+        payload=payload,
         source_chunk_ids=unit.chunk_ids,
     )
 
