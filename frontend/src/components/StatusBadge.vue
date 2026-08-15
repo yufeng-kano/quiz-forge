@@ -3,9 +3,10 @@ import { computed } from 'vue'
 import { useAppI18n, type MessageKey } from '@/i18n'
 
 /**
- * Status pill, shared by the two status vocabularies the backend uses:
- * jobs (`pending` / `running` / `done` / `failed`) and documents / pages
- * (`pending` / `processing` / `ready` / `failed`).
+ * Status pill, shared by the status vocabularies the backend uses: jobs
+ * (`pending` / `running` / `done` / `failed`), documents / pages (`pending` /
+ * `processing` / `ready` / `failed`) and questions (`draft` / `approved` /
+ * `rejected`, docs/question-bank.md 狀態機).
  *
  * Both are plain string columns with no CHECK constraint, so the prop is a
  * string: a value outside the table below is shown verbatim in a neutral tone
@@ -29,6 +30,9 @@ const STATUS_PRESENTATIONS: Record<string, StatusPresentation> = {
   done: { tone: 'done', labelKey: 'status.done' },
   ready: { tone: 'done', labelKey: 'status.ready' },
   failed: { tone: 'failed', labelKey: 'status.failed' },
+  draft: { tone: 'pending', labelKey: 'status.draft' },
+  approved: { tone: 'done', labelKey: 'status.approved' },
+  rejected: { tone: 'failed', labelKey: 'status.rejected' },
 }
 
 const presentation = computed<StatusPresentation | null>(

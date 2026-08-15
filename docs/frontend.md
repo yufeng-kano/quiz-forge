@@ -16,7 +16,12 @@
 - Job 輪詢：`src/stores/jobs.ts`（Pinia，訂閱計數共用計時器、遞迴 setTimeout 防重疊、done/failed 停止）＋`src/composables/useJobPolling.ts`。
 - 共用元件：`StatusBadge`（同時涵蓋 job 與 document/page 狀態字彙）、`ProgressText`（`3/12 pages`、`chunks 3/10` 本地化為「3 / 12 頁（25%）」）、`AppButton`、`EmptyState`、`MarkdownContent`（markdown-it + DOMPurify，表格橫向捲動、圖片限寬、連結開新分頁）。
 - 文件頁已實作：列表（上傳/網址匯入、逐列 job 輪詢、刪除確認、失敗重試）與詳情（逐頁狀態與單頁重試、markdown 圖文渲染、chunk 分類與標籤）。狀態輪詢規則：有 job id 就輪 job，否則輪 document 本身直到終態。
-- locale key 群組：`status.*`、`documents.*`、`documentDetail.*`、`job.progress.*`、`errors.*` 等，全部經型別化 t()。
+- locale key 群組：`status.*`、`documents.*`、`documentDetail.*`、`questions.*`、`editor.*`、`review.*`、`bank.*`、`generate.*`、`job.progress.*`、`errors.*` 等，全部經型別化 t()。
+- 題目元件：`src/components/questions/` 六題型各一個顯示元件與編輯器，`QuestionDisplay` 依 type 派發，審題與題庫共用；類比題題幹由槽位組出，比較題答案以面向×A×B 表格呈現。
+- 審題編輯 UX：答案用結構選取（單選以 radio 標正解、刪選項自動平移 index）、填充題即時檢查 `____` 數與答案數、空白解析正規化為 null；422 錯誤可讀化呈現。
+- 出題頁：文件/分類雙範圍選擇（分類樹勾科目展開為主題 id）、題型/數量/難度表單、job 進度與本 session 歷史。
+- 題庫頁：篩選（題型/難度/主題分類）、勾選存 `exportSelection` Pinia store 跨頁保留，供匯出頁消費。
+- 難度字彙統一「簡單/中等/困難」（與後端分類 prompt 同組值，見 `src/questions/labels.ts`）。
 - 導覽列 6 項（`/documents/:id` 無獨立入口，由文件列表進入，active 狀態仍標在文件列表）。
 - 尚無前端單元測試（scaffold 未含 vitest）；功能頁落地時再補 vitest。
 

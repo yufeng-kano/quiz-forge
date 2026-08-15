@@ -59,6 +59,17 @@ export function isActiveEntityStatus(status: string): boolean {
 }
 
 /**
+ * The value `backend.ingestion.pipeline` writes once a document is fully
+ * parsed, chunked and classified. Only such a document has chunks to generate
+ * questions from, so the generate page's scope picker filters on it.
+ */
+export const READY_ENTITY_STATUS = 'ready'
+
+export function isReadyEntityStatus(status: string): boolean {
+  return status === READY_ENTITY_STATUS
+}
+
+/**
  * One row of `GET /api/v1/documents`.
  *
  * `status` is a plain string rather than a union: docs/data-model.md does not
@@ -149,4 +160,179 @@ export interface UsageSummary {
   total: UsageTotals
   by_model: ModelUsage[]
   by_purpose: PurposeUsage[]
+}
+
+/**
+ * The six question types of docs/question-bank.md, matching the backend's
+ * `QuestionType` literal (`backend.questions.schemas`).
+ */
+export const QUESTION_TYPES = [
+  'comparison',
+  'analogy',
+  'single_choice',
+  'true_false',
+  'fill_blank',
+  'short_answer',
+] as const
+
+export type QuestionType = (typeof QUESTION_TYPES)[number]
+
+export function isQuestionType(value: string): value is QuestionType {
+  return QUESTION_TYPES.some((type) => type === value)
+}
+
+/**
+ * `questions.status`, restricted by the `ck_questions_status` CHECK constraint
+ * to exactly these three values (docs/question-bank.md 狀態機).
+ */
+export const QUESTION_STATUSES = ['draft', 'approved', 'rejected'] as const
+
+export type QuestionStatus = (typeof QUESTION_STATUSES)[number]
+
+/**
+ * Payload shapes of `questions.payload`, one per type, mirroring the Pydantic
+ * models in `backend.questions.schemas`. They are declared as type aliases
+ * rather than interfaces on purpose: an alias of an object type is assignable
+ * to the JSON body types the client sends, an interface is not.
+ *
+ * The stored payload never contains the `type` discriminator — that lives in
+ * the `questions.type` column — so neither do these types.
+ */
+export type ComparisonDifference = {
+  aspect: string
+  a: string
+  b: string
+}
+
+export type ComparisonModelAnswer = {
+  similarities: string[]
+  differences: ComparisonDifference[]
+}
+
+export type ComparisonPayload = {
+  stem: string
+  subject_a: string
+  subject_b: string
+  aspects: string[]
+  model_answer: ComparisonModelAnswer
+}
+
+/**
+ * `analogy` stores slots only. The stem 「a 之於 b，猶如 c 之於＿＿」 is composed
+ * for display; `options === null` means the question is asked as a blank to
+ * fill in rather than as a single choice.
+ */
+export type AnalogyPayload = {
+  a: string
+  b: string
+  c: string
+  answer: string
+  options: string[] | null
+  explanation: string | null
+}
+
+export type SingleChoicePayload = {
+  stem: string
+  options: string[]
+  answer_index: number
+  explanation: string | null
+}
+
+export type TrueFalsePayload = {
+  stem: string
+  answer: boolean
+  explanation: string | null
+}
+
+/** `stem` marks every blank with `____`; `answers` matches them left to right. */
+export type FillBlankPayload = {
+  stem: string
+  answers: string[]
+}
+
+export type ShortAnswerPayload = {
+  stem: string
+  model_answer: string
+  key_points: string[]
+}
+
+/** Which payload shape belongs to which type. */
+export interface QuestionPayloadMap {
+  comparison: ComparisonPayload
+  analogy: AnalogyPayload
+  single_choice: SingleChoicePayload
+  true_false: TrueFalsePayload
+  fill_blank: FillBlankPayload
+  short_answer: ShortAnswerPayload
+}
+
+export type QuestionPayload = QuestionPayloadMap[QuestionType]
+
+/**
+ * A question whose `payload` has been checked against its `type`, so the two
+ * can be consumed together (`src/questions/payload.ts` produces it).
+ */
+export type TypedQuestionPayload = {
+  [K in QuestionType]: { type: K; payload: QuestionPayloadMap[K] }
+}[QuestionType]
+
+/**
+ * One row of `GET /api/v1/questions`.
+ *
+ * `type` and `status` stay plain strings, as the backend declares them
+ * (`QuestionListItemOut`): the payload of an unknown future type is still
+ * rendered as an unreadable-payload notice instead of crashing the list.
+ * `difficulty` is free text (`backend.questions.prompts` interpolates it into
+ * the generation prompt), not an enum.
+ */
+export interface QuestionListItem {
+  id: number
+  type: string
+  difficulty: string | null
+  status: string
+  payload: Record<string, unknown>
+  source_chunk_ids: number[]
+  created_at: string
+}
+
+/** One source chunk carried by the question detail response. */
+export interface SourceChunk {
+  id: number
+  content: string
+}
+
+/** `GET /api/v1/questions/{id}` — the question plus its source chunks' full text. */
+export interface QuestionDetail extends QuestionListItem {
+  source_chunks: SourceChunk[]
+}
+
+/** Query parameters of `GET /api/v1/questions`; every one of them is optional. */
+export interface QuestionListQuery {
+  status?: QuestionStatus
+  type?: QuestionType
+  difficulty?: string
+  category_id?: number
+}
+
+/**
+ * `PATCH /api/v1/questions/{id}`. Only the keys present in the request are
+ * applied, so an omitted field is left untouched.
+ */
+export interface QuestionPatch {
+  payload?: QuestionPayload
+  difficulty?: string | null
+}
+
+/** Request body of `POST /api/v1/generate`; at least one scope list is required. */
+export interface GenerateRequest {
+  document_ids?: number[]
+  category_ids?: number[]
+  question_type: QuestionType
+  count: number
+  difficulty?: string | null
+}
+
+/** `POST /api/v1/generate` — the id of the queued `generate_questions` job. */
+export interface GenerateResult {
+  job_id: number
 }

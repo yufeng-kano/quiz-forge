@@ -180,6 +180,13 @@ export function apiPost<T>(path: string, body?: unknown): Promise<T> {
   })
 }
 
+export function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return request<T>('PATCH', buildUrl(path), {
+    headers: { ...ACCEPT_JSON, ...JSON_HEADERS },
+    body: JSON.stringify(body),
+  })
+}
+
 export function apiDelete<T = void>(path: string): Promise<T> {
   return request<T>('DELETE', buildUrl(path), { headers: ACCEPT_JSON })
 }

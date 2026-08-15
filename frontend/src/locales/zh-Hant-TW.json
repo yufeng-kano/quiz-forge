@@ -51,7 +51,10 @@
     "processing": "處理中",
     "done": "已完成",
     "ready": "已完成",
-    "failed": "失敗"
+    "failed": "失敗",
+    "draft": "待審",
+    "approved": "已採用",
+    "rejected": "已丟棄"
   },
   "job": {
     "progress": {
@@ -134,6 +137,164 @@
       "notEmbedded": "尚無向量",
       "expand": "展開全文",
       "collapse": "收合"
+    }
+  },
+  "questions": {
+    "type": {
+      "comparison": "比較題",
+      "analogy": "類比題",
+      "singleChoice": "單選題",
+      "trueFalse": "是非題",
+      "fillBlank": "填充題",
+      "shortAnswer": "問答題"
+    },
+    "difficulty": {
+      "easy": "簡單",
+      "medium": "中等",
+      "hard": "困難",
+      "unspecified": "未指定難度",
+      "prefix": "難度：{difficulty}"
+    },
+    "card": {
+      "identity": "題目 #{id} · 建立於 {datetime}",
+      "unknownType": "未知題型（{type}）",
+      "unreadableTitle": "題目內容格式無法解析",
+      "unreadableDescription": "此題儲存的欄位不符合題型定義，無法顯示或編輯，建議丟棄後重新出題。"
+    },
+    "labels": {
+      "stem": "題幹",
+      "answer": "答案",
+      "explanation": "解析",
+      "modelAnswer": "參考答案",
+      "keyPoints": "得分要點",
+      "similarities": "相同點",
+      "differences": "相異點",
+      "aspect": "面向",
+      "aspects": "比較面向",
+      "subjectA": "主體 A",
+      "subjectB": "主體 B",
+      "options": "選項",
+      "answers": "空格答案",
+      "noSimilarities": "未列出相同點。"
+    },
+    "option": {
+      "marker": "({letter})",
+      "correct": "正解"
+    },
+    "analogy": {
+      "stem": "{a} 之於 {b}，猶如 {c} 之於＿＿",
+      "slotA": "A：第一組概念",
+      "slotB": "B：a 對應的功能或性質",
+      "slotC": "C：第二組概念",
+      "fillForm": "此題以填空形式作答（未提供選項）。",
+      "withOptions": "提供選項，出成單選形式"
+    },
+    "trueFalse": {
+      "true": "正確",
+      "false": "錯誤"
+    },
+    "fillBlank": {
+      "blankNo": "第 {no} 格",
+      "markerHint": "以四個底線 ____ 標記空格，答案項數必須等於空格數。",
+      "countMatch": "空格 {blanks} 個、答案 {answers} 項",
+      "countMismatch": "空格 {blanks} 個、答案 {answers} 項，數量不一致，儲存會被伺服器拒絕。"
+    }
+  },
+  "editor": {
+    "edit": "編輯",
+    "save": "儲存",
+    "saving": "儲存中…",
+    "cancel": "取消",
+    "add": "新增一項",
+    "remove": "移除",
+    "addOption": "新增選項",
+    "addDifference": "新增一列相異點",
+    "markCorrect": "設為正解",
+    "unsupported": "此題內容格式無法解析，無法編輯。",
+    "differenceRow": "相異點第 {no} 列"
+  },
+  "review": {
+    "remaining": "待審 {count} 題",
+    "loading": "載入待審題目中…",
+    "reload": "重新載入",
+    "emptyTitle": "目前沒有待審題目",
+    "emptyDescription": "到出題頁建立出題任務，生成的題目會先進入待審清單。",
+    "goGenerate": "前往出題",
+    "approve": "採用",
+    "approving": "採用中…",
+    "reject": "丟棄",
+    "rejecting": "丟棄中…",
+    "source": {
+      "show": "對照原文",
+      "hide": "收合原文",
+      "loading": "載入原文中…",
+      "title": "來源分段",
+      "chunk": "分段 #{id}",
+      "empty": "這一題沒有可對照的來源分段。"
+    }
+  },
+  "bank": {
+    "count": "共 {count} 題",
+    "loading": "載入題庫中…",
+    "reload": "重新載入",
+    "emptyTitle": "沒有符合條件的已採用題目",
+    "emptyDescription": "先到審題頁採用題目，或放寬篩選條件。",
+    "goReview": "前往審題",
+    "reject": "丟棄",
+    "rejecting": "丟棄中…",
+    "filters": {
+      "title": "篩選",
+      "type": "題型",
+      "difficulty": "難度",
+      "subject": "科目",
+      "topic": "主題",
+      "anyType": "全部題型",
+      "anyDifficulty": "全部難度",
+      "anySubject": "全部科目",
+      "anyTopic": "全部主題",
+      "topicHint": "分類篩選以主題為單位；只選科目不會套用分類條件。",
+      "loadingCategories": "載入分類中…",
+      "reset": "清除篩選"
+    },
+    "selection": {
+      "checkbox": "選取題目 #{id}",
+      "selectAll": "全選目前結果",
+      "deselectAll": "取消勾選目前結果",
+      "selected": "已選取 {count} 題準備匯出",
+      "goExport": "前往匯出",
+      "clear": "清除選取"
+    }
+  },
+  "generate": {
+    "form": {
+      "scopeTitle": "出題範圍",
+      "scopeHint": "至少選擇一份文件或一個分類；兩者都選時只取同時符合的內容。",
+      "documents": "文件",
+      "documentsLoading": "載入文件中…",
+      "documentsEmpty": "尚無解析完成的文件。",
+      "categories": "分類",
+      "categoriesLoading": "載入分類中…",
+      "categoriesEmpty": "尚無分類；文件解析完成後會自動建立。",
+      "selectSubject": "選取整個科目",
+      "type": "題型",
+      "count": "題數",
+      "countHint": "一次可出 {min} 到 {max} 題，每題各佔一次 LLM 呼叫。",
+      "difficulty": "難度",
+      "difficultyAny": "不指定（由模型自行判斷）",
+      "submit": "建立出題任務",
+      "submitting": "建立中…"
+    },
+    "jobs": {
+      "title": "本次工作階段的出題任務",
+      "empty": "尚未建立出題任務。",
+      "summary": "{type} {count} 題",
+      "meta": "任務 #{id} · 建立於 {datetime} · 文件 {documents} 份、分類 {categories} 個 · {difficulty}",
+      "done": "出題完成，題目已進入待審清單。",
+      "goReview": "前往審題",
+      "partialError": "部分題目未完成：{error}",
+      "failed": "出題任務失敗：{error}",
+      "failedNoDetail": "出題任務失敗，未取得失敗原因。",
+      "retry": "重試任務"
     }
   },
   "errors": {

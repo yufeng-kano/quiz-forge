@@ -48,3 +48,119 @@ a:hover {
   color: var(--color-text-muted);
   max-width: 44rem;
 }
+
+/* Shared form controls: the question editors and the 出題 form all use these,
+   so field styling is maintained in one place instead of in every component */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.form-label {
+  color: var(--color-heading);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.form-input,
+.form-textarea,
+.form-select {
+  width: 100%;
+  min-width: 0;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-background);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.form-textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+  border-color: var(--color-accent);
+  outline: none;
+}
+
+.form-hint {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.form-error {
+  color: var(--color-status-failed-text);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+/* Shared question editor layout: the six type editors differ only in which
+   fields they show, so the row / remove-button / radio presentation lives here */
+.editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.editor-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.editor-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-remove {
+  flex: none;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.editor-remove:hover {
+  border-color: var(--color-status-failed-border);
+  background: var(--color-status-failed-bg);
+  color: var(--color-status-failed-text);
+}
+
+/* Shared question rendering: the six type components share the stem and list
+   presentation, only their type-specific parts carry their own styles */
+.question-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.question-stem {
+  color: var(--color-heading);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.question-bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding-left: 1.2rem;
+}
+
+.question-bullets li {
+  overflow-wrap: anywhere;
+}
