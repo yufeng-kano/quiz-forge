@@ -15,13 +15,17 @@ Browser ──> nginx (唯一對外 port)
 | `backend` | `quiz-forge-backend` | FastAPI，entrypoint 先跑 `alembic upgrade head` 再起 uvicorn |
 | `db` | `quiz-forge-db` | `pgvector/pgvector` 官方 image |
 
-- 前端不做常駐 container：multi-stage build 產出 `dist/`，交由 nginx serve。
-- 所有 volume 用明確 bind mount，來源統一在 `data/container-mounts/` 底下（DB 資料、上傳原檔、裁切圖、匯出檔）。
+- 前端不做常駐 container：nginx 的 Dockerfile 用 multi-stage build（node stage `npm ci && npm run build` 產出 `dist/`），交由 nginx serve。
+- 所有 volume 用明確 bind mount，來源統一在 `data/container-mounts/` 底下：`db/`（DB 資料）、`uploads/`（上傳原檔）、`assets/`（裁切圖）、`exports/`（匯出檔）。
+- db 用 `pgvector/pgvector:pg17` image，設定檔 `db/postgresql.conf`。`PGDATA` 指到掛載點底下的 `pgdata/` 子目錄——掛載點根目錄有 `.gitkeep`，直接當 `PGDATA` 會被 initdb 判定為非空而失敗。
+- nginx 對外 port 由 `NGINX_HTTP_PORT` 設定（預設 8080）。
 
 ## nginx 必要設定
 
-- `client_max_body_size`：放大，容納大型掃描 PDF 上傳。
-- `proxy_read_timeout`：拉長，容納長時間 API 請求。
+設定檔在 `nginx/nginx.conf`，數值放設定檔不寫死在程式碼：
+
+- `client_max_body_size 200m`：容納大型掃描 PDF 上傳。
+- `proxy_read_timeout 300s`：容納長時間 API 請求。
 - 若進度改用 SSE：`proxy_buffering off`（第一版用輪詢，暫不需要）。
 
 ## 背景任務：Postgres 當 queue（不用 Celery/Redis）
@@ -35,10 +39,11 @@ Browser ──> nginx (唯一對外 port)
 
 ## 後端技術
 
-- Python 3.13 + FastAPI，全 async handler，`uv` 管理專案。
+- Python 3.13 + FastAPI，全 async handler，`uv` 管理專案（src layout：`backend/src/backend/`）。
+- 模組劃分：`core/config.py`（pydantic-settings 讀根目錄 `.env`）、`db/`（async engine/session）、`models/`（ORM，每表一檔）、`api/v1/`（router）。
 - SQLAlchemy 2.0 async + asyncpg；pgvector 用官方 `pgvector` Python 套件的 SQLAlchemy type。
-- Alembic async template（`alembic init -t async`）管 migration；第一個 migration 要 `CREATE EXTENSION IF NOT EXISTS vector`。
-- API 公開路徑 `/api/v1/*`，內部 router 前綴 `/v1/*`。
+- Alembic async template（`alembic init -t async`）管 migration；初始 migration（`51e2e5d860a8`）先 `CREATE EXTENSION IF NOT EXISTS vector` 再建全部資料表，`downgrade()` 有完整反向操作。
+- API 公開路徑 `/api/v1/*`，內部 router 前綴 `/v1/*`；骨架先提供 `GET /v1/health`。
 
 ## LLM 介接
 
@@ -63,6 +68,14 @@ OCR_DPI=200
 # 基礎設施
 DATABASE_URL=postgresql+asyncpg://...
 DATA_DIR=/data
+
+# PostgreSQL（db 服務憑證）
+POSTGRES_USER=quizforge
+POSTGRES_PASSWORD=change-me
+POSTGRES_DB=quizforge
+
+# nginx 對外 port
+NGINX_HTTP_PORT=8080
 ```
 
 - Git 只保存 `.env.example`；真正的 `.env` 不入版控。

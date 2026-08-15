@@ -89,3 +89,13 @@
 - 修改前先檢查現有檔案與 git 狀態。
 - 不覆蓋使用者既有修改。
 - 交付前要檢查檔案、symlink、git diff、ruff、basedpyright、pytest、Alembic 設定與 Docker Compose 設定。
+
+## 反偷懶規則
+
+- 禁止用 `# type: ignore`、`# noqa`、`eslint-disable`、`cast(Any, ...)` 之類的抑制註解讓檢查通過；必須修正根本原因。若確有不得不用的情況，必須附註原因並在交付回報中明講。
+- 禁止假完成：不得留 `TODO`、空 stub 或 `raise NotImplementedError` 卻回報任務完成；未完成的部分必須在回報中明列。
+- 測試必須測到真正邏輯：不得把核心邏輯全部 mock 掉，不得只寫 `assert result is not None` 這類空泛斷言。
+- 禁止吞例外：不得 `except Exception: pass` 或 log 完就繼續；job 內的失敗必須寫入 `jobs.error` 並維持最小單位可重試。
+- 禁止部分處理：多頁文件、批次題目、清單資料必須處理完整範圍，不得只跑前幾頁、前 N 筆或做「示意版」實作。
+- Alembic migration 的 `downgrade()` 必須真正實作對應的反向操作，不得留 `pass`。
+- 回報驗證結果必須附實際指令輸出，不得只宣稱「測試通過」。

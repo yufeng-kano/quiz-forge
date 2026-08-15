@@ -19,6 +19,16 @@ jobs        id, kind, payload jsonb, status, progress, error,
 llm_usage   id, model, purpose, prompt_tokens, completion_tokens, created_at
 ```
 
+## 實作狀態
+
+初始 migration `51e2e5d860a8`（`backend/alembic/versions/`）已建立以上全部資料表：
+
+- 先執行 `CREATE EXTENSION IF NOT EXISTS vector` 再建表。
+- 主鍵一律整數自增（單人系統，不需 UUID）。
+- `chunks.embedding` 為 `vector(EMBEDDING_DIM)`，維度由設定讀入，不寫死。
+- `assets.bbox` 用 jsonb 存 `[ymin, xmin, ymax, xmax]`（0–1000，見 `ingestion.md`）。
+- `downgrade()` 有完整反向操作，已實測 downgrade/upgrade 可往返。
+
 ## 設計決定
 
 - **`questions.payload` 用 jsonb**：各題型欄位差異大，jsonb + Pydantic per-type schema 驗證；新增題型不需要 migration。payload 定義見 `question-bank.md`。

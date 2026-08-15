@@ -13,14 +13,14 @@
 |---|---|
 | `.rule` | 給 LLM 的專案規則主檔 |
 | `CLAUDE.md`、`AGENTS.md` | 指向 `.rule` 的 symlink |
-| `.env.example` | 環境變數範本（真正的 `.env` 不入 Git）（尚未建立） |
+| `.env.example` | 環境變數範本（真正的 `.env` 不入 Git） |
 | `docs/` | 專案文件（本目錄） |
 | `data/` | 樣本資料與 container mount 掛載點，見 `docs/data-inventory.md` |
-| `backend/` | Python FastAPI 服務（尚未建立） |
-| `frontend/` | Vue 3 前端（尚未建立） |
-| `nginx/` | 反向代理設定（尚未建立） |
-| `db/` | PostgreSQL（pgvector）設定（尚未建立） |
-| `docker-compose.yml` | 服務編排（尚未建立） |
+| `backend/` | Python FastAPI 服務（uv 管理、Alembic migration），見 `docs/architecture.md` |
+| `frontend/` | Vue 3 前端骨架，見 `docs/frontend.md` |
+| `nginx/` | 反向代理設定與 Dockerfile（multi-stage build 前端） |
+| `db/` | PostgreSQL（pgvector）設定檔 |
+| `docker-compose.yml` | 服務編排（backend / db / nginx） |
 
 ## 文件清單
 
@@ -33,7 +33,7 @@
 | `docs/ingestion.md` | 文件輸入管線：vision 解析契約（Markdown + bbox）、圖表裁切、網頁抽取、chunk 與分類 |
 | `docs/question-bank.md` | 六題型 payload schema、出題流程、審題流程 |
 | `docs/export.md` | Word 匯出：題目卷／答案卷、紙張尺寸、render 設計 |
-| `docs/frontend.md` | 前端技術、頁面清單、互動原則 |
+| `docs/frontend.md` | 前端技術（router/Pinia/i18n 規範）、頁面清單、視覺風格（白色簡潔）、互動原則 |
 | `docs/data-inventory.md` | `data/` 內資料清單與用途 |
 
 ## 決策文件
