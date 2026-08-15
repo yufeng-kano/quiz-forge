@@ -1,0 +1,68 @@
+{
+  "app": {
+    "title": "QuizForge",
+    "navLabel": "主導覽"
+  },
+  "nav": {
+    "documents": "文件列表",
+    "review": "審題",
+    "questions": "題庫",
+    "generate": "出題",
+    "exports": "匯出",
+    "usage": "用量"
+  },
+  "pages": {
+    "documents": {
+      "title": "文件列表",
+      "description": "所有文件與處理狀態，並提供上傳與網址匯入入口。"
+    },
+    "documentDetail": {
+      "title": "文件詳情",
+      "subtitle": "文件 #{id}",
+      "description": "逐頁 Markdown（含裁切圖表）、chunk 與分類結果，失敗頁可單頁重試。"
+    },
+    "review": {
+      "title": "審題",
+      "description": "檢視草稿題目並對照來源原文，編輯後採用或丟棄。"
+    },
+    "questions": {
+      "title": "題庫",
+      "description": "瀏覽已採用的題目，依分類、題型與難度篩選並勾選送匯出。"
+    },
+    "generate": {
+      "title": "出題",
+      "description": "選擇範圍、題型與數量，建立出題任務。"
+    },
+    "exports": {
+      "title": "匯出",
+      "description": "選擇紙張尺寸，查看歷次匯出紀錄並下載題目卷與答案卷。"
+    },
+    "usage": {
+      "title": "用量",
+      "description": "依模型與用途統計 LLM token 累計用量。"
+    }
+  },
+  "placeholder": {
+    "title": "此頁面尚未實作",
+    "description": "版面與共用元件已就緒，功能會在後續任務接上對應 API。"
+  },
+  "job": {
+    "status": {
+      "pending": "等待中",
+      "running": "處理中",
+      "done": "已完成",
+      "failed": "失敗"
+    },
+    "progress": {
+      "notStarted": "尚未開始",
+      "ratio": "{current} / {total}（{percent}%）"
+    }
+  },
+  "errors": {
+    "network": "無法連線到伺服器，請確認服務是否已啟動。",
+    "http": "伺服器回應錯誤（HTTP {status}）。",
+    "httpWithDetail": "伺服器回應錯誤（HTTP {status}）：{detail}",
+    "invalidResponse": "伺服器回應格式無法解析。",
+    "unknown": "發生未預期的錯誤。"
+  }
+}

@@ -9,6 +9,15 @@
 - 禁止在元件內硬編碼中文文案（一律走 locale 檔），也禁止把假資料寫死在 view 裡。
 - build 產物交由 nginx serve，不做常駐 container。
 
+## 基礎架構（已實作）
+
+- i18n：`src/i18n/`＋`src/locales/zh-Hant-TW.json`；`useAppI18n()`/`translate()` 是型別化包裝，key 型別由 locale JSON 推導，打錯 key 直接編譯錯誤。
+- API client：`src/api/`（`config.ts` 的 `API_BASE_PATH`、`client.ts` fetch 包裝與 `ApiError`、`types.ts` 集中型別、各資源模組）。錯誤統一轉 `ApiError` 並抽出 FastAPI `detail`。
+- Job 輪詢：`src/stores/jobs.ts`（Pinia，訂閱計數共用計時器、遞迴 setTimeout 防重疊、done/failed 停止）＋`src/composables/useJobPolling.ts`。
+- 共用元件：`StatusBadge`、`ProgressText`、`AppButton`、`EmptyState`（無 UI library）。
+- 導覽列 6 項（`/documents/:id` 無獨立入口，由文件列表進入，active 狀態仍標在文件列表）。
+- 尚無前端單元測試（scaffold 未含 vitest）；功能頁落地時再補 vitest。
+
 ## 頁面清單
 
 | 路由 | 頁面 | 說明 |

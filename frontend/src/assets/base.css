@@ -12,9 +12,28 @@
   --color-text-muted: #71717a;
 
   --color-accent: #4b6b8a;
+  --color-accent-strong: #3b5670;
   --color-accent-soft: #eef2f6;
 
+  /* Job status colours: still low saturation, hue alone separates the four states */
+  --color-status-pending-text: #52525b;
+  --color-status-pending-bg: #f4f4f5;
+  --color-status-pending-border: #e4e4e7;
+
+  --color-status-running-text: #3b5670;
+  --color-status-running-bg: #eef2f6;
+  --color-status-running-border: #d6e0e9;
+
+  --color-status-done-text: #3f6b52;
+  --color-status-done-bg: #eef5f0;
+  --color-status-done-border: #d6e6dc;
+
+  --color-status-failed-text: #8a4b4b;
+  --color-status-failed-bg: #f8eeee;
+  --color-status-failed-border: #ecd9d9;
+
   --section-gap: 2.5rem;
+  --content-max-width: 1080px;
 }
 
 *,

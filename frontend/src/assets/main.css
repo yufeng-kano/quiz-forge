@@ -1,9 +1,7 @@
 @import './base.css';
 
 #app {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 2.5rem 2rem;
+  min-height: 100vh;
 }
 
 h1,
@@ -21,4 +19,32 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+/* Shared page layout: every view uses these classes for its header block, so
+   the styling is maintained in one place */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.page-title {
+  font-size: 1.375rem;
+}
+
+.page-subtitle {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.page-description {
+  color: var(--color-text-muted);
+  max-width: 44rem;
 }
