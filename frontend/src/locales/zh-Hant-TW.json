@@ -60,6 +60,12 @@
   "table": {
     "emptyTitle": "沒有資料"
   },
+  "pagination": {
+    "label": "分頁",
+    "summary": "第 {page} / {pageCount} 頁，共 {total} 筆",
+    "previous": "上一頁",
+    "next": "下一頁"
+  },
   "status": {
     "pending": "等待中",
     "running": "處理中",
@@ -316,15 +322,36 @@
   },
   "review": {
     "remaining": "待審 {count} 題",
-    "loading": "載入待審題目中…",
     "reload": "重新載入",
     "emptyTitle": "目前沒有待審題目",
     "emptyDescription": "到出題頁建立出題任務，生成的題目會先進入待審清單。",
+    "emptyFiltered": "目前的篩選條件下沒有待審題目，可清除篩選再看看。",
     "goGenerate": "前往出題",
     "approve": "採用",
     "approving": "採用中…",
+    "approved": "題目 #{id} 已採用。",
     "reject": "丟棄",
     "rejecting": "丟棄中…",
+    "rejected": "題目 #{id} 已丟棄。",
+    "saved": "題目 #{id} 已儲存。",
+    "batch": {
+      "checkbox": "選取題目 #{id}",
+      "selectAll": "全選本頁 {count} 題",
+      "selected": "已選取 {count} 題",
+      "approve": "批次採用（{count}）",
+      "reject": "批次丟棄（{count}）",
+      "approveTitle": "批次採用題目",
+      "approveMessage": "確定採用選取的 {count} 題？採用後會進入題庫與匯出範圍。",
+      "approveConfirm": "確定採用",
+      "approveDone": "已採用 {count} 題。",
+      "rejectTitle": "批次丟棄題目",
+      "rejectMessage": "確定丟棄選取的 {count} 題？丟棄後不會進入題庫，之後仍可再按丟棄還原為待審。",
+      "rejectConfirm": "確定丟棄",
+      "rejectDone": "已丟棄 {count} 題。",
+      "progress": "處理中 {done} / {total}",
+      "itemFailed": "題目 #{id} 處理失敗：{error}",
+      "partial": "完成 {succeeded} 題，{failed} 題失敗。"
+    },
     "source": {
       "show": "對照原文",
       "hide": "收合原文",
@@ -335,16 +362,48 @@
     }
   },
   "bank": {
-    "count": "共 {count} 題",
-    "loading": "載入題庫中…",
+    "total": "共 {count} 題",
     "reload": "重新載入",
     "emptyTitle": "沒有符合條件的已採用題目",
-    "emptyDescription": "先到審題頁採用題目，或放寬篩選條件。",
+    "emptyDescription": "先到審題頁採用題目、手動新增題目，或放寬篩選條件。",
     "goReview": "前往審題",
     "reject": "丟棄",
     "rejecting": "丟棄中…",
+    "rejected": "題目 #{id} 已丟棄，並自動移出匯出選取。",
+    "duplicate": "複製",
+    "duplicating": "複製中…",
+    "duplicated": "已複製為待審題目 #{id}，可到審題頁改造。",
+    "create": {
+      "action": "新增題目",
+      "title": "新增題目",
+      "type": "題型",
+      "typeHint": "切換題型會清空目前填寫的內容。",
+      "difficulty": "難度",
+      "difficultyNone": "不指定",
+      "asDraft": "先存為待審草稿",
+      "statusHint": "預設直接採用進題庫；勾選後會存成待審，可在審題頁再確認。",
+      "submit": "建立題目",
+      "submitting": "建立中…",
+      "created": "已建立題目 #{id}。"
+    },
+    "categories": {
+      "action": "管理分類",
+      "title": "管理分類",
+      "hint": "分類由文件解析時自動建立，這裡只能改名或刪除；仍有分段引用或仍有子分類的分類無法刪除。",
+      "loading": "載入分類中…",
+      "empty": "尚無分類；文件解析完成後會自動建立。",
+      "rename": "改名",
+      "nameLabel": "分類名稱：{name}",
+      "renamed": "分類已更名為「{name}」。",
+      "delete": "刪除",
+      "deleteTitle": "刪除分類",
+      "deleteMessage": "確定刪除分類「{name}」？只有沒有分段引用且沒有子分類時才能刪除。",
+      "deleteConfirm": "確定刪除",
+      "deleted": "已刪除分類「{name}」。"
+    },
     "filters": {
-      "title": "篩選",
+      "search": "搜尋",
+      "searchPlaceholder": "搜尋題幹、選項或答案文字",
       "type": "題型",
       "difficulty": "難度",
       "subject": "科目",
@@ -383,7 +442,8 @@
       "difficulty": "難度",
       "difficultyAny": "不指定（由模型自行判斷）",
       "submit": "建立出題任務",
-      "submitting": "建立中…"
+      "submitting": "建立中…",
+      "queued": "出題任務 #{id} 已建立，進度顯示於右側。"
     },
     "jobs": {
       "title": "本次工作階段的出題任務",
@@ -416,25 +476,40 @@
     },
     "form": {
       "title": "建立匯出",
+      "paperTitle": "考卷標題",
+      "paperTitlePlaceholder": "例如：第一次段考 自然科",
+      "paperTitleHint": "會印在考卷第一行，必填。",
       "paperSize": "紙張尺寸",
       "paperHint": "B4、B3 採台灣考卷慣用的 JIS 尺寸，比同名 ISO 尺寸略大。",
+      "points": "每題型配分",
+      "pointsHint": "只列出目前選取題目的題型；留空表示該題型不印配分。",
       "submit": "建立匯出任務",
-      "submitting": "建立中…"
+      "submitting": "建立中…",
+      "queued": "匯出任務 #{id} 已建立。"
     },
     "job": {
       "title": "匯出進度",
-      "meta": "任務 #{id} · {paper} · {count} 題 · 建立於 {datetime}",
+      "meta": "任務 #{id} · {title} · {paper} · {count} 題 · 建立於 {datetime}",
       "done": "匯出完成，可於下方紀錄下載題目卷與答案卷。",
+      "doneToast": "「{title}」匯出完成，可於匯出紀錄下載。",
       "failed": "匯出失敗：{error}",
       "failedNoDetail": "匯出失敗，未取得失敗原因。",
+      "failedToast": "「{title}」匯出失敗，詳情見下方匯出進度。",
       "retry": "重試任務"
     },
     "history": {
       "title": "匯出紀錄",
-      "loading": "載入匯出紀錄中…",
       "reload": "重新載入",
       "count": "共 {count} 筆紀錄",
-      "meta": "匯出 #{id} · {paper} · {count} 題 · 建立於 {datetime}",
+      "questionCount": "{count} 題",
+      "columns": {
+        "id": "編號",
+        "title": "考卷標題",
+        "paperSize": "紙張尺寸",
+        "questionCount": "題數",
+        "createdAt": "建立時間",
+        "downloads": "下載"
+      },
       "questions": "下載題目卷",
       "answers": "下載答案卷",
       "unavailable": "檔案尚未產生",
@@ -443,7 +518,6 @@
     }
   },
   "usage": {
-    "loading": "載入用量統計中…",
     "refresh": "重新整理",
     "emptyTitle": "尚未有任何 LLM 用量紀錄",
     "emptyDescription": "解析文件、分類或出題後，每次呼叫的模型與 token 用量會累計在這裡。",
@@ -454,7 +528,7 @@
       "totalTokens": "總 token"
     },
     "totals": {
-      "title": "累計用量"
+      "hint": "輸入與輸出 token 的總和"
     },
     "byModel": {
       "title": "依模型",

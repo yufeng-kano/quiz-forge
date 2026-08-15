@@ -4,23 +4,28 @@ import { computed, onMounted, ref } from 'vue'
 import { getUsage, type UsageSummary } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
-import UsageTable from '@/components/usage/UsageTable.vue'
+import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import StatCard from '@/components/ui/StatCard.vue'
+import type { DataTableColumn } from '@/components/ui/dataTable'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
 import { formatCount } from '@/i18n/number'
-import { modelRows, purposeRows } from '@/usage/rows'
+import { useToastsStore } from '@/stores/toasts'
+import { modelRows, purposeRows, type UsageTableRow } from '@/usage/rows'
 
 /**
  * 用量 — the running total of what the LLM calls have cost in tokens
  * (.rule 使用者體驗規則: 提供使用者查看累計用量).
  *
  * Everything on the page comes from one `GET /api/v1/usage` response: the four
- * grand totals, plus the same numbers broken down by model and by purpose.
- * There is nothing to poll — usage only changes when a job runs — so the page
- * loads once and offers a refresh button.
+ * grand totals as cards, plus the same numbers broken down by model and by
+ * purpose as two sortable tables. There is nothing to poll — usage only
+ * changes when a job runs — so the page loads once and offers a refresh
+ * button, whose failure is a toast rather than a silent no-op.
  */
 const { t } = useAppI18n()
+const toasts = useToastsStore()
 
 const summary = ref<UsageSummary | null>(null)
 const loading = ref(false)
@@ -35,26 +40,63 @@ const isEmpty = computed(
   () => loaded.value && byModel.value.length === 0 && byPurpose.value.length === 0,
 )
 
-const totals = computed(() => {
-  const current = summary.value
-  if (current === null) {
-    return []
-  }
+const total = computed(() => summary.value?.total ?? null)
+
+/**
+ * The breakdown tables carry the same four numbers and differ only in what
+ * their first column names, so one column set is built for both. Sorting on
+ * every column is what makes 「哪個模型吃掉最多 token」 answerable without
+ * reading every row; the rows arrive heaviest-first already.
+ */
+function breakdownColumns(firstColumnLabel: string): DataTableColumn<UsageTableRow>[] {
   return [
-    { key: 'callCount', label: t('usage.metric.callCount'), value: current.total.call_count },
     {
-      key: 'promptTokens',
+      key: 'label',
+      label: firstColumnLabel,
+      value: (row) => row.label,
+      sortValue: (row) => row.label,
+    },
+    {
+      key: 'call_count',
+      label: t('usage.metric.callCount'),
+      value: (row) => formatCount(row.call_count),
+      sortValue: (row) => row.call_count,
+      align: 'end',
+      nowrap: true,
+      width: '8rem',
+    },
+    {
+      key: 'prompt_tokens',
       label: t('usage.metric.promptTokens'),
-      value: current.total.prompt_tokens,
+      value: (row) => formatCount(row.prompt_tokens),
+      sortValue: (row) => row.prompt_tokens,
+      align: 'end',
+      nowrap: true,
+      width: '9rem',
     },
     {
-      key: 'completionTokens',
+      key: 'completion_tokens',
       label: t('usage.metric.completionTokens'),
-      value: current.total.completion_tokens,
+      value: (row) => formatCount(row.completion_tokens),
+      sortValue: (row) => row.completion_tokens,
+      align: 'end',
+      nowrap: true,
+      width: '9rem',
     },
-    { key: 'totalTokens', label: t('usage.metric.totalTokens'), value: current.total.total_tokens },
+    {
+      key: 'total_tokens',
+      label: t('usage.metric.totalTokens'),
+      value: (row) => formatCount(row.total_tokens),
+      sortValue: (row) => row.total_tokens,
+      align: 'end',
+      nowrap: true,
+      width: '9rem',
+    },
   ]
-})
+}
+
+const modelColumns = computed(() => breakdownColumns(t('usage.byModel.column')))
+const purposeColumns = computed(() => breakdownColumns(t('usage.byPurpose.column')))
 
 async function load(): Promise<void> {
   loading.value = true
@@ -63,7 +105,9 @@ async function load(): Promise<void> {
     loaded.value = true
     loadError.value = null
   } catch (error) {
-    loadError.value = translateApiError(error)
+    const message = translateApiError(error)
+    loadError.value = message
+    toasts.error(message)
   } finally {
     loading.value = false
   }
@@ -76,100 +120,89 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.usage.title')" :subtitle="t('pages.usage.description')" />
+    <PageHeader :title="t('pages.usage.title')" :subtitle="t('pages.usage.description')">
+      <template #actions>
+        <AppButton variant="secondary" :disabled="loading" @click="load">
+          {{ t('usage.refresh') }}
+        </AppButton>
+      </template>
+    </PageHeader>
 
-    <div class="usage__actions">
+    <p v-if="loadError !== null" class="error-banner">
+      {{ loadError }}
       <AppButton variant="secondary" :disabled="loading" @click="load">
         {{ t('usage.refresh') }}
       </AppButton>
-      <span v-if="loading" class="form-hint">{{ t('usage.loading') }}</span>
-    </div>
+    </p>
 
-    <p v-if="loadError !== null" class="usage__error">{{ loadError }}</p>
-
-    <template v-if="summary !== null && !isEmpty">
-      <section class="usage__section">
-        <h3 class="usage__title">{{ t('usage.totals.title') }}</h3>
-        <ul class="usage__totals">
-          <li v-for="metric in totals" :key="metric.key" class="usage__metric">
-            <span class="usage__metric-label">{{ metric.label }}</span>
-            <span class="usage__metric-value">{{ formatCount(metric.value) }}</span>
-          </li>
-        </ul>
-      </section>
-
-      <section class="usage__section">
-        <h3 class="usage__title">{{ t('usage.byModel.title') }}</h3>
-        <UsageTable :column-label="t('usage.byModel.column')" :rows="byModel" />
-      </section>
-
-      <section class="usage__section">
-        <h3 class="usage__title">{{ t('usage.byPurpose.title') }}</h3>
-        <UsageTable :column-label="t('usage.byPurpose.column')" :rows="byPurpose" />
-      </section>
-    </template>
+    <section class="usage__cards">
+      <StatCard
+        :label="t('usage.metric.totalTokens')"
+        :value="formatCount(total?.total_tokens ?? 0)"
+        :hint="t('usage.totals.hint')"
+        :loading="loading && total === null"
+      />
+      <StatCard
+        :label="t('usage.metric.promptTokens')"
+        :value="formatCount(total?.prompt_tokens ?? 0)"
+        :loading="loading && total === null"
+      />
+      <StatCard
+        :label="t('usage.metric.completionTokens')"
+        :value="formatCount(total?.completion_tokens ?? 0)"
+        :loading="loading && total === null"
+      />
+      <StatCard
+        :label="t('usage.metric.callCount')"
+        :value="formatCount(total?.call_count ?? 0)"
+        :loading="loading && total === null"
+      />
+    </section>
 
     <EmptyState
-      v-else-if="isEmpty"
+      v-if="isEmpty"
       :title="t('usage.emptyTitle')"
       :description="t('usage.emptyDescription')"
     />
+
+    <template v-else>
+      <section class="usage__section">
+        <h2 class="card-title">{{ t('usage.byModel.title') }}</h2>
+        <DataTable
+          :columns="modelColumns"
+          :rows="byModel"
+          :row-key="(row: UsageTableRow) => row.key"
+          :loading="loading && byModel.length === 0"
+          :empty-title="t('usage.emptyTitle')"
+        />
+      </section>
+
+      <section class="usage__section">
+        <h2 class="card-title">{{ t('usage.byPurpose.title') }}</h2>
+        <DataTable
+          :columns="purposeColumns"
+          :rows="byPurpose"
+          :row-key="(row: UsageTableRow) => row.key"
+          :loading="loading && byPurpose.length === 0"
+          :empty-title="t('usage.emptyTitle')"
+        />
+      </section>
+    </template>
   </div>
 </template>
 
 <style scoped>
-.usage__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
+.usage__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-3);
 }
 
 .usage__section {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-}
-
-.usage__title {
-  font-size: 1rem;
-}
-
-.usage__totals {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.75rem;
-  padding: 0;
-  list-style: none;
-}
-
-.usage__metric {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-background);
-}
-
-.usage__metric-label {
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-}
-
-.usage__metric-value {
-  color: var(--color-heading);
-  font-size: 1.25rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.usage__error {
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--color-status-failed-border);
-  border-radius: 8px;
-  background: var(--color-status-failed-bg);
-  color: var(--color-status-failed-text);
-  overflow-wrap: anywhere;
+  gap: var(--space-3);
+  /* Two tables share the page, so neither takes the full viewport height */
+  --data-table-max-height: max(18rem, calc(100vh - 28rem));
 }
 </style>

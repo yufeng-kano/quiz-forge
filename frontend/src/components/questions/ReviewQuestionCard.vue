@@ -15,6 +15,7 @@ import QuestionEditor from '@/components/questions/QuestionEditor.vue'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
 import { useQuestionsStore } from '@/stores/questions'
+import { useToastsStore } from '@/stores/toasts'
 
 /**
  * One draft question in the review queue: render it, compare it against the
@@ -23,15 +24,22 @@ import { useQuestionsStore } from '@/stores/questions'
  *
  * Adopting and discarding both go through the store, which puts the *server's*
  * version of the row back into the lists — so the card only leaves the queue
- * once the status change is confirmed, never on optimism alone.
+ * once the status change is confirmed, never on optimism alone. Their outcome
+ * is a toast, because the card itself disappears with the change and could not
+ * show a message of its own; an edit stays on screen and keeps its 422 next to
+ * the fields it is about.
  *
- * The source text comes from `GET /api/v1/questions/{id}` and is fetched the
- * first time it is asked for, not for every card in the list.
+ * The checkbox feeds the page's batch selection; the source text comes from
+ * `GET /api/v1/questions/{id}` and is fetched the first time it is asked for,
+ * not for every card in the list.
  */
-const props = defineProps<{ question: QuestionListItem }>()
+const props = defineProps<{ question: QuestionListItem; selected: boolean; busy: boolean }>()
+
+const emit = defineEmits<{ toggleSelect: [] }>()
 
 const { t } = useAppI18n()
 const store = useQuestionsStore()
+const toasts = useToastsStore()
 
 const editing = ref(false)
 const saving = ref(false)
@@ -39,7 +47,6 @@ const saveError = ref<string | null>(null)
 
 /** Which status change is in flight, so only that button shows its progress. */
 const acting = ref<'approve' | 'reject' | null>(null)
-const actionError = ref<string | null>(null)
 
 const sourceOpen = ref(false)
 const detail = ref<QuestionDetail | null>(null)
@@ -78,6 +85,7 @@ async function onSave(payload: QuestionPayload): Promise<void> {
   try {
     await store.updatePayload(props.question.id, payload)
     editing.value = false
+    toasts.success(t('review.saved', { id: props.question.id }))
     // The stored payload changed, so the cached source panel is the only part
     // still holding the old response; drop it and refetch when asked again.
     detail.value = null
@@ -90,11 +98,11 @@ async function onSave(payload: QuestionPayload): Promise<void> {
 
 async function onApprove(): Promise<void> {
   acting.value = 'approve'
-  actionError.value = null
   try {
     await store.approve(props.question.id)
+    toasts.success(t('review.approved', { id: props.question.id }))
   } catch (error) {
-    actionError.value = translateApiError(error)
+    toasts.error(translateApiError(error))
   } finally {
     acting.value = null
   }
@@ -102,11 +110,11 @@ async function onApprove(): Promise<void> {
 
 async function onReject(): Promise<void> {
   acting.value = 'reject'
-  actionError.value = null
   try {
     await store.reject(props.question.id)
+    toasts.success(t('review.rejected', { id: props.question.id }))
   } catch (error) {
-    actionError.value = translateApiError(error)
+    toasts.error(translateApiError(error))
   } finally {
     acting.value = null
   }
@@ -115,22 +123,39 @@ async function onReject(): Promise<void> {
 
 <template>
   <QuestionCard :question="question">
+    <template #select>
+      <input
+        type="checkbox"
+        class="review-card__checkbox"
+        :checked="props.selected"
+        :disabled="props.busy"
+        :aria-label="t('review.batch.checkbox', { id: question.id })"
+        @change="emit('toggleSelect')"
+      />
+    </template>
+
     <template #actions>
-      <AppButton variant="secondary" @click="toggleSource">
+      <AppButton variant="secondary" size="sm" @click="toggleSource">
         {{ sourceOpen ? t('review.source.hide') : t('review.source.show') }}
       </AppButton>
       <AppButton
         v-if="!editing"
         variant="secondary"
-        :disabled="acting !== null"
+        size="sm"
+        :disabled="acting !== null || props.busy"
         @click="startEditing"
       >
         {{ t('editor.edit') }}
       </AppButton>
-      <AppButton :disabled="acting !== null || editing" @click="onApprove">
+      <AppButton size="sm" :disabled="acting !== null || editing || props.busy" @click="onApprove">
         {{ acting === 'approve' ? t('review.approving') : t('review.approve') }}
       </AppButton>
-      <AppButton variant="secondary" :disabled="acting !== null || editing" @click="onReject">
+      <AppButton
+        variant="secondary"
+        size="sm"
+        :disabled="acting !== null || editing || props.busy"
+        @click="onReject"
+      >
         {{ acting === 'reject' ? t('review.rejecting') : t('review.reject') }}
       </AppButton>
     </template>
@@ -146,8 +171,6 @@ async function onReject(): Promise<void> {
     <QuestionDisplay v-else :question="question" />
 
     <template #footer>
-      <p v-if="actionError !== null" class="form-error">{{ actionError }}</p>
-
       <section v-if="sourceOpen" class="review-source">
         <h4 class="review-source__title">{{ t('review.source.title') }}</h4>
         <p v-if="detailLoading" class="form-hint">{{ t('review.source.loading') }}</p>
@@ -173,26 +196,32 @@ async function onReject(): Promise<void> {
 </template>
 
 <style scoped>
+.review-card__checkbox {
+  width: 1.05rem;
+  height: 1.05rem;
+  cursor: pointer;
+}
+
 .review-source {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.85rem 1rem;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--color-background-soft);
 }
 
 .review-source__title {
-  font-size: 0.9375rem;
+  font-size: var(--font-size-md);
 }
 
 .review-source__chunk {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid var(--color-border);
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-hairline);
 }
 
 .review-source__chunk:first-of-type {
@@ -202,7 +231,7 @@ async function onReject(): Promise<void> {
 
 .review-source__chunk-id {
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
 }
 </style>

@@ -91,21 +91,23 @@ const difficultyLabel = computed(() =>
 </template>
 
 <style scoped>
+/* The row sits inside the 生成紀錄 card, so it reads as a nested entry — a
+   hairline border on the soft surface — rather than a second card on top of one */
 .job-row {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-background);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  background: var(--color-background-soft);
 }
 
 .job-row__head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.75rem;
+  gap: var(--space-2) var(--space-3);
 }
 
 .job-row__summary {
@@ -115,13 +117,13 @@ const difficultyLabel = computed(() =>
 
 .job-row__meta {
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-sm);
 }
 
 .job-row__done {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
   color: var(--color-status-done-text);
 }
 

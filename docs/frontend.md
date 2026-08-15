@@ -20,7 +20,10 @@
 - 題目元件：`src/components/questions/` 六題型各一個顯示元件與編輯器，`QuestionDisplay` 依 type 派發，審題與題庫共用；類比題題幹由槽位組出，比較題答案以面向×A×B 表格呈現。
 - 審題編輯 UX：答案用結構選取（單選以 radio 標正解、刪選項自動平移 index）、填充題即時檢查 `____` 數與答案數、空白解析正規化為 null；422 錯誤可讀化呈現。
 - 出題頁：文件/分類雙範圍選擇（分類樹勾科目展開為主題 id）、題型/數量/難度表單、job 進度與本 session 歷史。
-- 題庫頁：篩選（題型/難度/主題分類）、勾選存 `exportSelection` Pinia store 跨頁保留，供匯出頁消費。
+- 題庫頁：debounce 搜尋（`q`）＋篩選（題型/難度/科目/主題）＋真分頁（`AppPagination`，頁量對齊後端 default limit）；「新增題目」modal 重用六題型編輯器（`QuestionPayloadFields`）、可存草稿；每題可「複製」成草稿改造；「管理分類」modal 支援改名/刪除（409 原因直出）。勾選存 `exportSelection` Pinia store 跨頁保留，供匯出頁消費。
+- 審題頁：伺服器端篩選與分頁、批次採用/丟棄（ConfirmDialog、逐題進度、單題失敗不中斷、總結 toast）。
+- 匯出頁：必填考卷標題、僅對選取中存在的題型顯示配分輸入；歷史為可排序 DataTable。
+- 用量頁：總計 StatCard ＋ 兩張可排序 DataTable。
 - 難度字彙統一「簡單/中等/困難」（與後端分類 prompt 同組值，見 `src/questions/labels.ts`）。
 - 匯出頁：消費 `exportSelection`（顯示已選題、單筆移除）、紙張選擇（尺寸常數鏡射自 `backend/export/paper.py`，JIS B）、job 進度、歷史紀錄與題目卷/答案卷下載（純 `<a>` 連結、由後端 Content-Disposition 決定檔名）；job 失敗保留選取並顯示違規 id。
 - 用量頁：總計卡片 + 依 model/依用途兩表，purpose 未知值顯示原字串不隱藏。

@@ -153,6 +153,15 @@ export interface Category {
   parent_id: number | null
 }
 
+/**
+ * Request body of `PATCH /api/v1/categories/{id}` — rename only
+ * (`backend.schemas.document.CategoryPatchIn`; 不做合併). The name is trimmed
+ * server-side and must not be blank; a sibling with the same name is a 409.
+ */
+export interface CategoryPatch {
+  name: string
+}
+
 /** One `chunks` row. The embedding vector itself is never sent to the client. */
 export interface DocumentChunk {
   id: number
@@ -366,12 +375,37 @@ export interface QuestionDetail extends QuestionListItem {
   source_chunks: SourceChunk[]
 }
 
-/** Query parameters of `GET /api/v1/questions`; every one of them is optional. */
+/**
+ * Query parameters of `GET /api/v1/questions`; every one of them is optional.
+ *
+ * `q` is a case-insensitive `ILIKE` against the payload text, so it matches
+ * stems, options and answers alike. `limit` must stay within the server's
+ * `questions_list_limit_max` (`QUESTIONS_LIST_LIMIT_MAX`), which rejects a
+ * larger value with 422.
+ */
 export interface QuestionListQuery {
   status?: QuestionStatus
   type?: QuestionType
   difficulty?: string
   category_id?: number
+  q?: string
+  limit?: number
+  offset?: number
+}
+
+/**
+ * Request body of `POST /api/v1/questions` — manual authoring
+ * (`backend.schemas.question.QuestionCreateIn`).
+ *
+ * `status` defaults to `approved` server-side (老師自己寫的不需審) and only
+ * `draft` or `approved` may be sent. `source_chunk_ids` is not settable: the
+ * backend always stores an empty list for a hand-written question.
+ */
+export interface QuestionCreateRequest {
+  type: QuestionType
+  difficulty?: string | null
+  payload: QuestionPayload
+  status?: Extract<QuestionStatus, 'draft' | 'approved'>
 }
 
 /**
@@ -413,16 +447,30 @@ export interface GenerateResult {
 }
 
 /**
+ * Points per question type, e.g. `{ single_choice: 2 }`
+ * (`ExportIn.points`, docs/export.md 卷面結構).
+ *
+ * A type left out simply has no score printed for it; every value present must
+ * be a positive integer, and an unknown key is a 422.
+ */
+export type ExportPoints = Partial<Record<QuestionType, number>>
+
+/**
  * Request body of `POST /api/v1/exports`.
  *
  * `question_ids` must be non-empty and every id must be `approved`; a
  * non-approved id is not rejected by the request but fails the job, whose
  * `error` then lists the offending ids (docs/export.md 選題流程). Their order is
  * the paper's numbering order.
+ *
+ * `title` is required and must not be blank — it is printed on the paper's
+ * first line. `points` is optional scoring per question type.
  */
 export interface ExportRequest {
   question_ids: number[]
   paper_size: PaperSize
+  title: string
+  points?: ExportPoints
 }
 
 /** `POST /api/v1/exports` — the id of the queued `export_docx` job. */
@@ -440,6 +488,8 @@ export interface ExportResult {
  */
 export interface ExportListItem {
   id: number
+  /** The paper's printed title, as it was given when the job was created. */
+  title: string
   paper_size: string
   question_count: number
   created_at: string

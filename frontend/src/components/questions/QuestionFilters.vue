@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 
-import { QUESTION_TYPES, isQuestionType, type Category } from '@/api'
+import { QUESTION_TYPES, SEARCH_DEBOUNCE_MS, isQuestionType, type Category } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import { useAppI18n } from '@/i18n'
 import {
@@ -13,7 +13,12 @@ import { useCategoriesStore } from '@/stores/categories'
 import { useQuestionsStore } from '@/stores/questions'
 
 /**
- * Filters of the question bank: type, difficulty and category.
+ * Toolbar of the question bank: full-text search plus the type, difficulty and
+ * category filters.
+ *
+ * Typing is debounced (`SEARCH_DEBOUNCE_MS`) before it reaches the store, so a
+ * typed word is one query instead of one per keystroke; the selects apply
+ * immediately, since each is a single deliberate choice.
  *
  * The category filter is two selects because `categories` is a subject/topic
  * hierarchy, but `GET /api/v1/questions` takes a single `category_id` and
@@ -31,6 +36,39 @@ const categoriesStore = useCategoriesStore()
 onMounted(async () => {
   await categoriesStore.ensureLoaded()
 })
+
+const searchText = ref(store.filters.search)
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearDebounce(): void {
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer)
+    debounceTimer = null
+  }
+}
+
+watch(searchText, (value) => {
+  clearDebounce()
+  debounceTimer = setTimeout(() => {
+    debounceTimer = null
+    const trimmed = value.trim()
+    if (trimmed !== store.filters.search) {
+      store.setFilters({ ...store.filters, search: trimmed })
+    }
+  }, SEARCH_DEBOUNCE_MS)
+})
+
+// 清除篩選 resets the store, and the box has to follow it back to empty.
+watch(
+  () => store.filters.search,
+  (value) => {
+    if (value !== searchText.value.trim()) {
+      searchText.value = value
+    }
+  },
+)
+
+onUnmounted(clearDebounce)
 
 const questionType = computed<string>({
   get: () => store.filters.type ?? '',
@@ -77,10 +115,18 @@ const topics = computed<Category[]>(() => {
 </script>
 
 <template>
-  <section class="filters">
-    <h3 class="filters__title">{{ t('bank.filters.title') }}</h3>
+  <section class="card bank-toolbar">
+    <div class="bank-toolbar__fields">
+      <label class="form-field bank-toolbar__search">
+        <span class="form-label">{{ t('bank.filters.search') }}</span>
+        <input
+          v-model="searchText"
+          class="form-input"
+          type="search"
+          :placeholder="t('bank.filters.searchPlaceholder')"
+        />
+      </label>
 
-    <div class="filters__grid">
       <label class="form-field">
         <span class="form-label">{{ t('bank.filters.type') }}</span>
         <select v-model="questionType" class="form-select">
@@ -130,16 +176,21 @@ const topics = computed<Category[]>(() => {
       </label>
     </div>
 
-    <p v-if="categoriesStore.loading" class="form-hint">
-      {{ t('bank.filters.loadingCategories') }}
-    </p>
-    <p v-else-if="categoriesStore.loadError !== null" class="form-error">
-      {{ categoriesStore.loadError }}
-    </p>
-    <p class="form-hint">{{ t('bank.filters.topicHint') }}</p>
+    <div class="bank-toolbar__footer">
+      <p v-if="categoriesStore.loading" class="form-hint">
+        {{ t('bank.filters.loadingCategories') }}
+      </p>
+      <p v-else-if="categoriesStore.loadError !== null" class="form-error">
+        {{ categoriesStore.loadError }}
+      </p>
+      <p v-else class="form-hint">{{ t('bank.filters.topicHint') }}</p>
 
-    <div v-if="store.hasActiveFilter" class="filters__actions">
-      <AppButton variant="secondary" @click="store.resetFilters()">
+      <AppButton
+        v-if="store.hasActiveFilter"
+        variant="secondary"
+        size="sm"
+        @click="store.resetFilters()"
+      >
         {{ t('bank.filters.reset') }}
       </AppButton>
     </div>
@@ -147,27 +198,29 @@ const topics = computed<Category[]>(() => {
 </template>
 
 <style scoped>
-.filters {
+.bank-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1.25rem 1.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-background-soft);
+  gap: var(--space-3);
 }
 
-.filters__title {
-  font-size: 1rem;
-}
-
-.filters__grid {
+.bank-toolbar__fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: 0.75rem 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3) var(--space-4);
 }
 
-.filters__actions {
+/* The search box is the toolbar's primary control, so it gets the wider cell */
+.bank-toolbar__search {
+  grid-column: span 2;
+  min-width: 12rem;
+}
+
+.bank-toolbar__footer {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
 }
 </style>

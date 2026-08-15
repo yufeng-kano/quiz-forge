@@ -3,6 +3,7 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './client'
 import type { QueryParams } from './client'
 import type {
+  QuestionCreateRequest,
   QuestionDetail,
   QuestionListItem,
   QuestionListPage,
@@ -23,8 +24,28 @@ export function listQuestions(query: QuestionListQuery = {}): Promise<QuestionLi
     type: query.type,
     difficulty: query.difficulty,
     category_id: query.category_id,
+    q: query.q,
+    limit: query.limit,
+    offset: query.offset,
   }
   return apiGet<QuestionListPage>('/questions', params)
+}
+
+/**
+ * `POST /api/v1/questions` — manual authoring. The payload goes through the
+ * same discriminated-union validation as LLM output, so a shape violation
+ * comes back as HTTP 422 with the offending fields.
+ */
+export function createQuestion(request: QuestionCreateRequest): Promise<QuestionListItem> {
+  return apiPost<QuestionListItem>('/questions', request)
+}
+
+/**
+ * `POST /api/v1/questions/{id}/duplicate` — copy as a new `draft`, so the copy
+ * is edited into a variant on the review page rather than next to the original.
+ */
+export function duplicateQuestion(questionId: number): Promise<QuestionListItem> {
+  return apiPost<QuestionListItem>(`/questions/${encodeURIComponent(questionId)}/duplicate`)
 }
 
 /** `GET /api/v1/questions/{id}` — includes the full text of the source chunks. */

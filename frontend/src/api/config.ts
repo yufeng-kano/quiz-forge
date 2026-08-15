@@ -48,6 +48,28 @@ export const DASHBOARD_RECENT_JOB_LIMIT = 8
 export const JOB_LIST_LIMIT = 100
 
 /**
+ * Page size of 題庫 (`GET /api/v1/questions`).
+ *
+ * It mirrors the server's own `Settings.questions_list_limit_default` (50), so
+ * a page asked for explicitly is the same size as one the server fills in.
+ */
+export const QUESTIONS_PAGE_SIZE = 50
+
+/**
+ * Largest `limit` `GET /api/v1/questions` accepts
+ * (`Settings.questions_list_limit_max`); anything larger is a 422. Used where
+ * a caller has to walk the whole list in as few requests as possible (the
+ * 匯出 selection resolving its ids).
+ */
+export const QUESTIONS_LIST_LIMIT_MAX = 200
+
+/**
+ * How long the 題庫 search box waits after the last keystroke before querying.
+ * Long enough that typing a word is one request, short enough to feel live.
+ */
+export const SEARCH_DEBOUNCE_MS = 300
+
+/**
  * Extensions `POST /api/v1/documents/upload` accepts. The backend rejects
  * anything else with 400 (`backend.ingestion.kind._EXTENSION_KIND`), so the
  * file picker offers exactly this set instead of letting the user pick a file

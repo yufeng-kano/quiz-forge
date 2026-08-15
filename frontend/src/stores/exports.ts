@@ -15,11 +15,26 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { createExportJob, listExports, type ExportListItem, type PaperSize } from '@/api'
+import {
+  createExportJob,
+  listExports,
+  type ExportListItem,
+  type ExportPoints,
+  type PaperSize,
+} from '@/api'
 import { translateApiError } from '@/i18n/errors'
+
+/** What the 匯出 form sends, minus the ids it takes from the selection. */
+export interface ExportSubmission {
+  title: string
+  paperSize: PaperSize
+  /** Omitted entirely when no type was given a score. */
+  points?: ExportPoints
+}
 
 export interface ExportJobEntry {
   jobId: number
+  title: string
   paperSize: PaperSize
   questionCount: number
   /** ISO timestamp of the submission, formatted for display by the view. */
@@ -64,13 +79,20 @@ export const useExportsStore = defineStore('exports', () => {
     }
   }
 
-  async function submit(questionIds: readonly number[], paperSize: PaperSize): Promise<number> {
+  async function submit(
+    questionIds: readonly number[],
+    submission: ExportSubmission,
+  ): Promise<number> {
+    const { title, paperSize, points } = submission
     const result = await createExportJob({
       question_ids: [...questionIds],
       paper_size: paperSize,
+      title,
+      ...(points === undefined ? {} : { points }),
     })
     currentJob.value = {
       jobId: result.job_id,
+      title,
       paperSize,
       questionCount: questionIds.length,
       submittedAt: new Date().toISOString(),

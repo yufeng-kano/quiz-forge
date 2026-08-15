@@ -64,10 +64,10 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
 .question-card {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem 1.25rem;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--color-background);
 }
 
@@ -75,7 +75,7 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.75rem;
+  gap: var(--space-2) var(--space-3);
 }
 
 .question-card__select {
@@ -87,7 +87,7 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.75rem;
+  gap: var(--space-2) var(--space-3);
 }
 
 .question-card__type {
@@ -97,25 +97,25 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
 
 .question-card__difficulty {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-md);
 }
 
 .question-card__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
   margin-left: auto;
 }
 
 .question-card__identity {
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
 }
 
 .question-card__content {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 </style>

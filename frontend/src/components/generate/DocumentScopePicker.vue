@@ -64,12 +64,12 @@ function toggle(documentId: number): void {
 .scope-list {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: var(--space-1);
   max-height: 16rem;
   overflow-y: auto;
-  padding: 0.4rem 0.6rem;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--color-background);
   list-style: none;
 }
@@ -77,8 +77,8 @@ function toggle(documentId: number): void {
 .scope-list__item {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.15rem 0;
+  gap: var(--space-2);
+  padding: var(--space-1) 0;
   cursor: pointer;
 }
 
@@ -89,7 +89,7 @@ function toggle(documentId: number): void {
 
 .scope-list__meta {
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-size: var(--font-size-sm);
   white-space: nowrap;
 }
 </style>

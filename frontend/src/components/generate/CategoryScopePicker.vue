@@ -102,12 +102,12 @@ function toggleSubject(node: CategoryNode): void {
 .category-tree {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: var(--space-2);
   max-height: 16rem;
   overflow-y: auto;
-  padding: 0.4rem 0.6rem;
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--color-background);
   list-style: none;
 }
@@ -115,13 +115,13 @@ function toggleSubject(node: CategoryNode): void {
 .category-tree__subject {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-1);
 }
 
 .category-tree__item {
   display: flex;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: var(--space-2);
   cursor: pointer;
   overflow-wrap: anywhere;
 }
@@ -134,7 +134,7 @@ function toggleSubject(node: CategoryNode): void {
 .category-tree__topics {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-1);
   padding-left: 1.4rem;
   list-style: none;
 }

@@ -64,6 +64,16 @@ interface FastApiValidationIssue {
   msg?: unknown
 }
 
+/**
+ * `loc` segments FastAPI puts in front of the field path to say where in the
+ * request the value came from. They mean nothing to a user and are dropped —
+ * but only when they are actually one of these: a handler that re-raises a
+ * Pydantic error itself (`POST/PATCH /questions`, which validate the payload
+ * against the question type) reports `loc` starting at the field name, and
+ * dropping that would leave the message without a field at all.
+ */
+const REQUEST_LOCATIONS = ['body', 'query', 'path', 'header', 'cookie']
+
 function formatValidationIssue(issue: unknown): string | null {
   if (typeof issue !== 'object' || issue === null) {
     return null
@@ -75,8 +85,9 @@ function formatValidationIssue(issue: unknown): string | null {
   if (!Array.isArray(loc)) {
     return msg
   }
-  // The first `loc` segment is body/query/path, which means nothing to a user.
-  const field = loc.slice(1).map(String).join('.')
+  const segments = loc.map(String)
+  const path = REQUEST_LOCATIONS.includes(segments[0] ?? '') ? segments.slice(1) : segments
+  const field = path.join('.')
   return field === '' ? msg : `${field}: ${msg}`
 }
 

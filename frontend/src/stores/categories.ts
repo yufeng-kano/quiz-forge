@@ -9,7 +9,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import { listCategories, type Category } from '@/api'
+import { deleteCategory, listCategories, renameCategory, type Category } from '@/api'
 import { translateApiError } from '@/i18n/errors'
 import { buildCategoryTree, type CategoryNode } from '@/utils/categoryTree'
 
@@ -42,5 +42,28 @@ export const useCategoriesStore = defineStore('categories', () => {
     await load()
   }
 
-  return { categories, loading, loadError, loaded, tree, load, ensureLoaded }
+  /**
+   * Rename one category. The server's own row is written back rather than the
+   * requested name, so a name it trimmed is what the list then shows. A 409
+   * (a sibling already has the name) is thrown to the caller.
+   */
+  async function rename(categoryId: number, name: string): Promise<Category> {
+    const updated = await renameCategory(categoryId, { name })
+    categories.value = categories.value.map((category) =>
+      category.id === updated.id ? updated : category,
+    )
+    return updated
+  }
+
+  /**
+   * Delete one category. The backend refuses with 409 while chunks reference it
+   * or it still has children, so this only removes it locally once the request
+   * has actually succeeded.
+   */
+  async function remove(categoryId: number): Promise<void> {
+    await deleteCategory(categoryId)
+    categories.value = categories.value.filter((category) => category.id !== categoryId)
+  }
+
+  return { categories, loading, loadError, loaded, tree, load, ensureLoaded, rename, remove }
 })

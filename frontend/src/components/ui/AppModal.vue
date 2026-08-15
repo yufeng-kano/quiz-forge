@@ -22,8 +22,10 @@ const props = withDefaults(
     title: string
     /** Esc and backdrop clicks close the dialog. */
     dismissible?: boolean
+    /** `lg` widens the panel for a form (新增題目, 管理分類); `md` is a message. */
+    size?: 'md' | 'lg'
   }>(),
-  { dismissible: true },
+  { dismissible: true, size: 'md' },
 )
 
 const emit = defineEmits<{ close: [] }>()
@@ -124,6 +126,7 @@ onBeforeUnmount(unlockBodyScroll)
       <div
         ref="panel"
         class="modal__panel"
+        :class="`modal__panel--${props.size}`"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="titleId"
@@ -177,7 +180,6 @@ onBeforeUnmount(unlockBodyScroll)
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  width: min(32rem, 100%);
   max-height: 100%;
   overflow: auto;
   padding: var(--space-5);
@@ -185,6 +187,14 @@ onBeforeUnmount(unlockBodyScroll)
   border-radius: var(--radius-lg);
   background: var(--color-background);
   box-shadow: var(--shadow-lg);
+}
+
+.modal__panel--md {
+  width: min(32rem, 100%);
+}
+
+.modal__panel--lg {
+  width: min(48rem, 100%);
 }
 
 .modal__panel:focus {
