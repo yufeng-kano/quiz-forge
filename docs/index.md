@@ -18,10 +18,10 @@
 | `docs/` | 專案文件（本目錄） |
 | `data/` | 樣本資料與 container mount 掛載點，見 `docs/data-inventory.md` |
 | `backend/` | Python FastAPI 服務（uv 管理、Alembic migration），見 `docs/architecture.md` |
-| `frontend/` | Vue 3 前端骨架，見 `docs/frontend.md` |
-| `nginx/` | 反向代理設定與 Dockerfile（multi-stage build 前端） |
+| `frontend/` | Vue 3 前端專案，`frontend/Dockerfile` 建置 website container，見 `docs/frontend.md` |
+| `proxy/` | 純反向代理（nginx 實作）設定與 Dockerfile |
 | `db/` | PostgreSQL（pgvector）設定檔 |
-| `docker-compose.yml` | 服務編排（backend / db / nginx） |
+| `docker-compose.yml` | 服務編排（backend / db / nginx / website） |
 
 ## 文件清單
 
@@ -43,3 +43,4 @@
 |---|---|
 | `docs/decisions/2026-08-15-initial-system-design.md` | 初始系統設計：D1–D11 技術決策、待確認事項、開發順序 |
 | `docs/decisions/2026-08-15-ux-overhaul-feature-expansion.md` | UX 大改與功能補強：手動建題、匯出卷面、搜尋分頁、分類管理、Dashboard/任務中心、rechunk、專業版面 |
+| `docs/decisions/2026-08-16-separate-frontend-container.md` | 前端獨立常駐 container（website），反向代理改名 proxy（資料夾/service/container 皆改名），website 與 proxy 分離 |

@@ -33,13 +33,13 @@ backend 啟動時會自動執行資料庫 migration（`alembic upgrade head`）�
 ## 架構
 
 ```
-Browser ──> nginx (唯一對外 port)
-              ├── /        → Vue 3 前端靜態檔
+Browser ──> proxy (純反向代理，唯一對外 port)
+              ├── /        → website (Vue 3 前端靜態檔)
               └── /api/v1  → FastAPI backend
                                 └── PostgreSQL + pgvector
 ```
 
-- 三個 container：`quiz-forge-nginx`、`quiz-forge-backend`、`quiz-forge-db`。
+- 四個 container：`quiz-forge-proxy`（反向代理）、`quiz-forge-website`（前端）、`quiz-forge-backend`、`quiz-forge-db`。
 - 背景任務用 Postgres 當 queue（`SELECT ... FOR UPDATE SKIP LOCKED`），不需要 Redis/Celery。
 - 所有資料落在 `data/container-mounts/`（DB 資料、上傳原檔、裁切圖、匯出檔），備份帶走這個資料夾即可。
 

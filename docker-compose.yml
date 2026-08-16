@@ -38,13 +38,21 @@ services:
       - ./data/container-mounts/assets:${DATA_DIR}/assets
       - ./data/container-mounts/exports:${DATA_DIR}/exports
 
-  nginx:
+  website:
     build:
       context: .
-      dockerfile: nginx/Dockerfile
-    container_name: quiz-forge-nginx
+      dockerfile: frontend/Dockerfile
+    container_name: quiz-forge-website
+    restart: unless-stopped
+
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: quiz-forge-proxy
     restart: unless-stopped
     depends_on:
       - backend
+      - website
     ports:
       - "${NGINX_HTTP_PORT}:80"

@@ -3,29 +3,32 @@
 ## Docker Compose 拓撲
 
 ```
-Browser ──> nginx (唯一對外 port)
-              ├── /        → 前端靜態檔（Vue build 產物）
+Browser ──> proxy (純反向代理，唯一對外 port)
+              ├── /        → website (前端靜態檔，Vue build 產物)
               └── /api/v1  → backend (uvicorn, FastAPI async)
                                 └── db (PostgreSQL + pgvector)
 ```
 
 | 服務 | container name | 說明 |
 |---|---|---|
-| `nginx` | `quiz-forge-nginx` | 反向代理，serve 前端靜態檔 |
+| `proxy` | `quiz-forge-proxy` | 純反向代理（nginx 實作）：`/` → website、`/api/v1` → backend，不 serve 靜態檔 |
+| `website` | `quiz-forge-website` | 前端常駐 container，serve Vue build 靜態檔（含 SPA fallback） |
 | `backend` | `quiz-forge-backend` | FastAPI，entrypoint 先跑 `alembic upgrade head` 再起 uvicorn |
 | `db` | `quiz-forge-db` | `pgvector/pgvector` 官方 image |
 
-- 前端不做常駐 container：nginx 的 Dockerfile 用 multi-stage build（node stage `npm ci && npm run build` 產出 `dist/`），交由 nginx serve。
+- 前端是獨立常駐 container（見 `docs/decisions/2026-08-16-separate-frontend-container.md`）：`frontend/Dockerfile` 用 multi-stage build（node stage `npm ci && npm run build` 產出 `dist/`，final stage nginx serve 靜態檔），website 與 proxy 分離、各自獨立重建。
+- `website` 不對 host 暴露 port，只走 compose 內部 network。
 - 所有 volume 用明確 bind mount，來源統一在 `data/container-mounts/` 底下：`db/`（DB 資料）、`uploads/`（上傳原檔）、`assets/`（裁切圖）、`exports/`（匯出檔）。
 - db 用 `pgvector/pgvector:pg17` image，設定檔 `db/postgresql.conf`。`PGDATA` 指到掛載點底下的 `pgdata/` 子目錄——掛載點根目錄有 `.gitkeep`，直接當 `PGDATA` 會被 initdb 判定為非空而失敗。
-- nginx 對外 port 由 `NGINX_HTTP_PORT` 設定（預設 8080）。
+- proxy 對外 port 由 `NGINX_HTTP_PORT` 設定（預設 8080）。
 
-## nginx 必要設定
+## proxy 必要設定
 
-設定檔在 `nginx/nginx.conf`，數值放設定檔不寫死在程式碼：
+proxy 設定檔在 `proxy/nginx.conf`，website 靜態 serve 設定檔在 `frontend/nginx.conf`；數值放設定檔不寫死在程式碼：
 
-- `client_max_body_size 200m`：容納大型掃描 PDF 上傳。
-- `proxy_read_timeout 300s`：容納長時間 API 請求。
+- `client_max_body_size 200m`（proxy）：容納大型掃描 PDF 上傳。
+- `proxy_read_timeout 300s`（proxy）：容納長時間 API 請求。
+- SPA fallback（website）：找不到實體檔案回 `index.html`，交給 vue-router 處理路由。
 - 若進度改用 SSE：`proxy_buffering off`（第一版用輪詢，暫不需要）。
 
 ## 背景任務：Postgres 當 queue（不用 Celery/Redis）
@@ -87,7 +90,7 @@ Browser ──> nginx (唯一對外 port)
 | PostgreSQL | `POSTGRES_USER` | `quizforge` | db 服務帳號 |
 | PostgreSQL | `POSTGRES_PASSWORD` | `change-me` | db 服務密碼，部署時務必更換 |
 | PostgreSQL | `POSTGRES_DB` | `quizforge` | db 服務資料庫名 |
-| nginx | `NGINX_HTTP_PORT` | `8080` | 對外（host）監聽 port |
+| proxy | `NGINX_HTTP_PORT` | `8080` | 對外（host）監聽 port |
 
 - Git 只保存 `.env.example`；真正的 `.env` 不入版控。
 - `EMBEDDING_DIM` 是半固定值：pgvector 建表後更換 embedding model 需 re-embed + migration，README 要明講代價。

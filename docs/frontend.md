@@ -3,11 +3,11 @@
 ## 技術
 
 - Vue 3 + Vite，用 `npm create vue@latest` 建立於 `frontend/`。
-- 路由 vue-router、狀態 Pinia、API 呼叫統一走 `/api/v1`（同源，經 nginx 反代，不需 CORS）。
+- 路由 vue-router、狀態 Pinia、API 呼叫統一走 `/api/v1`（同源，經 proxy 反代，不需 CORS）。
 - vue-router 與 Pinia 已隨 scaffold 安裝；實作功能頁時必須真正落地：頁面清單全部走 router 定義，跨頁狀態（job 輪詢、篩選條件等）放 Pinia store，不散落元件內。
 - i18n 用 vue-i18n：介面文案全部進 locale 檔，但只做繁體中文（`zh-Hant-TW`）一種語言，不做語言切換功能。目的為文案集中管理，不是多語系。
 - 禁止在元件內硬編碼中文文案（一律走 locale 檔），也禁止把假資料寫死在 view 裡。
-- build 產物交由 nginx serve，不做常駐 container。
+- build 產物由獨立常駐 container `website`（`quiz-forge-website`）serve：`frontend/Dockerfile` multi-stage build（node build → nginx 靜態 serve，含 SPA `try_files` fallback），website 與 proxy 分離（見 `docs/decisions/2026-08-16-separate-frontend-container.md`）。
 
 ## 基礎架構（已實作）
 

@@ -44,17 +44,17 @@
 
 - Server-side 服務一律使用 Docker container 執行。
 - 開發與測試可直接操作 container 內部資料、檔案與狀態，用來驗證 migration、API、DB 寫入與整合流程。
-- Docker Compose 服務包含 `backend`、`db`、`nginx` 與檔案儲存 bind mount。
+- Docker Compose 服務包含 `backend`、`db`、`proxy`、`website` 與檔案儲存 bind mount。
 - `backend` 是 Python FastAPI 服務，必須放在 `backend/`。
 - `db` 是 PostgreSQL 服務，使用 `pgvector/pgvector` 官方 image，設定放在 `db/`。
-- `nginx` 是反向代理服務，必須放在 `nginx/`；`/` serve 前端靜態檔，`/api/v1` proxy 到 backend。
-- `frontend` 是 Vue 3 專案，必須放在 `frontend/`；build 產物交由 nginx serve，不做獨立常駐 container。
+- `proxy` 是純反向代理服務（nginx 實作），必須放在 `proxy/`；`/` proxy 到 website，`/api/v1` proxy 到 backend，不 serve 靜態檔。
+- `frontend` 是 Vue 3 專案，必須放在 `frontend/`；build 產物由獨立常駐 container `website` serve（`frontend/Dockerfile` multi-stage build），website 與 proxy 分離。
 - Docker Compose 服務與 container 必須明確命名，不得使用 Docker 自動產生的隨機名稱。
-- container name 固定使用 `quiz-forge-backend`、`quiz-forge-db`、`quiz-forge-nginx`。
+- container name 固定使用 `quiz-forge-backend`、`quiz-forge-db`、`quiz-forge-proxy`、`quiz-forge-website`。
 - 環境變數統一放在專案根目錄 `.env`，Docker Compose 必須明確引用；Git 只保存 `.env.example`，記錄必要變數名稱、範例值與說明。
 - 含有 API key 或資料庫密碼的 `.env` 不得納入 Git。
 - Docker volume 必須使用明確的 bind mount，來源路徑統一放在 `data/container-mounts/` 底下；不得使用 anonymous volume。
-- nginx 必須設定 `client_max_body_size`（大型掃描 PDF 上傳）與足夠的 proxy timeout；相關數值放設定檔，不寫死在程式碼。
+- proxy 的 nginx 設定必須設定 `client_max_body_size`（大型掃描 PDF 上傳）與足夠的 proxy timeout；相關數值放設定檔，不寫死在程式碼。
 
 ## 命名規則
 

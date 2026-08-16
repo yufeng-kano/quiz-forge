@@ -1,0 +1,14 @@
+# website image 的 build context 是 repo 根目錄。
+# Docker 不讀 .gitignore，靠這個檔案把不需要的檔案排除在 build context 外。
+.git
+.env
+.env.example
+data/
+backend/
+db/
+docs/
+proxy/
+frontend/node_modules/
+frontend/dist/
+.ruff_cache
+.DS_Store
