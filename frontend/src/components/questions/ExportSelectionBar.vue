@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import AppButton from '@/components/AppButton.vue'
@@ -7,44 +6,34 @@ import { useAppI18n } from '@/i18n'
 import { useExportSelectionStore } from '@/stores/exportSelection'
 
 /**
- * Summary of what is queued for the Word export, plus the bulk controls.
+ * Flush toolbar of the export selection: count, a jump to 已選, go-to-export,
+ * and clear. There is no select-all
+ * (docs/decisions/2026-08-17-bank-on-questions-page.md D11).
  *
- * `visibleIds` is the current filter's result, so 全選 adds exactly what is on
- * screen and never silently picks up questions the user cannot see. The count
- * is the whole selection, which may include questions selected under a
- * different filter — that is the point of keeping it in a store.
+ * The count is always clickable into the 已選 view so the user can see what
+ * those ids actually are, not just how many there are.
  */
-const props = defineProps<{ visibleIds: readonly number[] }>()
+const emit = defineEmits<{ viewSelected: [] }>()
 
 const { t } = useAppI18n()
 const selection = useExportSelectionStore()
-
-const allVisibleSelected = computed(() => selection.areAllSelected(props.visibleIds))
-
-function toggleVisible(): void {
-  if (allVisibleSelected.value) {
-    selection.deselectMany(props.visibleIds)
-  } else {
-    selection.selectMany(props.visibleIds)
-  }
-}
 </script>
 
 <template>
   <div class="selection-bar">
-    <AppButton variant="secondary" :disabled="visibleIds.length === 0" @click="toggleVisible">
-      {{ allVisibleSelected ? t('bank.selection.deselectAll') : t('bank.selection.selectAll') }}
-    </AppButton>
-
-    <span class="selection-bar__count">
+    <button class="selection-bar__count" type="button" @click="emit('viewSelected')">
       {{ t('bank.selection.selected', { count: selection.count }) }}
-    </span>
+    </button>
+
+    <AppButton variant="ghost" size="sm" @click="emit('viewSelected')">
+      {{ t('bank.selection.viewSelected') }}
+    </AppButton>
 
     <RouterLink v-if="selection.count > 0" class="selection-bar__link" :to="{ name: 'exports' }">
       {{ t('bank.selection.goExport') }}
     </RouterLink>
 
-    <AppButton v-if="selection.count > 0" variant="secondary" @click="selection.clear()">
+    <AppButton v-if="selection.count > 0" variant="ghost" size="sm" @click="selection.clear()">
       {{ t('bank.selection.clear') }}
     </AppButton>
   </div>
@@ -55,20 +44,27 @@ function toggleVisible(): void {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-accent-soft);
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
 }
 
 .selection-bar__count {
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--color-heading);
+  font: inherit;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.selection-bar__count:hover {
+  color: var(--color-accent-strong);
 }
 
 .selection-bar__link {
   color: var(--color-accent-strong);
+  font-size: var(--font-size-md);
   font-weight: 600;
 }
 </style>

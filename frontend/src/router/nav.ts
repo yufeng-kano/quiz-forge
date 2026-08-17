@@ -2,12 +2,12 @@
  * Sidebar navigation items, in the order they appear.
  *
  * The order follows the working sequence of docs/overview.md 核心流程
- * (總覽 → 文件 → 出題 → 審題 → 題庫 → 匯出) with the two cross-cutting views
- * (任務、用量) last.
+ * (總覽 → 文件 → 出題 → 審題 → 題庫 → 匯出) with the two cross-cutting
+ * views (任務、用量) last. 選題助手 is a column on 題庫, not a ninth item
+ * (docs/decisions/2026-08-17-bank-on-questions-page.md D10).
  *
- * `/documents/:id` has no nav entry — a link cannot be built without an id, so
- * that page is reached from the document list. `matches` keeps the document
- * list highlighted while the user is on a document detail page.
+ * `/documents/:id` has no nav entry — a link cannot be built without an id.
+ * `matches` keeps the same item highlighted on the matching detail route.
  */
 
 import type { IconName } from '@/components/ui/icons'

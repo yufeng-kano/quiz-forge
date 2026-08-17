@@ -13,6 +13,8 @@ export const JOB_KIND_LABEL_KEYS: Record<JobKind, MessageKey> = {
   parse_page: 'job.kind.parsePage',
   rechunk_document: 'job.kind.rechunkDocument',
   generate_questions: 'job.kind.generateQuestions',
+  embed_questions: 'job.kind.embedQuestions',
+  bank_agent_turn: 'job.kind.bankAgentTurn',
   export_docx: 'job.kind.exportDocx',
 }
 

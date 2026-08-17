@@ -414,7 +414,7 @@ async function onDelete(): Promise<void> {
 .detail {
   display: grid;
   grid-template-columns: 15rem minmax(0, 1fr);
-  gap: var(--space-5);
+  gap: 0;
   align-items: start;
 }
 
@@ -427,10 +427,8 @@ async function onDelete(): Promise<void> {
   gap: var(--space-2);
   max-height: calc(100vh - var(--page-header-height) - var(--space-6));
   overflow: auto;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-background);
+  padding: var(--space-3) var(--space-4) var(--space-3) 0;
+  border-right: 1px solid var(--color-border);
 }
 
 .detail__outline-title {
@@ -492,6 +490,7 @@ async function onDelete(): Promise<void> {
   flex-direction: column;
   gap: var(--space-5);
   min-width: 0;
+  padding-left: var(--space-5);
 }
 
 .detail__facts {
@@ -552,6 +551,14 @@ async function onDelete(): Promise<void> {
   .detail__outline {
     position: static;
     max-height: none;
+    padding: 0 0 var(--space-3);
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .detail__content {
+    padding-left: 0;
+    padding-top: var(--space-5);
   }
 }
 </style>

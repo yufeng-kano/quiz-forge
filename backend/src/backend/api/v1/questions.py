@@ -27,21 +27,47 @@ max come from `Settings` (never hardcoded, per .rule 開發規則), not a
 whereas settings can change per-request in tests (env + `get_settings.
 cache_clear()`) exactly like every other settings-driven handler in this
 codebase (e.g. `backend.ingestion.pipeline`).
+
+`similar_to` (docs/question-bank.md 題目向量化與語意搜尋;
+docs/decisions/2026-08-17-bank-agent-semantic-selection.md D3) layers
+semantic ranking on top of every filter above rather than replacing them:
+the free text is embedded once (purpose `question_search`), rows with a
+`NULL` embedding or a cosine similarity below `QUESTION_SIMILARITY_MIN` are
+dropped, and the rest are ordered by similarity descending. `q` (if also
+given) still applies as a literal `ILIKE` hard filter first — `similar_to`
+only changes ordering and the similarity floor. The actual query lives in
+`backend.questions.search.search_questions`, not here: `GET /v1/questions`
+and the bank-agent's `action="search"` step
+(`backend.questions.agent.bank_agent_turn`) both call that one function, so
+a manual filter here and the agent's search can never drift apart (D3).
+`unembedded_total` is computed once from the filters above `similar_to`
+itself, so it is meaningful whether or not `similar_to` was given at all.
+
+Both `POST /v1/questions` and `PATCH /v1/questions/{id}` (when `payload` is
+actually part of the request) null out `embedding` and enqueue a
+single-question `embed_questions` job rather than calling the embedding API
+inline — docs/question-bank.md 題目向量化與語意搜尋: 「不讓 embedding 延遲或
+失敗擋住編輯」.
 """
 
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import ValidationError
-from sqlalchemy import String, cast, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import get_settings
 from backend.db.session import get_session
+from backend.llm.client import get_llm_client
 from backend.models.chunk import Chunk
+from backend.models.job import Job
 from backend.models.question import Question
 from backend.questions.schemas import dump_payload, parse_question
+from backend.questions.search import search_questions
 from backend.schemas.question import (
+    EmbedQuestionsIn,
+    EmbedQuestionsOut,
     QuestionCreateIn,
     QuestionDetailOut,
     QuestionListItemOut,
@@ -51,6 +77,15 @@ from backend.schemas.question import (
 )
 
 router = APIRouter(prefix="/questions", tags=["questions"])
+
+
+async def _enqueue_embed_job(session: AsyncSession, question_id: int) -> None:
+    """Queues a single-question `embed_questions` job — the only way
+    `embedding` ever gets (re)computed from the request path, so a slow or
+    failing embedding call never blocks `POST`/`PATCH` (docs/question-bank.md
+    題目向量化與語意搜尋)."""
+    session.add(Job(kind="embed_questions", payload={"question_ids": [question_id]}))
+    await session.commit()
 
 
 def _to_list_item(question: Question) -> QuestionListItemOut:
@@ -79,6 +114,9 @@ async def list_questions(
     category_id: int | None = Query(None),
     difficulty: str | None = Query(None),
     q: str | None = Query(None, description="payload::text 的大小寫不敏感 ILIKE 搜尋"),
+    similar_to: str | None = Query(
+        None, description="語意搜尋自由文字；embed 一次後以 cosine 相似度排序＋門檻過濾"
+    ),
     limit: int | None = Query(None, ge=1),
     offset: int = Query(0, ge=0),
     session: AsyncSession = Depends(get_session),
@@ -91,45 +129,40 @@ async def list_questions(
         )
     effective_limit = limit if limit is not None else settings.questions_list_limit_default
 
-    stmt = select(Question)
-    if status_filter is not None:
-        stmt = stmt.where(Question.status == status_filter)
-    if type_filter is not None:
-        stmt = stmt.where(Question.type == type_filter)
-    if difficulty is not None:
-        stmt = stmt.where(Question.difficulty == difficulty)
-    if category_id is not None:
-        chunk_ids = (
-            (await session.execute(select(Chunk.id).where(Chunk.category_id == category_id)))
-            .scalars()
-            .all()
-        )
-        if not chunk_ids:
-            return QuestionListOut(items=[], total=0, limit=effective_limit, offset=offset)
-        # `questions.source_chunk_ids` is a plain `sqlalchemy.ARRAY`, whose
-        # comparator (unlike `dialects.postgresql.ARRAY`) has no `.overlap()`
-        # helper — `.op("&&")` sends Postgres's own array-overlap operator
-        # directly, coerced against the column's `ARRAY(Integer)` type.
-        stmt = stmt.where(Question.source_chunk_ids.op("&&")(list(chunk_ids)))
-    if q:
-        stmt = stmt.where(cast(Question.payload, String).ilike(f"%{q}%"))
-
-    total = (
-        await session.execute(select(func.count()).select_from(stmt.subquery()))
-    ).scalar_one()
-
-    list_stmt = (
-        stmt.order_by(Question.created_at.desc(), Question.id.desc())
-        .limit(effective_limit)
-        .offset(offset)
-    )
-    questions = (await session.execute(list_stmt)).scalars().all()
-    return QuestionListOut(
-        items=[_to_list_item(question) for question in questions],
-        total=total,
+    result = await search_questions(
+        session,
+        settings,
+        get_llm_client(),
+        status=status_filter,
+        type=type_filter,
+        difficulty=difficulty,
+        category_id=category_id,
+        q=q,
+        similar_to=similar_to,
         limit=effective_limit,
         offset=offset,
     )
+    return QuestionListOut(
+        items=[_to_list_item(question) for question in result.items],
+        total=result.total,
+        limit=effective_limit,
+        offset=offset,
+        unembedded_total=result.unembedded_total,
+    )
+
+
+@router.post("/embed", response_model=EmbedQuestionsOut, status_code=status.HTTP_201_CREATED)
+async def create_embed_job(
+    body: EmbedQuestionsIn, session: AsyncSession = Depends(get_session)
+) -> EmbedQuestionsOut:
+    """Enqueues an `embed_questions` job (docs/question-bank.md 相關 API) —
+    `question_ids=null` backfills every `embedding IS NULL` question,
+    otherwise re-embeds exactly the given ids."""
+    job = Job(kind="embed_questions", payload={"question_ids": body.question_ids})
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    return EmbedQuestionsOut(job_id=job.id)
 
 
 @router.post("", response_model=QuestionListItemOut, status_code=status.HTTP_201_CREATED)
@@ -158,6 +191,7 @@ async def create_question(
     session.add(question)
     await session.commit()
     await session.refresh(question)
+    await _enqueue_embed_job(session, question.id)
     return _to_list_item(question)
 
 
@@ -239,12 +273,19 @@ async def patch_question(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=json.loads(exc.json())
             ) from exc
         question.payload = dump_payload(validated)
+        # 有動到 payload 時 (docs/question-bank.md 題目向量化與語意搜尋): the old
+        # embedding no longer describes this question, so it is invalidated
+        # immediately and a background job recomputes it — never an inline
+        # embedding call in this request path.
+        question.embedding = None
 
     if "difficulty" in provided:
         question.difficulty = body.difficulty
 
     await session.commit()
     await session.refresh(question)
+    if "payload" in provided:
+        await _enqueue_embed_job(session, question.id)
     return _to_list_item(question)
 
 

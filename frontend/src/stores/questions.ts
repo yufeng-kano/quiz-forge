@@ -26,6 +26,7 @@ import {
   approveQuestion,
   createQuestion,
   duplicateQuestion,
+  embedQuestions,
   listQuestions,
   patchQuestion,
   rejectQuestion,
@@ -49,6 +50,14 @@ export interface QuestionBankFilters {
   categoryId: number | null
   /** Free text sent as `q`; empty means no search. */
   search: string
+  /**
+   * Free text sent as `similar_to`: the server embeds it once and orders the
+   * result by cosine similarity, dropping anything below its threshold
+   * (docs/question-bank.md 題目向量化與語意搜尋). Empty means no semantic
+   * ranking. It combines with every other filter, `search` included — there
+   * `search` stays the literal hard condition and this one decides the order.
+   */
+  similarTo: string
 }
 
 /** The review queue narrows on the two properties a draft carries by itself. */
@@ -58,7 +67,14 @@ export interface QuestionDraftFilters {
 }
 
 function emptyFilters(): QuestionBankFilters {
-  return { type: null, difficulty: null, subjectId: null, categoryId: null, search: '' }
+  return {
+    type: null,
+    difficulty: null,
+    subjectId: null,
+    categoryId: null,
+    search: '',
+    similarTo: '',
+  }
 }
 
 function emptyDraftFilters(): QuestionDraftFilters {
@@ -90,6 +106,14 @@ export const useQuestionsStore = defineStore('questions', () => {
   const bankLoaded = ref(false)
   const bankTotal = ref(0)
   const bankOffset = ref(0)
+  /**
+   * How many questions matching the current non-semantic filters have no
+   * embedding yet (`unembedded_total` of the list envelope). They can never
+   * appear in a `similar_to` result, so the page offers to backfill them.
+   */
+  const bankUnembeddedTotal = ref(0)
+  /** The `embed_questions` job started from that offer, while it is running. */
+  const embedJobId = ref<number | null>(null)
 
   const filters = ref<QuestionBankFilters>(emptyFilters())
 
@@ -108,7 +132,8 @@ export const useQuestionsStore = defineStore('questions', () => {
       current.type !== null ||
       current.difficulty !== null ||
       current.categoryId !== null ||
-      current.search !== ''
+      current.search !== '' ||
+      current.similarTo !== ''
     )
   })
 
@@ -177,6 +202,9 @@ export const useQuestionsStore = defineStore('questions', () => {
     if (current.search !== '') {
       query.q = current.search
     }
+    if (current.similarTo !== '') {
+      query.similar_to = current.similarTo
+    }
     return query
   }
 
@@ -195,6 +223,7 @@ export const useQuestionsStore = defineStore('questions', () => {
       }
       bank.value = page.items
       bankTotal.value = page.total
+      bankUnembeddedTotal.value = page.unembedded_total
       bankLoaded.value = true
       bankError.value = null
     } catch (error) {
@@ -305,6 +334,23 @@ export const useQuestionsStore = defineStore('questions', () => {
     return await duplicateQuestion(questionId)
   }
 
+  /**
+   * Queue the backfill of every question that still has no embedding
+   * (`question_ids: null`), and keep the job id so its progress survives
+   * leaving the page. Embedding is background work, so this returns as soon as
+   * the job exists — the caller polls it.
+   */
+  async function startEmbedBacklog(): Promise<number> {
+    const result = await embedQuestions({ question_ids: null })
+    embedJobId.value = result.job_id
+    return result.job_id
+  }
+
+  /** The embed job reached a terminal state; its progress is no longer shown. */
+  function clearEmbedJob(): void {
+    embedJobId.value = null
+  }
+
   return {
     drafts,
     draftsLoading,
@@ -322,8 +368,10 @@ export const useQuestionsStore = defineStore('questions', () => {
     bankLoaded,
     bankCount,
     bankTotal,
+    bankUnembeddedTotal,
     bankPage,
     bankPageCount,
+    embedJobId,
     filters,
     hasActiveFilter,
     loadDrafts,
@@ -339,5 +387,7 @@ export const useQuestionsStore = defineStore('questions', () => {
     updatePayload,
     create,
     duplicate,
+    startEmbedBacklog,
+    clearEmbedJob,
   }
 })

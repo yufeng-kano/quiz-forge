@@ -4,10 +4,10 @@ import type { DocumentListItem } from '@/api'
 /**
  * A document's title with, for a URL import, the page it came from.
  *
- * Shared by the 文件庫 table and the 上傳 tab's in-progress list so both cut a
- * long title the same way: one line with the full text in the tooltip
+ * Both lines cut the same way: one line with the full text in the tooltip
  * (docs/frontend.md 清單有界原則), never a wrapped block that makes a row six
- * lines tall.
+ * lines tall. Width comes from the table cell (`min-width: 0` +
+ * `table-layout: fixed`); this cell does not cap itself.
  */
 const props = defineProps<{ document: DocumentListItem }>()
 </script>
@@ -32,11 +32,9 @@ const props = defineProps<{ document: DocumentListItem }>()
 </template>
 
 <style scoped>
-/* `min-width: 0` so the ellipsis bites inside a flex row; the cap is what a
-   table cell without a fixed width needs before the rest of the row loses room */
 .document-title {
   min-width: 0;
-  max-width: 34rem;
+  width: 100%;
 }
 
 .document-title__text {

@@ -22,39 +22,23 @@
   },
   "pages": {
     "dashboard": {
-      "title": "總覽",
-      "description": "文件、題目與背景任務的整體狀態。"
-    },
-    "documents": {
-      "title": "文件"
+      "title": "總覽"
     },
     "documentDetail": {
       "title": "文件詳情",
       "subtitle": "文件 #{id}"
     },
     "jobs": {
-      "title": "任務中心",
-      "description": "所有背景任務的狀態、進度與失敗原因，可重試失敗任務。"
-    },
-    "review": {
-      "title": "審題",
-      "description": "檢視草稿題目並對照來源原文，編輯後採用或丟棄。"
-    },
-    "questions": {
-      "title": "題庫",
-      "description": "瀏覽已採用的題目，依分類、題型與難度篩選並勾選送匯出。"
+      "title": "任務中心"
     },
     "generate": {
-      "title": "出題",
-      "description": "選擇範圍、題型與數量，建立出題任務。"
+      "title": "出題"
     },
     "exports": {
-      "title": "匯出",
-      "description": "選擇紙張尺寸，查看歷次匯出紀錄並下載題目卷與答案卷。"
+      "title": "匯出"
     },
     "usage": {
-      "title": "用量",
-      "description": "依模型與用途統計 LLM token 累計用量。"
+      "title": "用量"
     }
   },
   "table": {
@@ -92,6 +76,8 @@
       "parsePage": "單頁重新解析",
       "rechunkDocument": "重新分段",
       "generateQuestions": "出題",
+      "embedQuestions": "題目向量化",
+      "bankAgentTurn": "選題助手回合",
       "exportDocx": "匯出考卷"
     }
   },
@@ -124,8 +110,6 @@
     "retry": "重試",
     "retrying": "重新排入中…",
     "retryQueued": "任務 #{id} 已重新排入佇列。",
-    "expandError": "顯示完整錯誤",
-    "collapseError": "收合錯誤",
     "none": "—",
     "emptyTitle": "沒有符合條件的任務",
     "emptyDescription": "調整篩選條件，或先上傳文件、建立出題與匯出任務。",
@@ -147,17 +131,11 @@
     }
   },
   "documents": {
-    "tabs": {
-      "label": "文件區分頁",
-      "upload": "上傳",
-      "library": "文件庫"
-    },
+    "pageTitle": "文件 - 共 {count} 份",
+    "filteredPageTitle": "文件 - {count} / {total} 份",
     "intake": {
-      "subtitle": "拖放檔案或貼上網址匯入，解析進度顯示在下方。",
-      "activeTitle": "尚未完成的解析",
-      "activeCount": "{count} 份",
-      "activeEmptyTitle": "沒有尚未完成的解析",
-      "activeEmptyDescription": "上傳檔案或匯入網址後，解析進度會顯示在這裡。",
+      "open": "上傳",
+      "modalTitle": "上傳檔案或匯入網址",
       "dropTitle": "把檔案拖到這裡上傳",
       "pickFile": "選擇檔案",
       "fileHint": "支援 PDF、PNG、JPG、DOCX。",
@@ -172,11 +150,10 @@
       "imported": "已匯入「{title}」，開始解析。"
     },
     "list": {
-      "count": "共 {count} 份文件",
-      "filteredCount": "共 {total} 份文件，符合條件 {count} 份",
       "search": "搜尋文件標題",
       "searchPlaceholder": "搜尋標題",
       "reload": "重新載入",
+      "activeSummary": "{count} 份解析尚未完成",
       "emptyTitle": "尚未有任何文件",
       "emptyDescription": "上傳掃描件、PDF、Word、圖片，或貼上網址匯入網頁內容。",
       "noMatchTitle": "沒有符合條件的文件",
@@ -188,9 +165,9 @@
       "all": "全部",
       "unfiled": "未分類",
       "loading": "載入資料夾中…",
-      "empty": "尚未建立資料夾，可用「新增資料夾」整理文件。",
-      "dragHint": "把文件列拖到資料夾即可移動。",
-      "create": "新增資料夾",
+      "empty": "尚未建立資料夾。按欄頭加號建立一個，再把文件列拖進來。",
+      "create": "新增",
+      "createAriaLabel": "新增資料夾",
       "createSubmit": "建立",
       "nameLabel": "資料夾名稱",
       "namePlaceholder": "輸入資料夾名稱",
@@ -223,6 +200,7 @@
       "renamed": "已改名為「{title}」。"
     },
     "row": {
+      "moreActions": "更多操作",
       "pageCount": "{count} 頁",
       "open": "開啟",
       "rename": "改名",
@@ -378,7 +356,7 @@
     "differenceRow": "相異點第 {no} 列"
   },
   "review": {
-    "remaining": "待審 {count} 題",
+    "pageTitle": "審題 - 待審 {count} 題",
     "reload": "重新載入",
     "emptyTitle": "目前沒有待審題目",
     "emptyDescription": "到出題頁建立出題任務，生成的題目會先進入待審清單。",
@@ -419,17 +397,31 @@
     }
   },
   "bank": {
-    "total": "共 {count} 題",
+    "pageTitle": "題庫 - 共 {count} 題",
+    "pageTitleSelected": "已選 - 共 {count} 題",
     "reload": "重新載入",
     "emptyTitle": "沒有符合條件的已採用題目",
     "emptyDescription": "先到審題頁採用題目、手動新增題目，或放寬篩選條件。",
+    "emptySelectedTitle": "尚未選取題目",
+    "emptySelectedDescription": "在題庫勾選題目。選題助手只帶你去看題，要自己勾。",
     "goReview": "前往審題",
-    "reject": "丟棄",
-    "rejecting": "丟棄中…",
+    "views": {
+      "bank": "題庫",
+      "selected": "已選"
+    },
+    "rejectAria": "丟棄題目 #{id}",
     "rejected": "題目 #{id} 已丟棄，並自動移出匯出選取。",
-    "duplicate": "複製",
-    "duplicating": "複製中…",
+    "duplicateAria": "複製題目 #{id}",
     "duplicated": "已複製為待審題目 #{id}，可到審題頁改造。",
+    "agent": {
+      "title": "選題助手",
+      "open": "展開選題助手",
+      "close": "收合選題助手",
+      "new": "新增對話",
+      "picker": "對話",
+      "created": "已建立新對話。",
+      "pickerEmpty": "還沒有對話"
+    },
     "create": {
       "action": "新增題目",
       "title": "新增題目",
@@ -469,17 +461,82 @@
       "anyDifficulty": "全部難度",
       "anySubject": "全部科目",
       "anyTopic": "全部主題",
-      "topicHint": "分類篩選以主題為單位；只選科目不會套用分類條件。",
       "loadingCategories": "載入分類中…",
-      "reset": "清除篩選"
+      "reset": "清除篩選",
+      "similar": "語意搜尋",
+      "similarPlaceholder": "描述你要的題目，例如：三角函數的實際應用",
+      "similarHint": "語意搜尋改變排序並濾掉相似度過低的題目，其他篩選照常生效；尚未向量化的題目不會出現。"
     },
     "selection": {
       "checkbox": "選取題目 #{id}",
-      "selectAll": "全選目前結果",
-      "deselectAll": "取消勾選目前結果",
-      "selected": "已選取 {count} 題準備匯出",
+      "selected": "已選取 {count} 題",
+      "viewSelected": "查看已選",
       "goExport": "前往匯出",
-      "clear": "清除選取"
+      "clear": "清除選取",
+      "unavailable": "題目 #{id} 已不在已採用題庫"
+    },
+    "embed": {
+      "notice": "有 {count} 題尚未向量化，語意搜尋與選題助手都找不到它們。",
+      "action": "補向量",
+      "starting": "建立任務中…",
+      "started": "已建立向量化任務 #{id}。",
+      "running": "向量化進行中",
+      "done": "題目向量化完成。",
+      "partial": "題目向量化完成，但有部分題目失敗：{error}",
+      "failed": "題目向量化失敗：{error}",
+      "failedNoDetail": "題目向量化失敗。"
+    }
+  },
+  "bankAgent": {
+    "reload": "重新載入",
+    "conversations": {
+      "untitled": "未命名對話",
+      "delete": "刪除對話",
+      "deleteTitle": "刪除對話",
+      "deleteMessage": "確定刪除對話「{title}」？該對話的訊息與提案會一併刪除。",
+      "deleteConfirm": "確定刪除",
+      "deleted": "已刪除對話。"
+    },
+    "messages": {
+      "emptyTitle": "開始對話找出題目",
+      "user": "你",
+      "assistant": "選題助手",
+      "meta": "{role} · {datetime}"
+    },
+    "composer": {
+      "label": "訊息",
+      "placeholder": "描述你要的題目…"
+    },
+    "turn": {
+      "running": "助手處理中",
+      "done": "助手已回覆。",
+      "failed": "這一回合失敗：{error}",
+      "failedNoDetail": "這一回合失敗。",
+      "retry": "重試這一回合",
+      "retried": "已重新排入這一回合。",
+      "retryFailed": "重試失敗，這一回合仍是失敗狀態。"
+    },
+    "proposals": {
+      "title": "提案題目（{count} 題）",
+      "open": "查看題目 #{id}",
+      "alreadySelected": "已選",
+      "missing": "題目 #{id} 已不在題庫。"
+    },
+    "steps": {
+      "show": "查詢過程（{count} 步）",
+      "hide": "收合查詢過程",
+      "searchTitle": "第 {step} 步 · 搜尋，命中 {count} 題",
+      "proposeTitle": "第 {step} 步 · 提案 {count} 題",
+      "replyTitle": "第 {step} 步 · 直接回覆",
+      "noFilters": "未加條件（整個題庫）",
+      "filterSimilarTo": "語意：{value}",
+      "filterQ": "關鍵字：{value}",
+      "filterType": "題型：{value}",
+      "filterDifficulty": "難度：{value}",
+      "filterCategory": "分類：{value}",
+      "filterCategoryUnknown": "分類 #{id}",
+      "apply": "套用到篩選",
+      "applied": "已把這組搜尋條件套進題庫篩選。"
     }
   },
   "generate": {

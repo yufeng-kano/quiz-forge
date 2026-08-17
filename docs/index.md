@@ -32,7 +32,7 @@
 | `docs/architecture.md` | Docker Compose 拓撲、nginx 設定、pg-as-queue、後端技術、LLM 介接、`.env` 變數 |
 | `docs/data-model.md` | 資料表邏輯定義與設計決定 |
 | `docs/ingestion.md` | 文件輸入管線：vision 解析契約（Markdown + bbox）、圖表裁切、網頁抽取、chunk 與分類、文件刪除與分類 GC |
-| `docs/question-bank.md` | 六題型 payload schema、出題流程、審題流程 |
+| `docs/question-bank.md` | 六題型 payload schema、出題流程、審題流程、題目向量化與語意搜尋、題庫選題助手（題庫右側欄） |
 | `docs/export.md` | Word 匯出：題目卷／答案卷、紙張尺寸、render 設計 |
 | `docs/frontend.md` | 前端技術（router/Pinia/i18n 規範）、頁面清單、視覺風格（白色簡潔）、清單有界原則、互動原則 |
 | `docs/data-inventory.md` | `data/` 內資料清單與用途 |
@@ -44,3 +44,9 @@
 | `docs/decisions/2026-08-15-initial-system-design.md` | 初始系統設計：D1–D11 技術決策、待確認事項、開發順序 |
 | `docs/decisions/2026-08-15-ux-overhaul-feature-expansion.md` | UX 大改與功能補強：手動建題、匯出卷面、搜尋分頁、分類管理、Dashboard/任務中心、rechunk、專業版面 |
 | `docs/decisions/2026-08-16-separate-frontend-container.md` | 前端獨立常駐 container（website），反向代理改名 proxy（資料夾/service/container 皆改名），website 與 proxy 分離 |
+| `docs/decisions/2026-08-17-bank-agent-semantic-selection.md` | 題庫選題助手與題目語意搜尋：`questions.embedding`、`embed_questions` job、`similar_to` 查詢、對話 agent 有界迴圈、agent 只提案不改選取；D7 已被 D8 推翻，D8 又被 D10 推翻 |
+| `docs/decisions/2026-08-17-bank-agent-own-pages.md` | 推翻 D7：選題助手曾改為獨立 `/conversations` 兩頁；已被同日 D10 推翻 |
+| `docs/decisions/2026-08-17-bank-on-questions-page.md` | 推翻 D8／D9：助手回到題庫右側欄；左欄可切已選；取消全選；D13 左右分開捲；D14 提案列跳到題目；D15 Esc 還原篩選與捲動 |
+| `docs/decisions/2026-08-17-compact-headers-and-job-errors.md` | 頁首只留頁名＋計數、狀態改純文字、任務錯誤改人話摘要 |
+| `docs/decisions/2026-08-17-documents-workspace-layout.md` | 文件頁改滿版工作區：側欄＋滿高表格，上傳改頁首 Modal；拿掉兩 tab 與浮動卡片 |
+| `docs/decisions/2026-08-17-list-pages-workspace.md` | 任務中心比照文件庫滿高表格；文件詳情大綱去卡片框。選題助手歷史頁已由 D10 撤回，不再適用本決策 |

@@ -152,7 +152,7 @@ onUnmounted(clearTimer)
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.dashboard.title')" :subtitle="t('pages.dashboard.description')">
+    <PageHeader :title="t('pages.dashboard.title')">
       <template #actions>
         <AppButton variant="secondary" :disabled="loading" @click="load()">
           {{ t('dashboard.refresh') }}

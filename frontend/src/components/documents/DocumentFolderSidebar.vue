@@ -3,6 +3,7 @@ import { computed, nextTick, ref, useTemplateRef } from 'vue'
 
 import type { Folder } from '@/api'
 import AppButton from '@/components/AppButton.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
@@ -17,7 +18,7 @@ import {
 } from './folders'
 
 /**
- * 資料夾欄 of the 文件庫 tab (docs/frontend.md 基礎架構).
+ * Folder sidebar of the documents workspace (docs/frontend.md).
  *
  * Two jobs in one column, because they are the same list:
  * - it filters the library — 全部 / 未分類 / one folder — through `v-model`;
@@ -258,8 +259,15 @@ async function removeFolder(folder: Folder): Promise<void> {
   <nav class="folders" :aria-label="t('documents.folders.label')">
     <div class="folders__head">
       <h2 class="folders__title">{{ t('documents.folders.title') }}</h2>
-      <AppButton variant="ghost" size="sm" :disabled="creating" @click="startCreating">
-        {{ t('documents.folders.create') }}
+      <AppButton
+        variant="ghost"
+        size="sm"
+        :disabled="creating"
+        :aria-label="t('documents.folders.createAriaLabel')"
+        :title="t('documents.folders.createAriaLabel')"
+        @click="startCreating"
+      >
+        <AppIcon name="plus" :size="16" />
       </AppButton>
     </div>
 
@@ -374,12 +382,11 @@ async function removeFolder(folder: Folder): Promise<void> {
       </li>
     </ul>
 
-    <p v-if="folders.loading" class="form-hint">{{ t('documents.folders.loading') }}</p>
-    <p v-else-if="folders.loadError !== null" class="form-error">{{ folders.loadError }}</p>
-    <p v-else-if="folders.folders.length === 0" class="form-hint">
+    <p v-if="folders.loading" class="folders__hint">{{ t('documents.folders.loading') }}</p>
+    <p v-else-if="folders.loadError !== null" class="folders__error">{{ folders.loadError }}</p>
+    <p v-else-if="folders.folders.length === 0" class="folders__hint">
       {{ t('documents.folders.empty') }}
     </p>
-    <p v-else class="form-hint">{{ t('documents.folders.dragHint') }}</p>
   </nav>
 </template>
 
@@ -388,14 +395,14 @@ async function removeFolder(folder: Folder): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-background);
+  min-height: 0;
+  height: 100%;
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
 }
 
 .folders__head {
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
@@ -403,13 +410,15 @@ async function removeFolder(folder: Folder): Promise<void> {
 
 .folders__title {
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .folders__create,
 .folders__rename {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: var(--space-2);
   width: 100%;
@@ -421,13 +430,13 @@ async function removeFolder(folder: Folder): Promise<void> {
   gap: var(--space-2);
 }
 
-/* Bounded height with its own scroll: the column must not grow the page as
-   folders pile up (docs/frontend.md 清單有界原則) */
+/* The column itself fills the workspace; only this list scrolls. */
 .folders__list {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.1rem;
-  max-height: min(28rem, 50vh);
+  min-height: 0;
   overflow-y: auto;
   padding: 0;
   list-style: none;
@@ -458,6 +467,7 @@ async function removeFolder(folder: Folder): Promise<void> {
   min-width: 0;
   padding: var(--space-1) var(--space-2);
   border: none;
+  border-left: 2px solid transparent;
   border-radius: var(--radius-sm);
   background: none;
   color: var(--color-text);
@@ -472,6 +482,7 @@ async function removeFolder(folder: Folder): Promise<void> {
 }
 
 .folders__select--active {
+  border-left-color: var(--color-accent);
   background: var(--color-accent-soft);
   color: var(--color-heading);
   font-weight: 600;
@@ -503,6 +514,21 @@ async function removeFolder(folder: Folder): Promise<void> {
 .folders__item:hover .folders__actions,
 .folders__item:focus-within .folders__actions {
   opacity: 1;
+}
+
+.folders__hint,
+.folders__error {
+  flex: none;
+  font-size: var(--font-size-sm);
+}
+
+.folders__hint {
+  color: var(--color-text-muted);
+}
+
+.folders__error {
+  color: var(--color-status-failed-text);
+  overflow-wrap: anywhere;
 }
 
 /* Without a pointer there is no hover to reveal them */

@@ -1,17 +1,21 @@
 <script setup lang="ts">
 /**
- * Header bar of a page: title (with optional secondary line) on the left, the
- * page's primary actions on the right.
+ * Header bar of a page: compact title on the left, the page's primary actions
+ * on the right.
  *
  * Every view renders exactly one of these as its first element, so the shell
  * has the same anchor line on every route. It sticks to the top of the content
  * region, which is what keeps the main action reachable while a long table or
  * a long document is scrolled.
+ *
+ * A count belongs in the title itself when it is the page's main number
+ * (「題庫 - 共 7 題」). `subtitle` is only for secondary data — a document id,
+ * a file count — never a how-to sentence about what the page is for.
  */
 defineProps<{
-  /** Localised page title. */
+  /** Localised page title, optionally already including a count. */
   title: string
-  /** Short line under the title: a count, an id, a one-sentence description. */
+  /** Secondary data under the title: a count, a document id. Not a how-to sentence. */
   subtitle?: string
 }>()
 </script>

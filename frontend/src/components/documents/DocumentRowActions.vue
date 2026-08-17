@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { RouterLink } from 'vue-router'
 
 import type { DocumentListItem } from '@/api'
-import AppButton from '@/components/AppButton.vue'
+import AppMenu from '@/components/ui/AppMenu.vue'
+import AppMenuItem from '@/components/ui/AppMenuItem.vue'
 import { useJobPolling } from '@/composables/useJobPolling'
 import { useAppI18n } from '@/i18n'
 import { useToastsStore } from '@/stores/toasts'
 
 /**
- * Actions of one document row: open, rename, move to a folder, retry the
- * failed parse job, delete.
+ * Actions of one document row, behind a single overflow trigger.
  *
  * Everything that opens a dialog is raised to the list view (`rename`, `move`,
  * `delete`), which owns those dialogs and the store calls; retrying is handled
@@ -21,19 +20,10 @@ import { useToastsStore } from '@/stores/toasts'
  * 移至資料夾 is deliberately present even though a row can be dragged onto the
  * folder column: dragging must not be the only way to file a document.
  */
-const props = withDefaults(
-  defineProps<{
-    document: DocumentListItem
-    jobId: number | null
-    /**
-     * Show 改名 and 移至資料夾. Only the 文件庫 table sets it: the 上傳 tab's
-     * list is about the parse that is still running, not about organising the
-     * library.
-     */
-    organizable?: boolean
-  }>(),
-  { organizable: false },
-)
+const props = defineProps<{
+  document: DocumentListItem
+  jobId: number | null
+}>()
 
 const emit = defineEmits<{
   rename: [document: DocumentListItem]
@@ -71,52 +61,21 @@ async function onRetry(): Promise<void> {
 </script>
 
 <template>
-  <div class="row-actions">
-    <RouterLink
-      class="row-actions__open"
-      :to="{ name: 'document-detail', params: { id: String(props.document.id) } }"
-    >
+  <AppMenu :label="t('documents.row.moreActions')">
+    <AppMenuItem :to="{ name: 'document-detail', params: { id: String(props.document.id) } }">
       {{ t('documents.row.open') }}
-    </RouterLink>
-
-    <AppButton
-      v-if="props.organizable"
-      variant="ghost"
-      size="sm"
-      @click="emit('rename', props.document)"
-    >
+    </AppMenuItem>
+    <AppMenuItem @select="emit('rename', props.document)">
       {{ t('documents.row.rename') }}
-    </AppButton>
-
-    <AppButton
-      v-if="props.organizable"
-      variant="ghost"
-      size="sm"
-      @click="emit('move', props.document)"
-    >
+    </AppMenuItem>
+    <AppMenuItem @select="emit('move', props.document)">
       {{ t('documents.folders.moveAction') }}
-    </AppButton>
-
-    <AppButton v-if="canRetry" variant="secondary" size="sm" :disabled="retrying" @click="onRetry">
+    </AppMenuItem>
+    <AppMenuItem v-if="canRetry" :disabled="retrying" @select="onRetry">
       {{ retrying ? t('documents.row.retrying') : t('documents.row.retryJob') }}
-    </AppButton>
-
-    <AppButton variant="ghost" size="sm" @click="emit('delete', props.document)">
+    </AppMenuItem>
+    <AppMenuItem danger @select="emit('delete', props.document)">
       {{ t('documents.row.delete') }}
-    </AppButton>
-  </div>
+    </AppMenuItem>
+  </AppMenu>
 </template>
-
-<style scoped>
-.row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
-
-.row-actions__open {
-  font-size: var(--font-size-md);
-}
-</style>

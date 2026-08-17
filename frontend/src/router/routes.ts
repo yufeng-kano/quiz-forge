@@ -11,6 +11,8 @@ export const ROUTE_NAMES = [
   'jobs',
   'review',
   'questions',
+  'conversations',
+  'conversation',
   'generate',
   'exports',
   'usage',
@@ -20,8 +22,12 @@ export type RouteName = (typeof ROUTE_NAMES)[number]
 
 /**
  * Everything except the landing route is lazily imported, so a cold visit only
- * downloads the Dashboard chunk. `props: true` on `document-detail` feeds
- * `:id` straight into the component, which then needs no `useRoute()`.
+ * downloads the Dashboard chunk. `props: true` on `document-detail` and
+ * `conversation` feeds `:id` straight into the component.
+ *
+ * `/conversations` routes stay registered so old bookmarks do not 404; they
+ * `replace` onto `/questions` (with `?conversation=` when `:id` is a positive
+ * integer) rather than rendering a standalone chat page.
  */
 export const routes: RouteRecordRaw[] = [
   {
@@ -54,6 +60,17 @@ export const routes: RouteRecordRaw[] = [
     path: '/questions',
     name: 'questions',
     component: () => import('@/views/QuestionBankView.vue'),
+  },
+  {
+    path: '/conversations',
+    name: 'conversations',
+    component: () => import('@/views/ConversationsRedirect.vue'),
+  },
+  {
+    path: '/conversations/:id',
+    name: 'conversation',
+    component: () => import('@/views/ConversationsRedirect.vue'),
+    props: true,
   },
   {
     path: '/generate',

@@ -40,8 +40,21 @@ const props = withDefaults(
      * row means (see the 文件庫 folder column).
      */
     draggableRows?: boolean
+    /**
+     * Stretch to the parent pane and scroll internally. Used by the documents
+     * workspace so a short list still fills the remaining viewport. Off by
+     * default: other pages keep growing with content, then clamp at
+     * `--data-table-max-height`.
+     */
+    fillHeight?: boolean
   }>(),
-  { loading: false, skeletonRowCount: 5, clickableRows: false, draggableRows: false },
+  {
+    loading: false,
+    skeletonRowCount: 5,
+    clickableRows: false,
+    draggableRows: false,
+    fillHeight: false,
+  },
 )
 
 const emit = defineEmits<{ rowClick: [row: T]; rowDragStart: [row: T, event: DragEvent] }>()
@@ -133,7 +146,7 @@ function onRowDragStart(row: T, event: DragEvent): void {
 </script>
 
 <template>
-  <div class="data-table">
+  <div class="data-table" :class="{ 'data-table--fill': props.fillHeight }">
     <div class="data-table__scroll">
       <table class="data-table__table">
         <thead>
@@ -229,6 +242,15 @@ function onRowDragStart(row: T, event: DragEvent): void {
   overflow: hidden;
 }
 
+.data-table--fill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-self: stretch;
+  min-height: 0;
+  height: 100%;
+}
+
 /* The scroll container is the table's own box: it keeps a wide table from
    pushing the page sideways, and it is what the sticky header sticks to. */
 .data-table__scroll {
@@ -239,8 +261,15 @@ function onRowDragStart(row: T, event: DragEvent): void {
   max-height: var(--data-table-max-height, max(22rem, calc(100vh - 18rem)));
 }
 
+.data-table--fill .data-table__scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
 .data-table__table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   font-size: var(--font-size-md);
@@ -263,7 +292,8 @@ function onRowDragStart(row: T, event: DragEvent): void {
 .data-table__table td {
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-hairline);
-  vertical-align: top;
+  vertical-align: middle;
+  overflow: hidden;
 }
 
 .data-table__table tbody tr:last-child td {
@@ -312,6 +342,19 @@ function onRowDragStart(row: T, event: DragEvent): void {
 .data-table__empty {
   padding: 0;
   border-bottom: none;
+}
+
+.data-table--fill .data-table__table:has(.data-table__empty) {
+  height: 100%;
+}
+
+.data-table--fill tbody:has(.data-table__empty) {
+  height: 100%;
+}
+
+.data-table--fill .data-table__empty {
+  height: 100%;
+  vertical-align: middle;
 }
 
 .data-table__empty :deep(.empty-state) {

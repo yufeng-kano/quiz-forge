@@ -34,18 +34,32 @@ const sidebarCollapsed = ref(false)
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  /* Hard viewport height so a long workspace list cannot grow the shell
+     (docs/decisions/2026-08-17-bank-on-questions-page.md D13). */
   min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .app-shell.is-collapsed {
   grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr);
 }
 
+/* Flex column so workspace pages can `flex: 1` into the leftover height.
+   `overflow: hidden` keeps `/questions` from sharing one scroll frame
+   (docs/decisions/2026-08-17-bank-on-questions-page.md D13). Non-workspace
+   pages scroll their own `.page` in main.css. */
 .app-main {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   width: 100%;
   max-width: var(--content-max-width);
   padding: 0 var(--content-padding-x) var(--space-7);
+  overflow: hidden;
 }
 
 /* Same breakpoint as the sidebar's own collapse rule */

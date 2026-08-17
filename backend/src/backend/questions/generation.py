@@ -32,8 +32,9 @@ scanned for source-referential wording (「根據教材內容」「文中提到�
 regeneration call with a corrective instruction appended; a hit on the retry
 too raises `SourceReferentialPhraseError`, which falls into the same
 per-question failure path as any other generation error above — the question
-is not inserted, the job keeps going, and the phrase shows up in
-`jobs.error`. This is pure string/regex matching, no extra LLM judge call,
+is not inserted, the job keeps going, and `jobs.error` records the
+teacher-facing reason class「題幹引用教材」(not the exception name or the
+banned phrase). This is pure string/regex matching, no extra LLM judge call,
 and both the first and the retry `llm.chat()` calls record `llm_usage` as
 normal (that recording lives inside `LLMClient`, so it needs no
 special-casing here).
@@ -58,9 +59,20 @@ from pydantic import BaseModel
 
 from backend.core.config import get_settings
 from backend.jobs.context import JobContext
+from backend.jobs.error_summary import (
+    GENERATION_SOURCE_REFERENTIAL,
+    JOB_FAILED,
+    JobFailed,
+    generation_no_material,
+    generation_short_material,
+    generation_unknown_type,
+    join_summaries,
+    summarize_generation_failures,
+)
 from backend.jobs.registry import register_handler
 from backend.llm.client import LLMClient, get_llm_client
 from backend.models.question import Question
+from backend.questions.embedding import EMBED_QUESTION_PURPOSE, flatten_question_payload
 from backend.questions.prompts import build_prompt
 from backend.questions.schemas import dump_payload, payload_model_for_type
 from backend.questions.selection import GenerationUnit, select_units
@@ -74,7 +86,7 @@ class SourceReferentialPhraseError(RuntimeError):
     caught by `generate_questions`'s existing per-question failure handling —
     same treatment as a schema-validation failure: the question is not
     inserted, the job's other questions are unaffected, and it is recorded
-    in the job's failure summary."""
+    in the job's failure summary as the reason class「題幹引用教材」."""
 
 
 # docs/question-bank.md 題幹自足原則 — wording that leaks "you had to have read
@@ -221,6 +233,13 @@ async def _generate_one(
     unit: GenerationUnit,
     difficulty: str | None,
 ) -> Question:
+    """Generates and embeds one question. The embedding call is inside this
+    function's own try/except-free body, so its failure surfaces to
+    `generate_questions`'s per-unit `try/except` exactly like a generation or
+    self-containment failure would — the question is not inserted, the job's
+    other questions are unaffected, and it shows up in `jobs.error`
+    (docs/question-bank.md 題目向量化與語意搜尋 — generate_questions job 入庫時
+    同步 embed，本來就在背景執行)."""
     prompt = build_prompt(question_type, unit.contents, difficulty)
     payload, banned_phrase = await _generate_payload(llm, model_cls, question_type, prompt)
     if banned_phrase is not None:
@@ -233,12 +252,17 @@ async def _generate_one(
                 f"generated {question_type!r} question still contains source-referential "
                 f"phrase {banned_phrase!r} after regeneration: {payload!r}"
             )
+    [embedding] = await llm.embed(
+        texts=[flatten_question_payload(question_type, payload)],
+        purpose=EMBED_QUESTION_PURPOSE,
+    )
     return Question(
         type=question_type,
         difficulty=difficulty,
         status="draft",
         payload=payload,
         source_chunk_ids=unit.chunk_ids,
+        embedding=embedding,
     )
 
 
@@ -272,8 +296,8 @@ async def generate_questions(ctx: JobContext) -> None:
 
         try:
             model_cls = payload_model_for_type(question_type)
-        except ValueError as exc:
-            notes.append(f"item {item_index} (type={question_type!r}): {exc}")
+        except ValueError:
+            notes.append(generation_unknown_type())
             continue
 
         units = await select_units(
@@ -285,16 +309,10 @@ async def generate_questions(ctx: JobContext) -> None:
             settings=settings,
         )
         if not units:
-            notes.append(
-                f"item {item_index} (type={question_type!r}): no eligible source material "
-                f"scope document_ids={document_ids} category_ids={category_ids}"
-            )
+            notes.append(generation_no_material(question_type))
             continue
         if len(units) < count:
-            notes.append(
-                f"item {item_index} (type={question_type!r}): requested {count} but only "
-                f"{len(units)} eligible unit(s) of source material found"
-            )
+            notes.append(generation_short_material(count, len(units)))
         item_plans.append((question_type, model_cls, units))
 
     total = sum(len(units) for _, _, units in item_plans)
@@ -303,7 +321,7 @@ async def generate_questions(ctx: JobContext) -> None:
     # one running index/total across the whole job (docs/question-bank.md —
     # progress 以全部題數合計顯示).
     success = 0
-    failures: list[str] = []
+    failure_reasons: list[str | None] = []
     index = 0
     for question_type, model_cls, units in item_plans:
         for unit in units:
@@ -322,19 +340,17 @@ async def generate_questions(ctx: JobContext) -> None:
                     question_type,
                     unit.chunk_ids,
                 )
-                failures.append(
-                    f"unit {index} (type={question_type!r}, chunks={unit.chunk_ids}): "
-                    f"{type(exc).__name__}: {exc}"
-                )
+                if isinstance(exc, SourceReferentialPhraseError):
+                    failure_reasons.append(GENERATION_SOURCE_REFERENTIAL)
+                else:
+                    failure_reasons.append(None)
             await ctx.set_progress(f"{index}/{total}")
 
-    if failures:
-        notes.append(
-            f"{len(failures)}/{total} generation call(s) failed:\n" + "\n".join(failures)
-        )
+    if failure_reasons:
+        notes.append(summarize_generation_failures(failure_reasons))
 
     if success == 0:
-        raise RuntimeError("; ".join(notes) or "all generation attempts failed")
+        raise JobFailed(join_summaries(notes) or JOB_FAILED)
 
     if notes:
-        ctx.job.error = "; ".join(notes)
+        ctx.job.error = join_summaries(notes)

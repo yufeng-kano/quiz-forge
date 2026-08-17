@@ -34,10 +34,6 @@ const { t } = useAppI18n()
 const store = useJobListStore()
 const toasts = useToastsStore()
 
-/** Characters of `jobs.error` shown before the row offers to expand it. */
-const ERROR_PREVIEW_LENGTH = 90
-
-const expandedErrorIds = ref<number[]>([])
 const retryingJobId = ref<number | null>(null)
 
 const statusOptions = JOB_STATUSES
@@ -108,25 +104,6 @@ function hasProgress(job: Job): boolean {
   return (job.progress ?? '') !== ''
 }
 
-function errorPreview(job: Job): string {
-  const error = job.error ?? ''
-  return error.length > ERROR_PREVIEW_LENGTH ? `${error.slice(0, ERROR_PREVIEW_LENGTH)}…` : error
-}
-
-function isTruncated(job: Job): boolean {
-  return (job.error ?? '').length > ERROR_PREVIEW_LENGTH
-}
-
-function isExpanded(job: Job): boolean {
-  return expandedErrorIds.value.includes(job.id)
-}
-
-function toggleError(job: Job): void {
-  expandedErrorIds.value = isExpanded(job)
-    ? expandedErrorIds.value.filter((id) => id !== job.id)
-    : [...expandedErrorIds.value, job.id]
-}
-
 async function onRetry(job: Job): Promise<void> {
   retryingJobId.value = job.id
   try {
@@ -191,8 +168,8 @@ onUnmounted(clearTimer)
 </script>
 
 <template>
-  <div class="page">
-    <PageHeader :title="t('pages.jobs.title')" :subtitle="t('pages.jobs.description')">
+  <div class="page page--workspace">
+    <PageHeader :title="t('pages.jobs.title')">
       <template #actions>
         <AppButton variant="secondary" :disabled="store.loading" @click="store.load()">
           {{ t('jobs.refresh') }}
@@ -200,86 +177,103 @@ onUnmounted(clearTimer)
       </template>
     </PageHeader>
 
-    <section class="card jobs__filters">
-      <div class="form-field">
-        <label class="form-label" for="jobs-status-filter">{{ t('jobs.filters.status') }}</label>
-        <select id="jobs-status-filter" v-model="selectedStatus" class="form-select">
-          <option value="">{{ t('jobs.filters.anyStatus') }}</option>
-          <option v-for="status in statusOptions" :key="status" :value="status">
-            {{ t(`status.${status}`) }}
-          </option>
-        </select>
-      </div>
-
-      <div class="form-field">
-        <label class="form-label" for="jobs-kind-filter">{{ t('jobs.filters.kind') }}</label>
-        <select id="jobs-kind-filter" v-model="selectedKind" class="form-select">
-          <option value="">{{ t('jobs.filters.anyKind') }}</option>
-          <option v-for="kind in kindOptions" :key="kind" :value="kind">
-            {{ jobKindLabel(kind) }}
-          </option>
-        </select>
-      </div>
-    </section>
-
     <p v-if="store.loadError !== null" class="error-banner">
       {{ store.loadError }}
       <AppButton variant="secondary" @click="store.load()">{{ t('jobs.refresh') }}</AppButton>
     </p>
 
-    <DataTable
-      :columns="columns"
-      :rows="store.jobs"
-      :row-key="(job: Job) => job.id"
-      :loading="store.loading"
-      :empty-title="t('jobs.emptyTitle')"
-      :empty-description="t('jobs.emptyDescription')"
-    >
-      <template #status="{ row }">
-        <StatusBadge :status="row.status" />
-      </template>
-
-      <template #progress="{ row }">
-        <ProgressText
-          v-if="hasProgress(row) || !isTerminalJobStatus(row.status)"
-          :progress="row.progress"
-        />
-        <span v-else class="jobs__muted">{{ t('jobs.none') }}</span>
-      </template>
-
-      <template #error="{ row }">
-        <div v-if="row.error !== null && row.error !== ''" class="jobs__error">
-          <p class="jobs__error-text">{{ isExpanded(row) ? row.error : errorPreview(row) }}</p>
-          <AppButton v-if="isTruncated(row)" variant="ghost" size="sm" @click="toggleError(row)">
-            {{ isExpanded(row) ? t('jobs.collapseError') : t('jobs.expandError') }}
-          </AppButton>
+    <div class="workspace">
+      <div class="workspace__toolbar">
+        <div class="form-field">
+          <label class="form-label" for="jobs-status-filter">{{ t('jobs.filters.status') }}</label>
+          <select id="jobs-status-filter" v-model="selectedStatus" class="form-select">
+            <option value="">{{ t('jobs.filters.anyStatus') }}</option>
+            <option v-for="status in statusOptions" :key="status" :value="status">
+              {{ t(`status.${status}`) }}
+            </option>
+          </select>
         </div>
-        <span v-else class="jobs__muted">{{ t('jobs.none') }}</span>
-      </template>
 
-      <template #actions="{ row }">
-        <AppButton
-          v-if="row.status === 'failed'"
-          variant="secondary"
-          size="sm"
-          :disabled="retryingJobId === row.id"
-          @click="onRetry(row)"
-        >
-          {{ retryingJobId === row.id ? t('jobs.retrying') : t('jobs.retry') }}
-        </AppButton>
-      </template>
-    </DataTable>
+        <div class="form-field">
+          <label class="form-label" for="jobs-kind-filter">{{ t('jobs.filters.kind') }}</label>
+          <select id="jobs-kind-filter" v-model="selectedKind" class="form-select">
+            <option value="">{{ t('jobs.filters.anyKind') }}</option>
+            <option v-for="kind in kindOptions" :key="kind" :value="kind">
+              {{ jobKindLabel(kind) }}
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <DataTable
+        :columns="columns"
+        :rows="store.jobs"
+        :row-key="(job: Job) => job.id"
+        :loading="store.loading"
+        :empty-title="t('jobs.emptyTitle')"
+        :empty-description="t('jobs.emptyDescription')"
+        fill-height
+      >
+        <template #status="{ row }">
+          <StatusBadge :status="row.status" />
+        </template>
+
+        <template #progress="{ row }">
+          <ProgressText
+            v-if="hasProgress(row) || !isTerminalJobStatus(row.status)"
+            :progress="row.progress"
+          />
+          <span v-else class="jobs__muted">{{ t('jobs.none') }}</span>
+        </template>
+
+        <template #error="{ row }">
+          <span
+            v-if="row.error !== null && row.error !== ''"
+            class="jobs__error text-ellipsis"
+            :title="row.error"
+          >
+            {{ row.error }}
+          </span>
+          <span v-else class="jobs__muted">{{ t('jobs.none') }}</span>
+        </template>
+
+        <template #actions="{ row }">
+          <AppButton
+            v-if="row.status === 'failed'"
+            variant="secondary"
+            size="sm"
+            :disabled="retryingJobId === row.id"
+            @click="onRetry(row)"
+          >
+            {{ retryingJobId === row.id ? t('jobs.retrying') : t('jobs.retry') }}
+          </AppButton>
+        </template>
+      </DataTable>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.jobs__filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
+.page > .error-banner {
+  margin: var(--space-3) 0 0;
 }
 
-.jobs__filters .form-field {
+.workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workspace__toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+}
+
+.workspace__toolbar .form-field {
   min-width: 12rem;
 }
 
@@ -288,16 +282,8 @@ onUnmounted(clearTimer)
 }
 
 .jobs__error {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
-  min-width: 12rem;
-}
-
-.jobs__error-text {
+  min-width: 0;
+  width: 100%;
   color: var(--color-status-failed-text);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 </style>

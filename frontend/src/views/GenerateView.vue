@@ -96,7 +96,7 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.generate.title')" :subtitle="t('pages.generate.description')" />
+    <PageHeader :title="t('pages.generate.title')" />
 
     <div class="generate">
       <form class="card generate__form" @submit.prevent="onSubmit">

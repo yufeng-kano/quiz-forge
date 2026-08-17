@@ -395,8 +395,7 @@ async def test_url_document_file_download_aborts_when_exceeding_max_bytes(
     job = await _run_parse_document_job(document_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert "URL_FETCH_MAX_BYTES" in job.error
+    assert job.error == "任務失敗"
 
     async with AsyncSessionLocal() as session:
         document = await session.get(Document, document_id)
@@ -420,9 +419,7 @@ async def test_url_document_unsupported_content_type_fails_job_with_clear_messag
     job = await _run_parse_document_job(document_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert "unsupported content-type" in job.error.lower()
-    assert "application/zip" in job.error
+    assert job.error == "任務失敗"
 
     async with AsyncSessionLocal() as session:
         document = await session.get(Document, document_id)

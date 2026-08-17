@@ -19,6 +19,7 @@ export const ICON_PATHS = {
   ],
   review: ['M9 4h6v3H9z', 'M15 5.5h4V21H5V5.5h4', 'M8.5 13l2.5 2.5L16 10'],
   questions: ['M12 3l9 5-9 5-9-5z', 'M3 13l9 5 9-5'],
+  conversations: ['M5 5h14v10H9l-4 4V5z'],
   exports: ['M12 4v10', 'M8 11l4 4 4-4', 'M5 20h14'],
   jobs: ['M3 12h4l2.5 7 4-14 2.5 7H21'],
   usage: ['M5 20V10', 'M12 20V4', 'M19 20v-7'],
@@ -33,6 +34,9 @@ export const ICON_PATHS = {
   link: ['M14 4h6v6', 'M20 4l-8.5 8.5', 'M18 14.5V20H4V6h5.5'],
   trash: ['M4.5 7h15', 'M9.5 7V4.5h5V7', 'M6.5 7l1 13h9l1-13'],
   refresh: ['M20 12a8 8 0 11-2.4-5.7', 'M20.5 3.5V9h-5.5'],
+  plus: ['M12 5v14', 'M5 12h14'],
+  more: ['M5 12h2', 'M11 12h2', 'M17 12h2'],
+  duplicate: ['M8 8h11v11H8z', 'M5 5h11v3', 'M5 5v11h3'],
 
   /* Feedback */
   success: ['M12 4a8 8 0 100 16 8 8 0 000-16z', 'M8.5 12.3l2.4 2.4 4.6-5.1'],

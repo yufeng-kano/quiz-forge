@@ -5,6 +5,7 @@ import type { QuestionListItem } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import QuestionCard from '@/components/questions/QuestionCard.vue'
 import QuestionDisplay from '@/components/questions/QuestionDisplay.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
 import { useExportSelectionStore } from '@/stores/exportSelection'
@@ -22,6 +23,10 @@ import { useToastsStore } from '@/stores/toasts'
  * 複製 creates a `draft` copy (docs/…-ux-overhaul-feature-expansion.md F1), so
  * the copy is not in the bank — the toast says where it went instead of
  * leaving the user looking for it here.
+ *
+ * 複製 / 丟棄 are icon-only: they are secondary next to the checkbox
+ * (docs/decisions/2026-08-17-bank-on-questions-page.md D12). Review keeps
+ * labelled 採用／丟棄／編輯 buttons.
  */
 const props = defineProps<{ question: QuestionListItem }>()
 
@@ -64,7 +69,7 @@ async function onDuplicate(): Promise<void> {
 </script>
 
 <template>
-  <QuestionCard :question="question">
+  <QuestionCard :question="question" flush>
     <template #select>
       <input
         type="checkbox"
@@ -76,11 +81,25 @@ async function onDuplicate(): Promise<void> {
     </template>
 
     <template #actions>
-      <AppButton variant="secondary" size="sm" :disabled="acting !== null" @click="onDuplicate">
-        {{ acting === 'duplicate' ? t('bank.duplicating') : t('bank.duplicate') }}
+      <AppButton
+        variant="ghost"
+        size="sm"
+        :disabled="acting !== null"
+        :aria-label="t('bank.duplicateAria', { id: question.id })"
+        :title="t('bank.duplicateAria', { id: question.id })"
+        @click="onDuplicate"
+      >
+        <AppIcon name="duplicate" :size="16" />
       </AppButton>
-      <AppButton variant="secondary" size="sm" :disabled="acting !== null" @click="onReject">
-        {{ acting === 'reject' ? t('bank.rejecting') : t('bank.reject') }}
+      <AppButton
+        variant="ghost"
+        size="sm"
+        :disabled="acting !== null"
+        :aria-label="t('bank.rejectAria', { id: question.id })"
+        :title="t('bank.rejectAria', { id: question.id })"
+        @click="onReject"
+      >
+        <AppIcon name="trash" :size="16" />
       </AppButton>
     </template>
 

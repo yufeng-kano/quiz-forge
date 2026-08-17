@@ -132,10 +132,6 @@ const difficultyLabel = computed(() =>
 }
 
 .job-row__item {
-  padding: 0.05rem var(--space-2);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-pill);
-  background: var(--color-background);
   color: var(--color-text);
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;

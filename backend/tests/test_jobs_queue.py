@@ -107,8 +107,7 @@ async def test_run_claimed_job_failure_writes_error_not_retry_count() -> None:
         fetched = await session.get(Job, job_id)
         assert fetched is not None
         assert fetched.status == "failed"
-        assert fetched.error is not None
-        assert "synthetic failure for test" in fetched.error
+        assert fetched.error == "任務失敗"
         # retry_count only moves when a human/API retries the job (see
         # POST /v1/jobs/{id}/retry) — a bare failure does not bump it.
         assert fetched.retry_count == 0
@@ -126,8 +125,7 @@ async def test_run_claimed_job_unknown_kind_fails_with_message() -> None:
         fetched = await session.get(Job, job_id)
         assert fetched is not None
         assert fetched.status == "failed"
-        assert fetched.error is not None
-        assert "no handler registered" in fetched.error
+        assert fetched.error == "任務種類不存在"
 
 
 async def test_reset_stale_running_jobs_requeues_only_running_rows() -> None:

@@ -4,6 +4,7 @@ from backend.db.base import Base
 from backend.models.asset import Asset
 from backend.models.category import Category
 from backend.models.chunk import Chunk
+from backend.models.conversation import Conversation, ConversationMessage
 from backend.models.document import Document
 from backend.models.export import Export
 from backend.models.folder import Folder
@@ -17,6 +18,8 @@ __all__ = [
     "Asset",
     "Category",
     "Chunk",
+    "Conversation",
+    "ConversationMessage",
     "Document",
     "Export",
     "Folder",

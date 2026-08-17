@@ -10,10 +10,9 @@ import AppIcon from './AppIcon.vue'
  * Main navigation.
  *
  * The active item is computed rather than left to `router-link-active`:
- * `/documents/:id` is its own route record with no nav entry of its own, so the
- * built-in classes would leave the navigation unhighlighted while the user sits
- * on a document detail page. `NAV_ITEMS[].matches` maps that route back onto
- * the document entry.
+ * `/documents/:id` is its own route record with no nav entry of its own, so
+ * the built-in classes would leave the navigation unhighlighted on that
+ * page. `NAV_ITEMS[].matches` maps each detail route back onto its list entry.
  *
  * `collapsed` is the user's own choice; below the breakpoint in the stylesheet
  * the sidebar collapses to icons regardless. Labels are never removed from the

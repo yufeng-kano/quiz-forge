@@ -32,6 +32,27 @@ a:hover {
   gap: var(--space-5);
 }
 
+/* Non-workspace pages (總覽／審題／出題／匯出／用量／文件詳情) scroll
+   themselves. `.app-main` stays `overflow: hidden` so a workspace page
+   cannot turn the main column into a shared scroll frame. */
+.page:not(.page--workspace) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Opt-in for list / split workspaces (documents / jobs / 題庫). Non-workspace
+   pages keep natural height and must not be forced to the viewport. The
+   used height comes from `.app-shell` (100dvh) via `.app-main`, not from
+   the page's content. */
+.page--workspace {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  gap: 0;
+}
+
 /* Surface used by every content block that is not a table: cards, panels,
    filter bars. One definition so borders and radii stay identical everywhere */
 .card {

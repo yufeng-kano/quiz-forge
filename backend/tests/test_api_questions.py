@@ -4,11 +4,24 @@ The `client` fixture disables the job worker pool, so `POST /v1/generate`
 here only exercises row/job creation (the `generate_questions` handler
 itself, including its LLM calls, is covered against a mocked transport in
 `test_questions_generation.py` and against the live provider in the e2e
-run — see task report)."""
+run — see task report). `GET /v1/questions?similar_to=...` does call the LLM
+client synchronously in the request path (docs/question-bank.md 題目向量化與
+語意搜尋 D3) -- those tests fake it the same way `test_questions_generation.py`
+does (a real `LLMClient` over an `httpx2.MockTransport`), monkeypatched onto
+`backend.api.v1.questions.get_llm_client`."""
 
+import json
+import math
+
+import httpx2
+import openai
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
+import backend.api.v1.questions as questions_module
+from backend.core.config import Settings
 from backend.db.session import AsyncSessionLocal
+from backend.llm.client import LLMClient
 from backend.models.category import Category
 from backend.models.chunk import Chunk
 from backend.models.document import Document
@@ -50,6 +63,7 @@ async def _make_question(
     difficulty: str | None = None,
     payload: dict[str, object] | None = None,
     source_chunk_ids: list[int] | None = None,
+    embedding: list[float] | None = None,
 ) -> int:
     async with AsyncSessionLocal() as session:
         question = Question(
@@ -64,11 +78,78 @@ async def _make_question(
                 "explanation": None,
             },
             source_chunk_ids=source_chunk_ids or [],
+            embedding=embedding,
         )
         session.add(question)
         await session.commit()
         await session.refresh(question)
         return question.id
+
+
+async def _get_question_row(question_id: int) -> Question:
+    async with AsyncSessionLocal() as session:
+        question = await session.get(Question, question_id)
+        assert question is not None
+        return question
+
+
+async def _embed_question_job_payloads() -> list[dict[str, object]]:
+    """Every enqueued `embed_questions` job's payload, in creation order —
+    used to assert a `POST`/`PATCH` enqueued exactly one, for exactly the
+    right question id(s)."""
+    async with AsyncSessionLocal() as session:
+        jobs = (
+            (
+                await session.execute(
+                    select(Job).where(Job.kind == "embed_questions").order_by(Job.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [job.payload for job in jobs]
+
+
+def _unit_vector(angle_degrees: float, dim: int) -> list[float]:
+    radians = math.radians(angle_degrees)
+    vector = [0.0] * dim
+    vector[0] = math.cos(radians)
+    vector[1] = math.sin(radians)
+    return vector
+
+
+def _embeddings_response(*, model: str, vector: list[float]) -> httpx2.Response:
+    return httpx2.Response(
+        200,
+        json={
+            "object": "list",
+            "model": model,
+            "data": [{"object": "embedding", "index": 0, "embedding": vector}],
+            "usage": {"prompt_tokens": 2, "total_tokens": 2},
+        },
+    )
+
+
+def _fake_embed_client_returning(vector: list[float]) -> LLMClient:
+    """A fake `LLMClient` (real `LLMClient` over an `httpx2.MockTransport`,
+    same pattern as `test_questions_generation.py`) whose `embed()` always
+    answers with `vector`, regardless of the input text — enough for
+    `similar_to` tests, which only ever embed the one free-text query per
+    request."""
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        return _embeddings_response(model=body["model"], vector=vector)
+
+    settings = Settings(llm_base_url="https://llm.test/v1", llm_api_key="test-key-not-real")
+    fake_openai_client = openai.AsyncOpenAI(
+        base_url=settings.llm_base_url,
+        api_key=settings.llm_api_key,
+        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)),
+    )
+    return LLMClient(
+        settings=settings, session_factory=AsyncSessionLocal, openai_client=fake_openai_client
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +387,39 @@ def test_list_questions_rejects_limit_above_settings_max(client: TestClient) -> 
     assert response.status_code == 422
 
 
+async def test_list_questions_unembedded_total_counts_null_embedding_rows(
+    client: TestClient,
+) -> None:
+    """`unembedded_total` (docs/question-bank.md 題目向量化與語意搜尋) is
+    present and correct even when `similar_to` was never given."""
+    dim = questions_module.get_settings().embedding_dim
+    await _make_question(embedding=None)
+    await _make_question(embedding=_unit_vector(0, dim))
+    await _make_question(embedding=None)
+
+    response = client.get("/v1/questions")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    assert body["unembedded_total"] == 2
+
+
+async def test_list_questions_unembedded_total_respects_hard_filters(
+    client: TestClient,
+) -> None:
+    """`unembedded_total` only counts rows matching the non-semantic filters
+    (status/type/difficulty/category_id/q) already in effect, not every
+    unembedded question in the whole bank."""
+    await _make_question(status="draft", embedding=None)
+    await _make_question(status="approved", embedding=None)
+
+    response = client.get("/v1/questions", params={"status": "approved"})
+
+    assert response.status_code == 200
+    assert response.json()["unembedded_total"] == 1
+
+
 # ---------------------------------------------------------------------------
 # GET /v1/questions -- q search (F3)
 # ---------------------------------------------------------------------------
@@ -345,6 +459,93 @@ async def test_list_questions_q_matches_nothing_returns_empty_envelope(
     await _make_question()
 
     response = client.get("/v1/questions", params={"q": "不存在的字串xyz"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/questions -- similar_to semantic search (D3)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_questions_similar_to_orders_by_similarity_and_applies_threshold(
+    client: TestClient, monkeypatch
+) -> None:
+    """docs/question-bank.md 題目向量化與語意搜尋 D3: `similar_to` embeds the
+    query once, orders by cosine similarity descending, drops rows below
+    `QUESTION_SIMILARITY_MIN` (default 0.2) and rows with a `NULL`
+    embedding — while every other filter still applies."""
+    dim = questions_module.get_settings().embedding_dim
+    query_vector = _unit_vector(0, dim)
+    close_id = await _make_question(embedding=_unit_vector(0, dim))  # similarity 1.0
+    mid_id = await _make_question(embedding=_unit_vector(60, dim))  # cos(60deg) = 0.5
+    await _make_question(embedding=_unit_vector(85, dim))  # cos(85deg) ~= 0.09 -> below 0.2
+    await _make_question(embedding=None)  # never embedded -> excluded outright
+
+    fake_client = _fake_embed_client_returning(query_vector)
+    monkeypatch.setattr(questions_module, "get_llm_client", lambda: fake_client)
+
+    response = client.get("/v1/questions", params={"similar_to": "光合作用的場所"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["id"] for item in body["items"]] == [close_id, mid_id]
+    assert body["total"] == 2
+    assert body["unembedded_total"] == 1
+
+
+async def test_list_questions_similar_to_still_applies_q_as_a_hard_filter(
+    client: TestClient, monkeypatch
+) -> None:
+    """`q` and `similar_to` combine: `q` is a literal hard filter, `similar_to`
+    only reorders/thresholds what survives it (docs/question-bank.md)."""
+    dim = questions_module.get_settings().embedding_dim
+    query_vector = _unit_vector(0, dim)
+    matching_id = await _make_question(
+        embedding=_unit_vector(0, dim),
+        payload={
+            "stem": "光合作用發生在哪裡？",
+            "options": ["葉綠體", "粒線體"],
+            "answer_index": 0,
+            "explanation": None,
+        },
+    )
+    # High similarity, but fails the literal `q` filter -- must not appear.
+    await _make_question(
+        embedding=_unit_vector(0, dim),
+        payload={
+            "stem": "細胞呼吸的產物是什麼？",
+            "options": ["水", "二氧化碳"],
+            "answer_index": 0,
+            "explanation": None,
+        },
+    )
+
+    fake_client = _fake_embed_client_returning(query_vector)
+    monkeypatch.setattr(questions_module, "get_llm_client", lambda: fake_client)
+
+    response = client.get(
+        "/v1/questions", params={"similar_to": "光合作用", "q": "光合作用"}
+    )
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["items"]] == [matching_id]
+
+
+async def test_list_questions_similar_to_all_below_threshold_returns_empty(
+    client: TestClient, monkeypatch
+) -> None:
+    dim = questions_module.get_settings().embedding_dim
+    query_vector = _unit_vector(0, dim)
+    await _make_question(embedding=_unit_vector(90, dim))  # cos(90deg) = 0.0
+
+    fake_client = _fake_embed_client_returning(query_vector)
+    monkeypatch.setattr(questions_module, "get_llm_client", lambda: fake_client)
+
+    response = client.get("/v1/questions", params={"similar_to": "不相關的敘述"})
 
     assert response.status_code == 200
     body = response.json()
@@ -454,6 +655,52 @@ async def test_patch_question_can_clear_difficulty_to_null(client: TestClient) -
 def test_patch_question_404_for_missing_question(client: TestClient) -> None:
     response = client.patch("/v1/questions/999999999", json={"difficulty": "簡單"})
     assert response.status_code == 404
+
+
+async def test_patch_question_payload_change_nulls_embedding_and_enqueues_embed_job(
+    client: TestClient,
+) -> None:
+    """docs/question-bank.md 題目向量化與語意搜尋 — 「有動到 payload 時」把
+    embedding 設為 NULL 並排一個只含該題 id 的 embed_questions job, never an
+    inline embedding call in the request path."""
+    dim = questions_module.get_settings().embedding_dim
+    question_id = await _make_question(embedding=_unit_vector(0, dim))
+
+    response = client.patch(
+        f"/v1/questions/{question_id}",
+        json={
+            "payload": {
+                "stem": "修改後的題幹",
+                "options": ["x", "y"],
+                "answer_index": 1,
+                "explanation": None,
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    stored = await _get_question_row(question_id)
+    assert stored.embedding is None
+
+    job_payloads = await _embed_question_job_payloads()
+    assert job_payloads == [{"question_ids": [question_id]}]
+
+
+async def test_patch_question_difficulty_only_does_not_touch_embedding(
+    client: TestClient,
+) -> None:
+    """A `PATCH` that never touches `payload` must not invalidate the
+    embedding or enqueue a re-embed job — 只有動到 payload 才重算。"""
+    dim = questions_module.get_settings().embedding_dim
+    question_id = await _make_question(difficulty="簡單", embedding=_unit_vector(0, dim))
+
+    response = client.patch(f"/v1/questions/{question_id}", json={"difficulty": "困難"})
+
+    assert response.status_code == 200
+    stored = await _get_question_row(question_id)
+    assert stored.embedding is not None
+
+    assert await _embed_question_job_payloads() == []
 
 
 # ---------------------------------------------------------------------------
@@ -654,6 +901,25 @@ async def test_created_question_is_persisted_and_listable(client: TestClient) ->
         assert stored.source_chunk_ids == []
 
 
+async def test_create_question_enqueues_a_single_question_embed_job(client: TestClient) -> None:
+    """docs/question-bank.md 題目向量化與語意搜尋 — manual creation never calls
+    the embedding API inline; it enqueues an `embed_questions` job scoped to
+    just the new question id."""
+    response = client.post(
+        "/v1/questions",
+        json={
+            "type": "true_false",
+            "payload": {"stem": "地球是圓的。", "answer": True, "explanation": None},
+        },
+    )
+    question_id = response.json()["id"]
+
+    stored = await _get_question_row(question_id)
+    assert stored.embedding is None
+
+    assert await _embed_question_job_payloads() == [{"question_ids": [question_id]}]
+
+
 # ---------------------------------------------------------------------------
 # POST /v1/questions/{id}/duplicate (F1)
 # ---------------------------------------------------------------------------
@@ -692,3 +958,33 @@ async def test_duplicate_question_does_not_mutate_the_original(client: TestClien
 def test_duplicate_question_404_for_missing_question(client: TestClient) -> None:
     response = client.post("/v1/questions/999999999/duplicate")
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/questions/embed
+# ---------------------------------------------------------------------------
+
+
+async def test_create_embed_job_with_explicit_question_ids(client: TestClient) -> None:
+    response = client.post("/v1/questions/embed", json={"question_ids": [1, 2, 3]})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert isinstance(body["job_id"], int)
+
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, body["job_id"])
+        assert job is not None
+        assert job.kind == "embed_questions"
+        assert job.status == "pending"
+        assert job.payload == {"question_ids": [1, 2, 3]}
+
+
+async def test_create_embed_job_with_null_backfills_everything(client: TestClient) -> None:
+    response = client.post("/v1/questions/embed", json={})
+
+    assert response.status_code == 201
+    async with AsyncSessionLocal() as session:
+        job = await session.get(Job, response.json()["job_id"])
+        assert job is not None
+        assert job.payload == {"question_ids": None}

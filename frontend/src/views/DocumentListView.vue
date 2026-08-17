@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import { DOCUMENT_POLL_INTERVAL_MS, isReadyEntityStatus, type DocumentListItem } from '@/api'
 import AppButton from '@/components/AppButton.vue'
-import DocumentActiveList from '@/components/documents/DocumentActiveList.vue'
 import DocumentFolderSidebar from '@/components/documents/DocumentFolderSidebar.vue'
 import DocumentIntakePanel from '@/components/documents/DocumentIntakePanel.vue'
 import DocumentMoveModal from '@/components/documents/DocumentMoveModal.vue'
@@ -18,32 +17,31 @@ import {
   type FolderFilter,
   type FolderTarget,
 } from '@/components/documents/folders'
-import AppTabs from '@/components/ui/AppTabs.vue'
+import AppModal from '@/components/ui/AppModal.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import type { DataTableColumn } from '@/components/ui/dataTable'
-import type { AppTabItem } from '@/components/ui/tabs'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAppI18n } from '@/i18n'
 import { formatDateTime } from '@/i18n/datetime'
 import { translateApiError } from '@/i18n/errors'
+import { formatCount } from '@/i18n/number'
 import { useDocumentsStore } from '@/stores/documents'
 import { useFoldersStore } from '@/stores/folders'
 import { useToastsStore } from '@/stores/toasts'
 import { matchesQuery, normalizeQuery } from '@/utils/search'
 
 /**
- * 文件區 — two tabs (docs/frontend.md 頁面清單): 上傳 is the intake workspace
- * (drop zone, URL import and the parses still running), 文件庫 is the whole
- * library as a sortable table.
+ * Documents workspace (docs/frontend.md, L1–L4): folder sidebar + fill-height
+ * table under a compact header. Upload lives in a header modal; `?tab=upload`
+ * still opens it, then `replace`s the query away so `/documents` and
+ * `/documents?tab=library` never look like two different pages.
  *
  * Rows created in this session carry a job id and refresh themselves through
  * their status cell. This view only covers what job polling cannot see: a
  * document left `pending` / `processing` by an earlier session, whose job id no
  * endpoint can give back. For those, the whole list is refetched on an
- * interval, which stops as soon as none are left. That timer belongs to the
- * page rather than to a tab, so a parse started under 上傳 keeps being watched
- * while 文件庫 is on screen.
+ * interval, which stops as soon as none are left.
  *
  * The search box and the folder column narrow the rows client-side:
  * `GET /api/v1/documents` returns the whole list in one response, so filtering
@@ -59,49 +57,51 @@ const folders = useFoldersStore()
 const toasts = useToastsStore()
 const { confirm } = useConfirm()
 
-const TAB_IDS = ['library', 'upload'] as const
-
-type DocumentsTab = (typeof TAB_IDS)[number]
-
-/** 文件庫 is what `/documents` opens on; `?tab=upload` deep-links the other one. */
-const DEFAULT_TAB: DocumentsTab = 'library'
 const TAB_QUERY_KEY = 'tab'
 
-function isDocumentsTab(value: unknown): value is DocumentsTab {
-  return TAB_IDS.some((tab) => tab === value)
+function tabQuery(): string | null {
+  const raw = route.query[TAB_QUERY_KEY]
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' ? value : null
 }
 
-/**
- * The active tab lives in the route query, so a reload or a back navigation
- * returns to the tab the user was on. The default tab carries no query
- * parameter: `/documents` and `/documents?tab=library` must not be two
- * different-looking URLs for the same view.
- */
-const activeTab = computed<DocumentsTab>({
-  get: () => {
-    const raw = route.query[TAB_QUERY_KEY]
-    const value = Array.isArray(raw) ? raw[0] : raw
-    return isDocumentsTab(value) ? value : DEFAULT_TAB
-  },
-  set: (tab) => {
-    if (tab === activeTab.value) {
+const intakeOpen = ref(false)
+
+function stripTabQuery(): void {
+  if (tabQuery() === null) {
+    return
+  }
+  const query = { ...route.query }
+  delete query[TAB_QUERY_KEY]
+  void router.replace({ query })
+}
+
+function openIntake(): void {
+  intakeOpen.value = true
+}
+
+function closeIntake(): void {
+  intakeOpen.value = false
+  stripTabQuery()
+}
+
+watch(
+  () => tabQuery(),
+  (tab) => {
+    if (tab === 'upload') {
+      intakeOpen.value = true
       return
     }
-    const query: LocationQueryRaw = { ...route.query }
-    if (tab === DEFAULT_TAB) {
-      delete query[TAB_QUERY_KEY]
-    } else {
-      query[TAB_QUERY_KEY] = tab
+    if (tab !== null) {
+      stripTabQuery()
     }
-    // `replace`: switching tabs is not a step the back button should retrace
-    // once per click, it only has to survive a reload.
-    void router.replace({ query })
   },
-})
+  { immediate: true },
+)
 
 const search = ref('')
 
-/** Which folder the 文件庫 list is showing; owned here, driven by the sidebar. */
+/** Which folder the library list is showing; owned here, driven by the sidebar. */
 const folderFilter = ref<FolderFilter>('all')
 
 const query = computed(() => normalizeQuery(search.value))
@@ -121,27 +121,14 @@ const inProgressDocuments = computed<DocumentListItem[]>(() =>
   store.documents.filter((document) => !isReadyEntityStatus(document.status)),
 )
 
-const tabs = computed<AppTabItem<DocumentsTab>[]>(() => [
-  { id: 'library', label: t('documents.tabs.library') },
-  {
-    id: 'upload',
-    label: t('documents.tabs.upload'),
-    badge:
-      inProgressDocuments.value.length === 0 ? undefined : String(inProgressDocuments.value.length),
-  },
-])
-
-const subtitle = computed(() => {
-  if (activeTab.value === 'upload') {
-    return t('documents.intake.subtitle')
-  }
-  return isFiltering.value
-    ? t('documents.list.filteredCount', {
-        total: store.documents.length,
-        count: visibleDocuments.value.length,
+const pageTitle = computed(() =>
+  isFiltering.value
+    ? t('documents.filteredPageTitle', {
+        total: formatCount(store.documents.length),
+        count: formatCount(visibleDocuments.value.length),
       })
-    : t('documents.list.count', { count: store.documents.length })
-})
+    : t('documents.pageTitle', { count: formatCount(store.documents.length) }),
+)
 
 const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
   {
@@ -154,14 +141,14 @@ const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
     label: t('documents.columns.sourceType'),
     value: (item) => t(`documents.sourceType.${item.source_type}`),
     sortValue: (item) => item.source_type,
-    width: '8rem',
+    width: '7rem',
     nowrap: true,
   },
   {
     key: 'status',
     label: t('documents.columns.status'),
     sortValue: (item) => item.status,
-    width: '14rem',
+    width: '6rem',
   },
   {
     key: 'page_count',
@@ -169,7 +156,7 @@ const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
     value: (item) => t('documents.row.pageCount', { count: item.page_count }),
     sortValue: (item) => item.page_count,
     align: 'end',
-    width: '6rem',
+    width: '4.5rem',
     nowrap: true,
   },
   {
@@ -177,7 +164,7 @@ const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
     label: t('documents.columns.createdAt'),
     value: (item) => formatDateTime(item.created_at),
     sortValue: (item) => item.created_at,
-    width: '10rem',
+    width: '9.5rem',
     nowrap: true,
   },
   {
@@ -185,7 +172,7 @@ const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
     label: t('documents.columns.actions'),
     labelHidden: true,
     align: 'end',
-    width: '13rem',
+    width: '2.75rem',
   },
 ])
 
@@ -292,9 +279,9 @@ async function onDelete(item: DocumentListItem): Promise<void> {
   }
 }
 
-/** A new document's job only shows up under 上傳, so that is where the user goes. */
+/** A finished upload belongs in the library; the new row appears there. */
 function onDocumentCreated(): void {
-  activeTab.value = 'upload'
+  closeIntake()
 }
 
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -344,12 +331,13 @@ onUnmounted(clearTimer)
 </script>
 
 <template>
-  <div class="page">
-    <PageHeader :title="t('pages.documents.title')" :subtitle="subtitle">
+  <div class="page page--workspace">
+    <PageHeader :title="pageTitle">
       <template #actions>
         <AppButton variant="secondary" :disabled="store.loading" @click="store.load()">
           {{ t('documents.list.reload') }}
         </AppButton>
+        <AppButton @click="openIntake">{{ t('documents.intake.open') }}</AppButton>
       </template>
     </PageHeader>
 
@@ -360,74 +348,80 @@ onUnmounted(clearTimer)
       </AppButton>
     </p>
 
-    <AppTabs v-model="activeTab" :tabs="tabs" :label="t('documents.tabs.label')">
-      <template #upload>
-        <DocumentIntakePanel @created="onDocumentCreated" />
-        <DocumentActiveList
-          :documents="inProgressDocuments"
+    <div class="workspace">
+      <DocumentFolderSidebar
+        v-model="folderFilter"
+        class="workspace__sidebar"
+        @move="moveDocument"
+      />
+
+      <div class="workspace__main">
+        <div class="workspace__toolbar">
+          <input
+            v-model="search"
+            class="form-input workspace__search"
+            type="search"
+            :aria-label="t('documents.list.search')"
+            :placeholder="t('documents.list.searchPlaceholder')"
+          />
+        </div>
+
+        <p v-if="inProgressDocuments.length > 0" class="workspace__summary">
+          {{
+            t('documents.list.activeSummary', { count: formatCount(inProgressDocuments.length) })
+          }}
+        </p>
+
+        <DataTable
+          :columns="columns"
+          :rows="visibleDocuments"
+          :row-key="(item: DocumentListItem) => item.id"
           :loading="store.loading"
-          @delete="onDelete"
-        />
-      </template>
+          :empty-title="
+            isFiltering ? t('documents.list.noMatchTitle') : t('documents.list.emptyTitle')
+          "
+          :empty-description="
+            isFiltering
+              ? t('documents.list.noMatchDescription')
+              : t('documents.list.emptyDescription')
+          "
+          fill-height
+          clickable-rows
+          draggable-rows
+          @row-click="openDetail"
+          @row-drag-start="onRowDragStart"
+        >
+          <template #title="{ row }">
+            <DocumentTitleCell :document="row" />
+          </template>
 
-      <template #library>
-        <div class="library">
-          <DocumentFolderSidebar v-model="folderFilter" @move="moveDocument" />
+          <template #status="{ row }">
+            <DocumentStatusCell :document="row" :job-id="store.parseJobIdOf(row.id)" />
+          </template>
 
-          <div class="library__main">
-            <div class="documents__toolbar">
-              <input
-                v-model="search"
-                class="form-input documents__search"
-                type="search"
-                :aria-label="t('documents.list.search')"
-                :placeholder="t('documents.list.searchPlaceholder')"
+          <template #actions="{ row }">
+            <div @click.stop>
+              <DocumentRowActions
+                :document="row"
+                :job-id="store.parseJobIdOf(row.id)"
+                @rename="openRename"
+                @move="openMove"
+                @delete="onDelete"
               />
             </div>
+          </template>
+        </DataTable>
+      </div>
+    </div>
 
-            <DataTable
-              :columns="columns"
-              :rows="visibleDocuments"
-              :row-key="(item: DocumentListItem) => item.id"
-              :loading="store.loading"
-              :empty-title="
-                isFiltering ? t('documents.list.noMatchTitle') : t('documents.list.emptyTitle')
-              "
-              :empty-description="
-                isFiltering
-                  ? t('documents.list.noMatchDescription')
-                  : t('documents.list.emptyDescription')
-              "
-              clickable-rows
-              draggable-rows
-              @row-click="openDetail"
-              @row-drag-start="onRowDragStart"
-            >
-              <template #title="{ row }">
-                <DocumentTitleCell :document="row" />
-              </template>
-
-              <template #status="{ row }">
-                <DocumentStatusCell :document="row" :job-id="store.parseJobIdOf(row.id)" />
-              </template>
-
-              <template #actions="{ row }">
-                <div @click.stop>
-                  <DocumentRowActions
-                    :document="row"
-                    :job-id="store.parseJobIdOf(row.id)"
-                    organizable
-                    @rename="openRename"
-                    @move="openMove"
-                    @delete="onDelete"
-                  />
-                </div>
-              </template>
-            </DataTable>
-          </div>
-        </div>
-      </template>
-    </AppTabs>
+    <AppModal
+      :open="intakeOpen"
+      :title="t('documents.intake.modalTitle')"
+      size="lg"
+      @close="closeIntake"
+    >
+      <DocumentIntakePanel @created="onDocumentCreated" />
+    </AppModal>
 
     <DocumentRenameModal
       :open="renamingDocument !== null"
@@ -447,41 +441,64 @@ onUnmounted(clearTimer)
 </template>
 
 <style scoped>
-/* The tab bar and the search row sit above the table, so it gets less of the
-   viewport than the design system's default assumes */
-.page {
-  --data-table-max-height: max(22rem, calc(100vh - 24rem));
+.page > .error-banner {
+  margin: var(--space-3) 0 0;
 }
 
-.documents__toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.documents__search {
-  width: min(18rem, 60vw);
-}
-
-/* 資料夾欄 left, library table right */
-.library {
+.workspace {
   display: grid;
-  grid-template-columns: 16rem minmax(0, 1fr);
-  gap: var(--space-5);
-  align-items: start;
+  flex: 1;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: 0;
+  min-height: 0;
 }
 
-.library__main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+.workspace__sidebar {
   min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--color-border);
+}
+
+.workspace__main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-3) 0 0 var(--space-4);
+}
+
+.workspace__toolbar {
+  flex: none;
+  padding-bottom: var(--space-3);
+}
+
+.workspace__search {
+  width: 100%;
+}
+
+.workspace__summary {
+  flex: none;
+  padding-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
 }
 
 @media (max-width: 900px) {
-  .library {
+  .workspace {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .workspace__sidebar {
+    height: min(16rem, 30vh);
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .workspace__main {
+    padding-left: 0;
   }
 }
 </style>

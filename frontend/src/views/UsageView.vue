@@ -120,7 +120,7 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.usage.title')" :subtitle="t('pages.usage.description')">
+    <PageHeader :title="t('pages.usage.title')">
       <template #actions>
         <AppButton variant="secondary" :disabled="loading" @click="load">
           {{ t('usage.refresh') }}

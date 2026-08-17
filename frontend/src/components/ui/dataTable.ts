@@ -25,7 +25,7 @@ export interface DataTableColumn<T> {
   readonly align?: 'start' | 'end'
   /** CSS width for the column (e.g. `'8rem'`), left to the browser when absent. */
   readonly width?: string
-  /** Keep the cell on one line (ids, timestamps, status pills). */
+  /** Keep the cell on one line (ids, timestamps, status). */
   readonly nowrap?: boolean
   /** Header text is for assistive technology only (action columns). */
   readonly labelHidden?: boolean

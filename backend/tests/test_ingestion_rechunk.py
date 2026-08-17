@@ -259,8 +259,7 @@ async def test_rechunk_fails_the_job_when_no_page_is_ready(
     job = await _get_job(job_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert "no ready page" in job.error
+    assert job.error == "任務失敗"
 
 
 async def test_rechunk_marks_document_failed_and_reraises_when_chunk_phase_errors(

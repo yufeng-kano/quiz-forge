@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 
 import { QUESTION_TYPES, SEARCH_DEBOUNCE_MS, isQuestionType, type Category } from '@/api'
 import AppButton from '@/components/AppButton.vue'
@@ -13,19 +13,25 @@ import { useCategoriesStore } from '@/stores/categories'
 import { useQuestionsStore } from '@/stores/questions'
 
 /**
- * Toolbar of the question bank: full-text search plus the type, difficulty and
- * category filters.
+ * Toolbar of the question bank: full-text search, semantic search, and the
+ * type, difficulty and category filters.
  *
- * Typing is debounced (`SEARCH_DEBOUNCE_MS`) before it reaches the store, so a
- * typed word is one query instead of one per keystroke; the selects apply
- * immediately, since each is a single deliberate choice.
+ * Both text boxes are debounced (`SEARCH_DEBOUNCE_MS`) before they reach the
+ * store, so a typed word is one query instead of one per keystroke; the
+ * selects apply immediately, since each is a single deliberate choice. The
+ * semantic box matters more than the literal one: each of its queries costs an
+ * embedding call server-side (docs/question-bank.md 題目向量化與語意搜尋).
+ *
+ * The two searches are not alternatives — `q` stays the literal hard condition
+ * and `similar_to` reorders whatever is left, which is what the hint says.
  *
  * The category filter is two selects because `categories` is a subject/topic
  * hierarchy, but `GET /api/v1/questions` takes a single `category_id` and
  * ingestion only ever classifies a chunk at topic level
- * (`backend.ingestion.pipeline`). So the subject select narrows the topic
- * choices and the topic is what actually filters — stated in the hint below
- * rather than silently returning nothing for a subject-only choice.
+ * (`backend.ingestion.pipeline`). The subject select only narrows the topic
+ * choices; the topic is what actually filters. That is not explained on the
+ * page — standing how-to copy is forbidden
+ * (docs/decisions/2026-08-17-compact-headers-and-job-errors.md).
  *
  * The values live in the questions store, so they survive leaving the page.
  */
@@ -37,38 +43,61 @@ onMounted(async () => {
   await categoriesStore.ensureLoaded()
 })
 
-const searchText = ref(store.filters.search)
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
+/**
+ * A text box bound to one store filter through a debounce.
+ *
+ * Both search boxes need the same three behaviours — hold the keystrokes,
+ * push the trimmed value once, and follow the store back to empty when 清除
+ * 篩選 resets it — so the wiring is written once here rather than twice.
+ */
+function debouncedFilterText(
+  currentValue: () => string,
+  apply: (value: string) => void,
+): Ref<string> {
+  const text = ref(currentValue())
+  let timer: ReturnType<typeof setTimeout> | null = null
 
-function clearDebounce(): void {
-  if (debounceTimer !== null) {
-    clearTimeout(debounceTimer)
-    debounceTimer = null
+  function clearDebounce(): void {
+    if (timer !== null) {
+      clearTimeout(timer)
+      timer = null
+    }
   }
+
+  watch(text, (value) => {
+    clearDebounce()
+    timer = setTimeout(() => {
+      timer = null
+      const trimmed = value.trim()
+      if (trimmed !== currentValue()) {
+        apply(trimmed)
+      }
+    }, SEARCH_DEBOUNCE_MS)
+  })
+
+  watch(currentValue, (value) => {
+    if (value !== text.value.trim()) {
+      text.value = value
+    }
+  })
+
+  onUnmounted(clearDebounce)
+  return text
 }
 
-watch(searchText, (value) => {
-  clearDebounce()
-  debounceTimer = setTimeout(() => {
-    debounceTimer = null
-    const trimmed = value.trim()
-    if (trimmed !== store.filters.search) {
-      store.setFilters({ ...store.filters, search: trimmed })
-    }
-  }, SEARCH_DEBOUNCE_MS)
-})
-
-// 清除篩選 resets the store, and the box has to follow it back to empty.
-watch(
+const searchText = debouncedFilterText(
   () => store.filters.search,
   (value) => {
-    if (value !== searchText.value.trim()) {
-      searchText.value = value
-    }
+    store.setFilters({ ...store.filters, search: value })
   },
 )
 
-onUnmounted(clearDebounce)
+const similarText = debouncedFilterText(
+  () => store.filters.similarTo,
+  (value) => {
+    store.setFilters({ ...store.filters, similarTo: value })
+  },
+)
 
 const questionType = computed<string>({
   get: () => store.filters.type ?? '',
@@ -115,7 +144,7 @@ const topics = computed<Category[]>(() => {
 </script>
 
 <template>
-  <section class="card bank-toolbar">
+  <section class="bank-toolbar">
     <div class="bank-toolbar__fields">
       <label class="form-field bank-toolbar__search">
         <span class="form-label">{{ t('bank.filters.search') }}</span>
@@ -124,6 +153,16 @@ const topics = computed<Category[]>(() => {
           class="form-input"
           type="search"
           :placeholder="t('bank.filters.searchPlaceholder')"
+        />
+      </label>
+
+      <label class="form-field bank-toolbar__search">
+        <span class="form-label">{{ t('bank.filters.similar') }}</span>
+        <input
+          v-model="similarText"
+          class="form-input"
+          type="search"
+          :placeholder="t('bank.filters.similarPlaceholder')"
         />
       </label>
 
@@ -177,13 +216,18 @@ const topics = computed<Category[]>(() => {
     </div>
 
     <div class="bank-toolbar__footer">
-      <p v-if="categoriesStore.loading" class="form-hint">
-        {{ t('bank.filters.loadingCategories') }}
-      </p>
-      <p v-else-if="categoriesStore.loadError !== null" class="form-error">
-        {{ categoriesStore.loadError }}
-      </p>
-      <p v-else class="form-hint">{{ t('bank.filters.topicHint') }}</p>
+      <div class="bank-toolbar__hints">
+        <p v-if="categoriesStore.loading" class="form-hint">
+          {{ t('bank.filters.loadingCategories') }}
+        </p>
+        <p v-else-if="categoriesStore.loadError !== null" class="form-error">
+          {{ categoriesStore.loadError }}
+        </p>
+
+        <p v-if="store.filters.similarTo !== ''" class="form-hint">
+          {{ t('bank.filters.similarHint') }}
+        </p>
+      </div>
 
       <AppButton
         v-if="store.hasActiveFilter"
@@ -202,6 +246,7 @@ const topics = computed<Category[]>(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  padding: var(--space-3) 0;
 }
 
 .bank-toolbar__fields {
@@ -210,10 +255,18 @@ const topics = computed<Category[]>(() => {
   gap: var(--space-3) var(--space-4);
 }
 
-/* The search box is the toolbar's primary control, so it gets the wider cell */
+/* The two search boxes are the toolbar's primary controls, so they get the
+   wider cells and the four selects share the rest of the row */
 .bank-toolbar__search {
   grid-column: span 2;
   min-width: 12rem;
+}
+
+.bank-toolbar__hints {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
 }
 
 .bank-toolbar__footer {

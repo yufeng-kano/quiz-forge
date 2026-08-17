@@ -210,7 +210,7 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.exports.title')" :subtitle="t('pages.exports.description')">
+    <PageHeader :title="t('pages.exports.title')">
       <template #actions>
         <AppButton
           variant="secondary"

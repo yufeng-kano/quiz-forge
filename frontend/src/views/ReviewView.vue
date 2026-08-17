@@ -138,12 +138,9 @@ watch([() => store.draftFilters, () => store.draftsPage], () => {
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.review.title')" :subtitle="t('pages.review.description')">
-      <template #meta>
-        <span>{{ t('review.remaining', { count: formatCount(store.draftsTotal) }) }}</span>
-        <span v-if="selectedCount > 0">
-          {{ t('review.batch.selected', { count: selectedCount }) }}
-        </span>
+    <PageHeader :title="t('review.pageTitle', { count: formatCount(store.draftsTotal) })">
+      <template v-if="selectedCount > 0" #meta>
+        <span>{{ t('review.batch.selected', { count: selectedCount }) }}</span>
       </template>
 
       <template #actions>

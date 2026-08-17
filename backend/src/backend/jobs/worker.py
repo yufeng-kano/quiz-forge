@@ -15,6 +15,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.jobs.context import JobContext
+from backend.jobs.error_summary import UNKNOWN_JOB_KIND, error_for_uncaught
 from backend.jobs.registry import get_handler
 from backend.models.job import Job
 
@@ -77,8 +78,9 @@ async def run_claimed_job(session_factory: async_sessionmaker[AsyncSession], job
         handler = get_handler(job.kind)
         if handler is None:
             job.status = "failed"
-            job.error = f"no handler registered for job kind {job.kind!r}"
+            job.error = UNKNOWN_JOB_KIND
             await session.commit()
+            logger.error("job %d has no handler registered for kind %s", job_id, job.kind)
             return
 
         ctx = JobContext(job=job, session=session)
@@ -89,7 +91,7 @@ async def run_claimed_job(session_factory: async_sessionmaker[AsyncSession], job
             failed_job = await session.get(Job, job_id)
             if failed_job is not None:
                 failed_job.status = "failed"
-                failed_job.error = f"{type(exc).__name__}: {exc}"
+                failed_job.error = error_for_uncaught(exc)
                 await session.commit()
             logger.exception("job %d (%s) failed", job_id, job.kind)
             return

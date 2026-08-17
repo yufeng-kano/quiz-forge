@@ -91,9 +91,7 @@ async def test_rejects_not_approved_question_id_and_names_it(
     job = await _get_job(job_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert str(draft_id) in job.error
-    assert "not approved" in job.error
+    assert job.error == "任務失敗"
 
     async with AsyncSessionLocal() as session:
         exports = (await session.execute(select(Export))).scalars().all()
@@ -115,9 +113,7 @@ async def test_rejects_missing_question_id_and_names_it(
     job = await _get_job(job_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert str(missing_id) in job.error
-    assert "not found" in job.error
+    assert job.error == "任務失敗"
 
     get_settings.cache_clear()
 
@@ -134,8 +130,7 @@ async def test_unsupported_paper_size_fails_before_touching_the_database(
     job = await _get_job(job_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert "Letter" in job.error
+    assert job.error == "任務失敗"
 
     async with AsyncSessionLocal() as session:
         exports = (await session.execute(select(Export))).scalars().all()
@@ -270,8 +265,7 @@ async def test_missing_title_fails_the_job(
     job = await _get_job(job_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert "title" in job.error
+    assert job.error == "任務失敗"
 
     get_settings.cache_clear()
 
@@ -390,9 +384,7 @@ async def test_rejects_question_points_key_outside_question_ids(
     job = await _get_job(job_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert "question_points" in job.error
-    assert str(outside_id) in job.error
+    assert job.error == "任務失敗"
 
     get_settings.cache_clear()
 
@@ -415,8 +407,7 @@ async def test_rejects_non_positive_question_points_value(
     job = await _get_job(job_id)
 
     assert job.status == "failed"
-    assert job.error is not None
-    assert "positive" in job.error
+    assert job.error == "任務失敗"
 
     get_settings.cache_clear()
 

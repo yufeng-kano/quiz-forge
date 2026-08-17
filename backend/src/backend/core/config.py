@@ -67,6 +67,25 @@ class Settings(BaseSettings):
     comparison_similarity_min: float = 0.35
     comparison_similarity_max: float = 0.75
 
+    # 題庫搜尋（docs/question-bank.md 題目向量化與語意搜尋、docs/decisions/
+    # 2026-08-17-bank-agent-semantic-selection.md D2/D3）：`similar_to` 語意
+    # 搜尋的 cosine 相似度門檻，以及 `embed_questions` job 每批送出的題數。
+    question_similarity_min: float = 0.2
+    question_embed_batch_size: int = 64
+
+    # 題庫選題助手（docs/question-bank.md 題庫選題助手（對話 agent）；docs/decisions/
+    # 2026-08-17-bank-agent-semantic-selection.md D4/D6）：`bank_agent_turn` job 一
+    # 個回合的有界迴圈步數上限、每次搜尋回餵模型的題目摘要數上限、帶入 prompt 的
+    # 歷史訊息則數，以及回餵摘要中題幹截斷字元數。
+    bank_agent_max_steps: int = 6
+    bank_agent_search_limit: int = 30
+    bank_agent_history_limit: int = 20
+    bank_agent_stem_preview_chars: int = 120
+    # 對話標題（docs/question-bank.md 相關 API — 標題由第一則使用者訊息截斷產
+    # 生）：`POST /v1/conversations/{id}/messages` 把第一則使用者訊息截斷到這個
+    # 字元數當標題，不落文件的新設定，見交付回報。
+    conversation_title_max_length: int = 40
+
     # 分頁：`GET /v1/questions`（docs/question-bank.md limit/offset 分頁封包）
     # 與 `GET /v1/jobs`（docs/architecture.md 任務列表）共用「預設值 + 上限」
     # 這組模式——未帶 limit 時用 default，帶了但超過 max 時回 422。

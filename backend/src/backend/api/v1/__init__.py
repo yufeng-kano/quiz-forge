@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from backend.api.v1 import (
     assets,
     categories,
+    conversations,
     documents,
     exports,
     folders,
@@ -30,3 +31,4 @@ router.include_router(folders.router)
 router.include_router(generate.router)
 router.include_router(questions.router)
 router.include_router(exports.router)
+router.include_router(conversations.router)

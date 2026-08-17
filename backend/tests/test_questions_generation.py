@@ -98,15 +98,33 @@ def _chat_completion_response(*, model: str, content: dict[str, object]) -> http
     )
 
 
+def _embeddings_response(*, model: str, dim: int) -> httpx2.Response:
+    """`generate_questions` embeds every generated question at insertion time
+    (docs/question-bank.md 題目向量化與語意搜尋) -- same `httpx2.MockTransport`
+    dispatch-by-path pattern as `test_ingestion_pipeline_url_file.py`."""
+    return httpx2.Response(
+        200,
+        json={
+            "object": "list",
+            "model": model,
+            "data": [{"object": "embedding", "index": 0, "embedding": [0.0] * dim}],
+            "usage": {"prompt_tokens": 2, "total_tokens": 2},
+        },
+    )
+
+
 def _canned_handler(
-    captured: list[httpx2.Request],
+    captured: list[httpx2.Request], *, dim: int = 1536
 ) -> Callable[[httpx2.Request], httpx2.Response]:
     """Serves the canned valid payload matching whatever type the request's
-    `response_format.json_schema.name` asked for."""
+    `response_format.json_schema.name` asked for; embeddings calls get a
+    canned zero-vector of `dim` dimensions."""
 
     def handler(request: httpx2.Request) -> httpx2.Response:
-        captured.append(request)
         body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=dim)
+        captured.append(request)
         schema_name = body["response_format"]["json_schema"]["name"]
         return _chat_completion_response(model=body["model"], content=CANNED_PAYLOADS[schema_name])
 
@@ -317,8 +335,10 @@ async def test_one_bad_generation_does_not_abort_the_rest_of_the_batch(monkeypat
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         nonlocal call_count
-        call_count += 1
         body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=1536)
+        call_count += 1
         if call_count == 2:
             # Missing required "answer_index" -- fails schema validation.
             broken = {
@@ -349,8 +369,7 @@ async def test_one_bad_generation_does_not_abort_the_rest_of_the_batch(monkeypat
     # 一題失敗不得整批重跑；job.error carries the failure summary instead).
     assert job.status == "done"
     assert job.progress == "3/3"
-    assert job.error is not None
-    assert "1/3" in job.error
+    assert job.error == "1 題出題失敗"
 
     questions = await _questions_for_type("single_choice")
     assert len(questions) == 2
@@ -363,6 +382,8 @@ async def test_all_generations_failing_marks_the_job_failed(monkeypatch) -> None
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=1536)
         broken: dict[str, object] = {
             "type": "single_choice",
             "stem": "...",
@@ -383,8 +404,7 @@ async def test_all_generations_failing_marks_the_job_failed(monkeypatch) -> None
 
     job = await _get_job(job_id)
     assert job.status == "failed"
-    assert job.error is not None
-    assert "failed" in job.error.lower()
+    assert job.error == "1 題出題失敗"
 
     questions = await _questions_for_type("single_choice")
     assert len(questions) == 0
@@ -408,8 +428,7 @@ async def test_no_eligible_material_marks_the_job_failed(monkeypatch) -> None:
 
     job = await _get_job(job_id)
     assert job.status == "failed"
-    assert job.error is not None
-    assert "no eligible source material" in job.error
+    assert job.error == "單選題找不到可用素材"
     assert captured == []  # never even reached the LLM
 
 
@@ -432,8 +451,7 @@ async def test_unknown_question_type_marks_the_job_failed(monkeypatch) -> None:
 
     job = await _get_job(job_id)
     assert job.status == "failed"
-    assert job.error is not None
-    assert "unknown question type" in job.error
+    assert job.error == "未知題型"
     assert captured == []
 
 
@@ -517,8 +535,10 @@ async def test_regeneration_recovers_from_a_banned_first_attempt(monkeypatch) ->
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         nonlocal call_count
-        call_count += 1
         body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=1536)
+        call_count += 1
         if call_count == 1:
             banned = {
                 **CANNED_PAYLOADS["SingleChoiceQuestion"],
@@ -586,6 +606,8 @@ async def test_question_fails_when_both_attempts_are_banned(monkeypatch) -> None
 
     def handler(request: httpx2.Request) -> httpx2.Response:
         body = json.loads(request.content)
+        if request.url.path == "/v1/embeddings":
+            return _embeddings_response(model=body["model"], dim=1536)
         prompt_text = body["messages"][0]["content"]
         if "內容0" in prompt_text:
             banned = {
@@ -611,12 +633,10 @@ async def test_question_fails_when_both_attempts_are_banned(monkeypatch) -> None
 
     job = await _get_job(job_id)
     # 2 of 3 succeeded -> job still reaches "done"; the failure summary names
-    # both the exception and the offending phrase.
+    # the reason class, not the exception or the banned phrase.
     assert job.status == "done"
     assert job.progress == "3/3"
-    assert job.error is not None
-    assert "SourceReferentialPhraseError" in job.error
-    assert "根據教材內容" in job.error
+    assert job.error == "1 題出題失敗（題幹引用教材）"
 
     questions = await _questions_for_type("single_choice")
     assert len(questions) == 2
@@ -714,9 +734,7 @@ async def test_one_item_with_no_eligible_material_does_not_abort_the_other_items
     job = await _get_job(job_id)
     assert job.status == "done"
     assert job.progress == "1/1"
-    assert job.error is not None
-    assert "item 1" in job.error
-    assert "no eligible source material" in job.error
+    assert job.error == "比較題找不到可用素材"
 
     assert len(await _questions_for_type("comparison")) == 0
     assert len(await _questions_for_type("single_choice")) == 1
@@ -743,7 +761,5 @@ async def test_all_items_with_no_eligible_material_marks_the_job_failed(monkeypa
 
     job = await _get_job(job_id)
     assert job.status == "failed"
-    assert job.error is not None
-    assert "item 1" in job.error
-    assert "item 2" in job.error
+    assert job.error == "單選題找不到可用素材；是非題找不到可用素材"
     assert captured == []

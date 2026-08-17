@@ -90,6 +90,7 @@
   /* 疊層順序集中管理，避免各元件各自猜數字 */
   --z-sidebar: 20;
   --z-page-header: 15;
+  --z-menu: 50;
   --z-modal: 100;
   --z-toast: 200;
 }

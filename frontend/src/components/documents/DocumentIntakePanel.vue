@@ -10,17 +10,17 @@ import { useDocumentsStore } from '@/stores/documents'
 import { useToastsStore } from '@/stores/toasts'
 
 /**
- * The two document intake paths of docs/ingestion.md, side by side above the
- * list: a file (dropped or picked) and a URL. Both create a document plus its
- * `parse_document` job; the resulting row and its job id go into the documents
- * store, which is where the list picks the progress up from.
+ * The two document intake paths of docs/ingestion.md: a file (dropped or
+ * picked) and a URL. Both create a document plus its `parse_document` job;
+ * the resulting row and its job id go into the documents store, which is
+ * where the library table picks the progress up from.
  *
  * A dropped file is checked against the extensions the upload endpoint accepts
  * before it is sent, so an unsupported file fails immediately with a readable
  * message instead of coming back as a 400 from the server.
  *
- * `created` fires once the job exists, so the page can bring the 上傳 tab back
- * up if the user navigated away from it while the request was in flight.
+ * `created` fires once the job exists, so the host modal can close and leave
+ * the new row visible in the library.
  */
 const emit = defineEmits<{ created: [] }>()
 
@@ -160,9 +160,9 @@ async function onSubmitUrl(): Promise<void> {
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-5);
+  padding: var(--space-4);
   border: 1px dashed var(--color-border-hover);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--color-background-soft);
   text-align: center;
   transition:
@@ -226,10 +226,7 @@ async function onSubmitUrl(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-background);
+  padding: 0;
 }
 
 .intake__url-row {

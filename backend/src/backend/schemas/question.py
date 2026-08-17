@@ -56,12 +56,29 @@ class QuestionListItemOut(BaseModel):
 
 class QuestionListOut(BaseModel):
     """`GET /v1/questions` pagination envelope (docs/question-bank.md
-    limit/offset 分頁封包)."""
+    limit/offset 分頁封包). `unembedded_total` counts questions matching every
+    non-semantic filter (`status`/`type`/`difficulty`/`category_id`/`q`) whose
+    `embedding IS NULL` — present regardless of whether `similar_to` was
+    given, so the page can always surface "N 題尚未向量化" (docs/question-bank.md
+    題目向量化與語意搜尋)."""
 
     items: list[QuestionListItemOut]
     total: int
     limit: int
     offset: int
+    unembedded_total: int
+
+
+class EmbedQuestionsIn(BaseModel):
+    """`POST /v1/questions/embed` body — `question_ids=None` backfills every
+    `embedding IS NULL` question; an explicit list re-embeds exactly those
+    ids (docs/question-bank.md `embed_questions` job)."""
+
+    question_ids: list[int] | None = None
+
+
+class EmbedQuestionsOut(BaseModel):
+    job_id: int
 
 
 class QuestionCreateIn(BaseModel):

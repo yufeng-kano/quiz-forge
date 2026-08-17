@@ -15,8 +15,14 @@ import { questionDifficultyLabel, questionTypeLabel } from '@/questions/labels'
  * `select` renders in front of the header (the export checkbox on 題庫),
  * `actions` on the right of it, and `footer` under the body — the source-text
  * panel and error messages of the review page.
+ *
+ * `flush` is the bank-list variant (docs/decisions/2026-08-17-bank-on-questions-
+ * page.md D12): no outer border or radius, just padding and a bottom hairline.
+ * Review keeps the bordered card.
  */
-const props = defineProps<{ question: QuestionListItem }>()
+const props = withDefaults(defineProps<{ question: QuestionListItem; flush?: boolean }>(), {
+  flush: false,
+})
 
 const { t } = useAppI18n()
 
@@ -26,7 +32,7 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
 </script>
 
 <template>
-  <article class="question-card">
+  <article class="question-card" :class="{ 'question-card--flush': flush }">
     <header class="question-card__header">
       <div v-if="$slots.select" class="question-card__select">
         <slot name="select" />
@@ -69,6 +75,13 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-background);
+}
+
+.question-card--flush {
+  padding: var(--space-4) 0;
+  border: none;
+  border-bottom: 1px solid var(--color-hairline);
+  border-radius: 0;
 }
 
 .question-card__header {

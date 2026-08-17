@@ -12,11 +12,16 @@ chunks      id, document_id, content, category_id, tags[],
             embedding vector(EMBEDDING_DIM)
 categories  id, name, parent_id                    -- 階層分類
 questions   id, type, difficulty, status(draft/approved/rejected),
-            payload jsonb, source_chunk_ids[], created_at
+            payload jsonb, source_chunk_ids[], created_at,
+            embedding vector(EMBEDDING_DIM)          -- nullable，NULL = 待向量化
+conversations          id, title, created_at, updated_at
+conversation_messages  id, conversation_id, role(user/assistant), content,
+                       proposed_question_ids[], steps jsonb, created_at
 exports     id, title, paper_size, question_ids[], docx_path,
             answer_docx_path, created_at
 jobs        id, kind, payload jsonb, status, progress(text, 如 "12/40"),
-            error, retry_count, created_at, updated_at
+            error（人話短摘要，不含 exception／payload dump）, retry_count,
+            created_at, updated_at
 llm_usage   id, model, purpose, prompt_tokens, completion_tokens, created_at
 ```
 
@@ -37,4 +42,7 @@ llm_usage   id, model, purpose, prompt_tokens, completion_tokens, created_at
 - **`source_chunk_ids` 保留出題溯源**：每題可回查生成來源，審題時可對照原文。
 - **`llm_usage` 支撐用量頁面**：使用者自付 API 費，累計 token 是必要的透明度。
 - **pgvector 維度綁 `EMBEDDING_DIM`**：更換 embedding model 屬重大變更（re-embed + migration），必須先告知使用者。
+- **`questions.embedding` 供題目語意搜尋**：選題的檢索單位是題目本身，不是來源 chunk（同一個 chunk 可生出題型難度都不同的題，chunk 相似度分不出來）。nullable，`NULL` 即「尚未向量化」，由 `embed_questions` job 補齊；維度沿用 `EMBEDDING_DIM`，不開第二個維度設定。見 `docs/decisions/2026-08-17-bank-agent-semantic-selection.md`。
+- **`conversation_messages.steps` 記錄 agent 查詢過程**：jsonb，存該回合實際跑過的搜尋條件與命中數，讓選題助手不是黑箱。`conversation_id` 為 FK `ON DELETE CASCADE`，刪對話即刪訊息。
+- **`proposed_question_ids` 是提案不是選取**：agent 選出的題目存在訊息上；前端點列跳到該題，使用者自己勾選才進入匯出範圍，與「LLM 產出先進待確認」的審題原則一致。
 - **`folders` 為平面結構**：單人系統文件量小，不做巢狀資料夾；`documents.folder_id` nullable FK（`ON DELETE SET NULL`，刪資料夾文件自動變未分類，不擋刪除）。資料夾只影響文件庫瀏覽，與 `categories`（LLM 知識分類，供出題範圍）互不相干。

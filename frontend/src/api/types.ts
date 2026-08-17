@@ -59,6 +59,8 @@ export const JOB_KINDS = [
   'parse_page',
   'rechunk_document',
   'generate_questions',
+  'embed_questions',
+  'bank_agent_turn',
   'export_docx',
 ] as const
 
@@ -425,6 +427,14 @@ export interface QuestionDetail extends QuestionListItem {
  * stems, options and answers alike. `limit` must stay within the server's
  * `questions_list_limit_max` (`QUESTIONS_LIST_LIMIT_MAX`), which rejects a
  * larger value with 422.
+ *
+ * `similar_to` is free text embedded once server-side and used to rank the
+ * result by cosine similarity, dropping anything under
+ * `QUESTION_SIMILARITY_MIN` (docs/question-bank.md 題目向量化與語意搜尋). It
+ * never replaces the filters above: they all still apply, and a question with
+ * no embedding yet simply cannot appear — which is what `unembedded_total` on
+ * the response is for. `q` and `similar_to` combine as documented: `q` is the
+ * hard literal condition, `similar_to` decides the order.
  */
 export interface QuestionListQuery {
   status?: QuestionStatus
@@ -432,6 +442,7 @@ export interface QuestionListQuery {
   difficulty?: string
   category_id?: number
   q?: string
+  similar_to?: string
   limit?: number
   offset?: number
 }
@@ -458,12 +469,35 @@ export interface QuestionCreateRequest {
  * `limit` and `offset` are echoed back as the server applied them: an omitted
  * `limit` is filled in from `Settings.questions_list_limit_default`, so `total`
  * can be larger than `items.length` even when the caller asked for no page.
+ *
+ * `unembedded_total` counts the questions matching every non-semantic filter
+ * of the request whose `embedding IS NULL`. It is computed whether or not
+ * `similar_to` was given, so the page can always say how many questions a
+ * semantic search would silently skip over.
  */
 export interface QuestionListPage {
   items: QuestionListItem[]
   total: number
   limit: number
   offset: number
+  unembedded_total: number
+}
+
+/**
+ * Request body of `POST /api/v1/questions/embed`
+ * (`backend.schemas.question.EmbedQuestionsIn`).
+ *
+ * `null` backfills every question whose `embedding IS NULL`; an explicit list
+ * re-embeds exactly those ids. Either way the work happens in an
+ * `embed_questions` job, never in the request.
+ */
+export interface EmbedQuestionsRequest {
+  question_ids: number[] | null
+}
+
+/** `POST /api/v1/questions/embed` — the id of the queued `embed_questions` job. */
+export interface EmbedQuestionsResult {
+  job_id: number
 }
 
 /**
@@ -580,4 +614,76 @@ export interface ExportListItem {
   created_at: string
   questions_available: boolean
   answers_available: boolean
+}
+
+/**
+ * `conversation_messages.role`. The column is CHECK-constrained to these two
+ * values, and they decide how a chat message is drawn, so they are named
+ * here instead of being written as bare strings in components.
+ */
+export const CONVERSATION_ROLE_USER = 'user'
+export const CONVERSATION_ROLE_ASSISTANT = 'assistant'
+
+/**
+ * One message of a 題庫選題助手 conversation
+ * (`backend.schemas.conversation.ConversationMessageOut`).
+ *
+ * `proposed_question_ids` is what the agent suggests, nothing more: the
+ * backend never writes it anywhere else. The bank page opens the question
+ * on the left; the person ticks the checkbox themselves (docs/decisions/
+ * 2026-08-17-bank-on-questions-page.md D14).
+ *
+ * `steps` is the turn's jsonb search log (D6). It is typed as `unknown[]`
+ * because the backend declares it `list[object]`: the entries are read field
+ * by field in `src/questions/agentSteps.ts` rather than trusted here.
+ */
+export interface ConversationMessage {
+  id: number
+  role: string
+  content: string
+  proposed_question_ids: number[]
+  steps: unknown[] | null
+  created_at: string
+}
+
+/**
+ * One row of `GET /api/v1/conversations`, newest activity first.
+ *
+ * `title` is empty until the first user message, which the backend truncates
+ * into it (docs/question-bank.md — 標題由第一則使用者訊息截斷產生); a list item
+ * with an empty title is therefore a conversation nobody has written in yet.
+ */
+export interface Conversation {
+  id: number
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+/** `GET /api/v1/conversations/{id}` — the conversation with every message, oldest first. */
+export interface ConversationDetail extends Conversation {
+  messages: ConversationMessage[]
+}
+
+/**
+ * Body of `POST /api/v1/conversations/{id}/messages`
+ * (`backend.schemas.conversation.ConversationMessageIn`).
+ *
+ * `content` must not be empty. `selected_question_ids` is the export selection
+ * as it stands on screen; the agent is given it as context so it can say
+ * 「再補三題」 sensibly, but it can never write to it.
+ */
+export interface ConversationMessageRequest {
+  content: string
+  selected_question_ids: number[]
+}
+
+/**
+ * `POST /api/v1/conversations/{id}/messages` — the stored user message and the
+ * one `bank_agent_turn` job that runs this turn (docs/question-bank.md — 一個
+ * 回合＝一個 job). The assistant's reply only exists once that job is done.
+ */
+export interface PostConversationMessageResult {
+  job_id: number
+  message_id: number
 }

@@ -3,6 +3,8 @@
 import { apiDelete, apiGet, apiPatch, apiPost } from './client'
 import type { QueryParams } from './client'
 import type {
+  EmbedQuestionsRequest,
+  EmbedQuestionsResult,
   QuestionCreateRequest,
   QuestionDetail,
   QuestionListItem,
@@ -13,10 +15,12 @@ import type {
 
 /**
  * `GET /api/v1/questions` — newest first, payload included, wrapped in the
- * `{ items, total, limit, offset }` pagination envelope.
+ * `{ items, total, limit, offset, unembedded_total }` pagination envelope.
  *
  * Every filter is optional and an omitted one is left out of the query string
- * entirely (the backend treats a missing parameter as "no filter").
+ * entirely (the backend treats a missing parameter as "no filter"). With
+ * `similar_to` the order becomes semantic rather than newest-first, and every
+ * other filter still narrows the result exactly as it does without it.
  */
 export function listQuestions(query: QuestionListQuery = {}): Promise<QuestionListPage> {
   const params: QueryParams = {
@@ -25,10 +29,23 @@ export function listQuestions(query: QuestionListQuery = {}): Promise<QuestionLi
     difficulty: query.difficulty,
     category_id: query.category_id,
     q: query.q,
+    similar_to: query.similar_to,
     limit: query.limit,
     offset: query.offset,
   }
   return apiGet<QuestionListPage>('/questions', params)
+}
+
+/**
+ * `POST /api/v1/questions/embed` — queue an `embed_questions` job.
+ *
+ * `question_ids: null` backfills every question that has no embedding yet,
+ * which is what the 補向量 action on 題庫 sends. The work is a background job,
+ * so the caller polls the returned id (docs/question-bank.md 題目向量化與語意
+ * 搜尋).
+ */
+export function embedQuestions(request: EmbedQuestionsRequest): Promise<EmbedQuestionsResult> {
+  return apiPost<EmbedQuestionsResult>('/questions/embed', request)
 }
 
 /**

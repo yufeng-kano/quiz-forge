@@ -93,15 +93,49 @@
 
 - `approve`：僅 `draft → approved`，其他狀態回 409。
 - `reject`：任何狀態皆可按——`draft/approved → rejected`；對已是 `rejected` 的題目再按一次會回到 `draft`（復原誤丟棄）。
-- 單題生成失敗不會使整個出題 job 失敗；job 結束時把失敗摘要記在 `jobs.error`，全部失敗才標 `failed`。
+- 單題生成失敗不會使整個出題 job 失敗；job 結束時把失敗摘要記在 `jobs.error`，全部失敗才標 `failed`。寫進 `jobs.error` 的是給使用者看的人話（題數、題型、原因類別），不得含 exception 類名、repr、payload dump、chunk id 清單。完整例外只寫後端 log。
 
 ### 手動建題與複製
 
 - `POST /api/v1/questions`：手動建題（同一份 union 驗證），預設 `approved`、可指定 `draft`，`source_chunk_ids` 為空。
 - `POST /api/v1/questions/{id}/duplicate`：複製為 `draft` 改造變體。
 
+## 題目向量化與語意搜尋
+
+決策見 `docs/decisions/2026-08-17-bank-agent-semantic-selection.md`。
+
+- `questions.embedding` 為 `vector(EMBEDDING_DIM)`，nullable；`NULL` 代表尚未向量化。
+- 向量化輸入文字由 payload 攤平而來（題幹、選項、答案、解析；比較題另含 A/B 主體與面向，類比題含四個槽位），實作在 `backend/src/backend/questions/embedding.py`，與 Word renderer 分離。
+- 寫入時機：
+  - `generate_questions` job 入庫時同步 embed（本來就在背景）。
+  - `POST /api/v1/questions`、`PATCH /api/v1/questions/{id}`（有動到 payload 時）把 `embedding` 設為 NULL，並排一個只含該題 id 的 `embed_questions` job，不讓 embedding 延遲或失敗擋住編輯。
+- `embed_questions` job：payload `{"question_ids": null | [int]}`，`null` 代表補齊全部 `embedding IS NULL` 的題；progress 逐題更新，單題失敗記入 `jobs.error` 不中斷其他題。`jobs.error` 同樣只寫人話摘要。
+- `GET /api/v1/questions` 的 `similar_to` 參數做語意搜尋：把文字 embed 一次（purpose `question_search`），以 cosine 距離排序，過濾相似度低於 `QUESTION_SIMILARITY_MIN` 的題。既有篩選全部照常生效——語意是排序加門檻，不取代篩選；`q` 與 `similar_to` 併用時 `q` 是硬條件、`similar_to` 決定順序。未向量化的題不會出現在 `similar_to` 查詢結果，回應封包的 `unembedded_total` 供前端提示補向量。
+
+## 題庫選題助手（對話 agent）
+
+掛在題庫頁（`/questions`）右側可收合欄（`docs/decisions/2026-08-17-bank-on-questions-page.md` D10、D13）。側邊欄沒有獨立「選題助手」項。舊網址 `/conversations`、`/conversations/:id` 導向題庫（有 id 則打開該則對話）。右欄固定高度、只捲訊息；輸入框釘在欄底，不跟左欄清單共用捲動框。
+
+題庫左欄兩個檢視：題庫（篩選＋分頁）與已選（`exportSelection` 勾選順序）。沒有「全選目前結果」。語意搜尋與補向量仍留在題庫篩選列。
+
+- 一個回合＝一個 `bank_agent_turn` job；題庫頁訂閱 `pendingTurn.jobId` 並輪詢 `GET /api/v1/jobs/{id}`，完成後清掉 `pendingTurn` 並重讀該則訊息。同一時間只跑一個回合；失敗重試出現在送出該回合的那則對話。離開 `/questions` 才停止輪詢。
+- 後端跑有界迴圈（上限 `BANK_AGENT_MAX_STEPS`），每一步用 `response_format: json_schema` 取得一個 `BankAgentStep`：
+  - `action`：`search`／`propose`／`reply`
+  - `search`：`similar_to`／`q`／`type`／`difficulty`／`category_id`／`limit`
+  - `question_ids`：`propose` 時選出的題目
+  - `reply`：給使用者看的話
+- agent 的搜尋固定 `status = approved`，這不是模型可控欄位：agent 只提案給匯出用，未採用的題目提了也沒用。
+- `search` 步驟與 `GET /v1/questions` 共用同一個查詢函式（`backend/src/backend/questions/search.py`），兩邊行為不會漂移。
+- `action = search` 時後端執行上節的查詢，把命中題目的精簡摘要（id、題型、難度、分類路徑、題幹前 N 字，上限 `BANK_AGENT_SEARCH_LIMIT`）回餵模型；`propose`／`reply` 結束回合，達步數上限則強制結束並在回覆說明。
+- prompt 帶入題庫 schema、六題型、難度字彙、分類樹摘要、最近 `BANK_AGENT_HISTORY_LIMIT` 則訊息，以及前端傳來的目前已選題目 id。
+- **agent 只提案不改選取**：`question_ids` 存進該則 assistant 訊息的 `proposed_question_ids`。點提案列跳到左欄該題（只顯示這一題），使用者看過再用 checkbox 勾選。Esc 還原跳題前的篩選與捲動。助手不寫入匯出選取。助手回覆的 `content` 以 Markdown 渲染（與文件頁同一套 sanitizer）。
+- 該回合跑過的搜尋條件與命中數存進 `steps`，右側欄以可展開的「查詢過程」呈現；「套用到篩選」只寫入題庫篩選，人已在題庫頁不換頁。
+
 ### 相關 API
 
-- `GET /api/v1/questions` 支援 `limit/offset`（回傳含 `total` 的分頁封包）與 `q` 全文搜尋（payload 文字 ILIKE）。
+- `GET /api/v1/questions` 支援 `limit/offset`（回傳含 `total` 的分頁封包）與 `q` 全文搜尋（payload 文字 ILIKE）；`similar_to` 做語意排序，回應另含 `unembedded_total`。
+- `POST /api/v1/questions/embed`：建立 `embed_questions` job（body `{"question_ids": null | [int]}`），回 job id。
+- `GET /api/v1/conversations`、`POST /api/v1/conversations`、`GET /api/v1/conversations/{id}`（含訊息）、`DELETE /api/v1/conversations/{id}`。
+- `POST /api/v1/conversations/{id}/messages`：body 帶 `content` 與目前 `selected_question_ids`，建立 `bank_agent_turn` job，回 `{job_id, message_id}`。
 - `GET /api/v1/categories`：全部分類（flat，`id/name/parent_id`），供出題範圍選擇與分類路徑顯示；`PATCH .../{id}` 改名、`DELETE .../{id}`（有 chunk 引用或子分類時 409）。
 - `GET /api/v1/documents*` 帶 `latest_job`（id/status/error），供前端顯示歷史失敗與重試。

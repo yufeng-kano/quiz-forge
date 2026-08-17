@@ -69,7 +69,7 @@ async def _clean_tables() -> None:
         await session.execute(
             text(
                 "TRUNCATE TABLE jobs, llm_usage, documents, categories, questions, exports, "
-                "folders RESTART IDENTITY CASCADE"
+                "folders, conversations, conversation_messages RESTART IDENTITY CASCADE"
             )
         )
         await session.commit()
