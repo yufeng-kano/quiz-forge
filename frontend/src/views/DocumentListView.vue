@@ -17,6 +17,7 @@ import {
   type FolderFilter,
   type FolderTarget,
 } from '@/components/documents/folders'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -121,13 +122,14 @@ const inProgressDocuments = computed<DocumentListItem[]>(() =>
   store.documents.filter((document) => !isReadyEntityStatus(document.status)),
 )
 
-const pageTitle = computed(() =>
+/** Header count: how many documents the table is showing, of how many there are. */
+const headerCount = computed(() =>
   isFiltering.value
-    ? t('documents.filteredPageTitle', {
+    ? t('documents.headerCountFiltered', {
         total: formatCount(store.documents.length),
         count: formatCount(visibleDocuments.value.length),
       })
-    : t('documents.pageTitle', { count: formatCount(store.documents.length) }),
+    : t('documents.headerCount', { count: formatCount(store.documents.length) }),
 )
 
 const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
@@ -148,7 +150,9 @@ const columns = computed<DataTableColumn<DocumentListItem>[]>(() => [
     key: 'status',
     label: t('documents.columns.status'),
     sortValue: (item) => item.status,
-    width: '6rem',
+    // Wide enough for the parse progress line (「3 / 12 頁（25%）」) to stay
+    // readable under the status word instead of being cut by the cell.
+    width: '9rem',
   },
   {
     key: 'page_count',
@@ -332,10 +336,19 @@ onUnmounted(clearTimer)
 
 <template>
   <div class="page page--workspace">
-    <PageHeader :title="pageTitle">
+    <PageHeader :page-name="t('nav.documents')">
+      <template #meta>{{ headerCount }}</template>
+
       <template #actions>
-        <AppButton variant="secondary" :disabled="store.loading" @click="store.load()">
-          {{ t('documents.list.reload') }}
+        <AppButton
+          variant="secondary"
+          icon
+          :disabled="store.loading"
+          :aria-label="t('documents.list.reload')"
+          :title="t('documents.list.reload')"
+          @click="store.load()"
+        >
+          <AppIcon name="refresh" :size="16" />
         </AppButton>
         <AppButton @click="openIntake">{{ t('documents.intake.open') }}</AppButton>
       </template>
@@ -343,8 +356,14 @@ onUnmounted(clearTimer)
 
     <p v-if="store.loadError !== null" class="error-banner">
       {{ store.loadError }}
-      <AppButton variant="secondary" @click="store.load()">
-        {{ t('documents.list.reload') }}
+      <AppButton
+        variant="secondary"
+        icon
+        :aria-label="t('documents.list.reload')"
+        :title="t('documents.list.reload')"
+        @click="store.load()"
+      >
+        <AppIcon name="refresh" :size="16" />
       </AppButton>
     </p>
 
@@ -359,7 +378,7 @@ onUnmounted(clearTimer)
         <div class="workspace__toolbar">
           <input
             v-model="search"
-            class="form-input workspace__search"
+            class="workspace__search"
             type="search"
             :aria-label="t('documents.list.search')"
             :placeholder="t('documents.list.searchPlaceholder')"
@@ -379,11 +398,6 @@ onUnmounted(clearTimer)
           :loading="store.loading"
           :empty-title="
             isFiltering ? t('documents.list.noMatchTitle') : t('documents.list.emptyTitle')
-          "
-          :empty-description="
-            isFiltering
-              ? t('documents.list.noMatchDescription')
-              : t('documents.list.emptyDescription')
           "
           fill-height
           clickable-rows
@@ -451,6 +465,9 @@ onUnmounted(clearTimer)
   grid-template-columns: 15rem minmax(0, 1fr);
   gap: 0;
   min-height: 0;
+  /* Same bleed as PageHeader: cancel the .page gutter so the column and table
+     line up with the header rule (L8). */
+  margin: 0 calc(-1 * var(--content-padding-x));
 }
 
 .workspace__sidebar {
@@ -466,23 +483,44 @@ onUnmounted(clearTimer)
   gap: 0;
   min-width: 0;
   min-height: 0;
-  padding: var(--space-3) 0 0 var(--space-4);
 }
 
+/* Search is the table's first band (L7): no boxed .form-input chrome, a rule
+   under the field closes the band, then the table header follows. */
 .workspace__toolbar {
   flex: none;
-  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .workspace__search {
+  display: block;
   width: 100%;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  appearance: none;
 }
 
+.workspace__search:focus {
+  outline: none;
+}
+
+.workspace__search:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* Says how many documents are still parsing — real information, so it gets a
+   readable size and the running tone rather than shrunken grey (D20). */
 .workspace__summary {
   flex: none;
-  padding-bottom: var(--space-2);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  padding: var(--space-2) var(--space-4);
+  color: var(--color-status-running-text);
+  font-size: var(--font-size-md);
 }
 
 @media (max-width: 900px) {
@@ -495,10 +533,6 @@ onUnmounted(clearTimer)
     height: min(16rem, 30vh);
     border-right: none;
     border-bottom: 1px solid var(--color-border);
-  }
-
-  .workspace__main {
-    padding-left: 0;
   }
 }
 </style>

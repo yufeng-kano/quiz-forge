@@ -258,9 +258,9 @@ async function removeFolder(folder: Folder): Promise<void> {
 <template>
   <nav class="folders" :aria-label="t('documents.folders.label')">
     <div class="folders__head">
-      <h2 class="folders__title">{{ t('documents.folders.title') }}</h2>
       <AppButton
         variant="ghost"
+        icon
         size="sm"
         :disabled="creating"
         :aria-label="t('documents.folders.createAriaLabel')"
@@ -371,11 +371,27 @@ async function removeFolder(folder: Folder): Promise<void> {
           </button>
 
           <span class="folders__actions">
-            <AppButton variant="ghost" size="sm" :disabled="busy" @click="startEditing(folder)">
-              {{ t('documents.folders.rename') }}
+            <AppButton
+              variant="ghost"
+              icon
+              size="sm"
+              :disabled="busy"
+              :aria-label="t('documents.folders.rename')"
+              :title="t('documents.folders.rename')"
+              @click="startEditing(folder)"
+            >
+              <AppIcon name="edit" :size="16" />
             </AppButton>
-            <AppButton variant="ghost" size="sm" :disabled="busy" @click="removeFolder(folder)">
-              {{ t('documents.folders.delete') }}
+            <AppButton
+              variant="ghost"
+              icon
+              size="sm"
+              :disabled="busy"
+              :aria-label="t('documents.folders.delete')"
+              :title="t('documents.folders.delete')"
+              @click="removeFolder(folder)"
+            >
+              <AppIcon name="trash" :size="16" />
             </AppButton>
           </span>
         </template>
@@ -397,22 +413,17 @@ async function removeFolder(folder: Folder): Promise<void> {
   gap: var(--space-2);
   min-height: 0;
   height: 100%;
-  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+  padding: var(--space-3) 0 0;
 }
 
+/* No column heading: the list under it (全部 / 未分類 / folder names) says what
+   this column is, and the `nav` already carries the accessible name (D19). */
 .folders__head {
   display: flex;
   flex: none;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--space-2);
-}
-
-.folders__title {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
 }
 
 .folders__create,
@@ -495,7 +506,6 @@ async function removeFolder(folder: Folder): Promise<void> {
 .folders__count {
   flex: none;
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -519,7 +529,7 @@ async function removeFolder(folder: Folder): Promise<void> {
 .folders__hint,
 .folders__error {
   flex: none;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
 }
 
 .folders__hint {

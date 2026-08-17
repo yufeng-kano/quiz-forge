@@ -10,8 +10,8 @@ import { useAppI18n } from '@/i18n'
  * Four fixed checkboxes, all ticked by default, so the group stays one compact
  * line and never grows: the set is defined by the API
  * (`EXPORT_HEADER_FIELD_NAMES`), not by any data. Unticking all four omits the
- * row entirely, which the hint says out loud rather than leaving the user to
- * discover it on the printed paper.
+ * row entirely — the empty group shows that by itself, so the field carries a
+ * label and the boxes and nothing else (docs/frontend.md 設計節制原則).
  */
 const fields = defineModel<ExportHeaderFields>({ required: true })
 
@@ -38,8 +38,6 @@ function onToggle(field: ExportHeaderField, event: Event): void {
         <span>{{ t(EXPORT_HEADER_FIELD_LABEL_KEYS[field]) }}</span>
       </label>
     </div>
-
-    <span class="form-hint">{{ t('exports.headerFields.hint') }}</span>
   </div>
 </template>
 

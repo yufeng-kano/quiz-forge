@@ -4,35 +4,42 @@ import { computed } from 'vue'
 import type { QuestionListItem } from '@/api'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useAppI18n } from '@/i18n'
-import { formatDateTime } from '@/i18n/datetime'
 import { questionDifficultyLabel, questionTypeLabel } from '@/questions/labels'
 
 /**
- * The card frame shared by 審題 and 題庫: type label, difficulty, status badge
- * and the id/timestamp line, with the question itself and the page's own
- * controls supplied through slots.
+ * The question row shared by 審題 and 題庫: type label, id and difficulty on one
+ * header line, with the question itself and the page's own controls supplied
+ * through slots.
  *
  * `select` renders in front of the header (the export checkbox on 題庫),
  * `actions` on the right of it, and `footer` under the body — the source-text
  * panel and error messages of the review page.
  *
- * `flush` is the bank-list variant (docs/decisions/2026-08-17-bank-on-questions-
- * page.md D12): no outer border or radius, just padding and a bottom hairline.
- * Review keeps the bordered card.
+ * Both queues are lists of questions divided by a hairline, not stacks of
+ * framed cards (docs/decisions/2026-08-17-bank-on-questions-page.md D12,
+ * docs/frontend.md 設計節制原則 — 卡片不是骨架).
+ *
+ * `expectedStatus` is the status the list consists of by definition — `draft`
+ * in 審題, `approved` in 題庫. The status is only rendered for a row that
+ * deviates from it: repeating what the list already says is not information
+ * (D19).
+ *
+ * The id stays because export failures name questions by it; the creation time
+ * does not, because nothing on either page is ordered or filtered by it.
  */
-const props = withDefaults(defineProps<{ question: QuestionListItem; flush?: boolean }>(), {
-  flush: false,
-})
+const props = defineProps<{ question: QuestionListItem; expectedStatus: string }>()
 
 const { t } = useAppI18n()
 
 const typeLabel = computed(() => questionTypeLabel(props.question.type))
 
 const difficultyLabel = computed(() => questionDifficultyLabel(props.question.difficulty))
+
+const showStatus = computed(() => props.question.status !== props.expectedStatus)
 </script>
 
 <template>
-  <article class="question-card" :class="{ 'question-card--flush': flush }">
+  <article class="question-card">
     <header class="question-card__header">
       <div v-if="$slots.select" class="question-card__select">
         <slot name="select" />
@@ -40,23 +47,15 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
 
       <div class="question-card__meta">
         <span class="question-card__type">{{ typeLabel }}</span>
+        <span class="question-card__id">{{ t('questions.card.id', { id: question.id }) }}</span>
         <span class="question-card__difficulty">{{ difficultyLabel }}</span>
-        <StatusBadge :status="question.status" />
+        <StatusBadge v-if="showStatus" :status="question.status" />
       </div>
 
       <div v-if="$slots.actions" class="question-card__actions">
         <slot name="actions" />
       </div>
     </header>
-
-    <p class="question-card__identity">
-      {{
-        t('questions.card.identity', {
-          id: question.id,
-          datetime: formatDateTime(question.created_at),
-        })
-      }}
-    </p>
 
     <div class="question-card__content">
       <slot />
@@ -71,17 +70,8 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-background);
-}
-
-.question-card--flush {
   padding: var(--space-4) 0;
-  border: none;
   border-bottom: 1px solid var(--color-hairline);
-  border-radius: 0;
 }
 
 .question-card__header {
@@ -108,9 +98,13 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
   font-weight: 600;
 }
 
+.question-card__id {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .question-card__difficulty {
   color: var(--color-text-muted);
-  font-size: var(--font-size-md);
 }
 
 .question-card__actions {
@@ -118,12 +112,6 @@ const difficultyLabel = computed(() => questionDifficultyLabel(props.question.di
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-left: auto;
-}
-
-.question-card__identity {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
 }
 
 .question-card__content {

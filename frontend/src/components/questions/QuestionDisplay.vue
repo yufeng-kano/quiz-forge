@@ -49,24 +49,13 @@ const shortAnswer = computed(() =>
   <TrueFalseQuestion v-else-if="trueFalse !== null" :payload="trueFalse" />
   <FillBlankQuestion v-else-if="fillBlank !== null" :payload="fillBlank" />
   <ShortAnswerQuestion v-else-if="shortAnswer !== null" :payload="shortAnswer" />
-  <div v-else class="question-display__unreadable">
-    <p class="question-display__unreadable-title">{{ t('questions.card.unreadableTitle') }}</p>
-    <p class="form-hint">{{ t('questions.card.unreadableDescription') }}</p>
-  </div>
+  <p v-else class="question-display__unreadable">{{ t('questions.card.unreadableTitle') }}</p>
 </template>
 
 <style scoped>
+/* One warning line in the failed tone: the row's own actions (丟棄) are right
+   above it, so the notice does not need a frame or a paragraph of advice. */
 .question-display__unreadable {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--color-status-failed-border);
-  border-radius: 6px;
-  background: var(--color-status-failed-bg);
-}
-
-.question-display__unreadable-title {
   color: var(--color-status-failed-text);
   font-weight: 600;
 }

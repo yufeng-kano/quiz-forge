@@ -15,6 +15,7 @@ import AppButton from '@/components/AppButton.vue'
 import ProgressText from '@/components/ProgressText.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import AppSkeleton from '@/components/ui/AppSkeleton.vue'
 import StatCard from '@/components/ui/StatCard.vue'
 import { useAppI18n } from '@/i18n'
@@ -43,7 +44,7 @@ const loadError = ref<string | null>(null)
 /** Placeholder rows shown while the recent-activity block loads. */
 const RECENT_SKELETON_ROWS = 4
 
-/** Status order used for the breakdown chips, so the cards read the same way every time. */
+/** Status order used for the breakdowns, so the cards read the same way every time. */
 const STATUS_ORDER = [
   'pending',
   'processing',
@@ -93,7 +94,6 @@ const questionCounts = computed(() => statusCounts(stats.value?.questions_by_sta
 const documentTotal = computed(() => sumOf(stats.value?.documents_by_status))
 const questionTotal = computed(() => sumOf(stats.value?.questions_by_status))
 const draftCount = computed(() => stats.value?.questions_by_status['draft'] ?? 0)
-const approvedCount = computed(() => stats.value?.questions_by_status['approved'] ?? 0)
 const failedJobCount = computed(() => stats.value?.failed_job_count ?? 0)
 const totalTokens = computed(() =>
   stats.value === null ? 0 : stats.value.llm_prompt_tokens + stats.value.llm_completion_tokens,
@@ -152,18 +152,22 @@ onUnmounted(clearTimer)
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.dashboard.title')">
+    <PageHeader :page-name="t('nav.dashboard')">
       <template #actions>
-        <AppButton variant="secondary" :disabled="loading" @click="load()">
-          {{ t('dashboard.refresh') }}
+        <AppButton
+          variant="secondary"
+          icon
+          :disabled="loading"
+          :aria-label="t('dashboard.refresh')"
+          :title="t('dashboard.refresh')"
+          @click="load()"
+        >
+          <AppIcon name="refresh" :size="16" />
         </AppButton>
       </template>
     </PageHeader>
 
-    <p v-if="loadError !== null" class="error-banner">
-      {{ loadError }}
-      <AppButton variant="secondary" @click="load()">{{ t('dashboard.refresh') }}</AppButton>
-    </p>
+    <p v-if="loadError !== null" class="error-banner">{{ loadError }}</p>
 
     <section class="dashboard__cards">
       <StatCard
@@ -172,7 +176,7 @@ onUnmounted(clearTimer)
         :to="{ name: 'documents' }"
         :loading="loading"
       >
-        <span v-for="entry in documentCounts" :key="entry.status" class="dashboard__chip">
+        <span v-for="entry in documentCounts" :key="entry.status" class="dashboard__status">
           <StatusBadge :status="entry.status" />
           {{ formatCount(entry.count) }}
         </span>
@@ -181,7 +185,6 @@ onUnmounted(clearTimer)
       <StatCard
         :label="t('dashboard.cards.drafts')"
         :value="formatCount(draftCount)"
-        :hint="draftCount > 0 ? t('dashboard.cards.draftsCta') : t('dashboard.cards.draftsIdle')"
         :tone="draftCount > 0 ? 'attention' : 'default'"
         :to="{ name: 'review' }"
         :loading="loading"
@@ -190,11 +193,10 @@ onUnmounted(clearTimer)
       <StatCard
         :label="t('dashboard.cards.questions')"
         :value="formatCount(questionTotal)"
-        :hint="t('dashboard.cards.questionsHint', { count: approvedCount })"
         :to="{ name: 'questions' }"
         :loading="loading"
       >
-        <span v-for="entry in questionCounts" :key="entry.status" class="dashboard__chip">
+        <span v-for="entry in questionCounts" :key="entry.status" class="dashboard__status">
           <StatusBadge :status="entry.status" />
           {{ formatCount(entry.count) }}
         </span>
@@ -210,11 +212,6 @@ onUnmounted(clearTimer)
       <StatCard
         :label="t('dashboard.cards.failedJobs')"
         :value="formatCount(failedJobCount)"
-        :hint="
-          failedJobCount > 0
-            ? t('dashboard.cards.failedJobsCta')
-            : t('dashboard.cards.failedJobsIdle')
-        "
         :tone="failedJobCount > 0 ? 'attention' : 'default'"
         :to="{ name: 'jobs' }"
         :loading="loading"
@@ -229,9 +226,9 @@ onUnmounted(clearTimer)
       />
     </section>
 
-    <section class="card dashboard__recent">
+    <section class="dashboard__recent">
       <header class="dashboard__recent-head">
-        <h2 class="card-title">{{ t('dashboard.recent.title') }}</h2>
+        <h2 class="dashboard__recent-title">{{ t('dashboard.recent.title') }}</h2>
         <RouterLink class="dashboard__all" :to="{ name: 'jobs' }">
           {{ t('dashboard.recent.viewAll') }}
         </RouterLink>
@@ -262,23 +259,30 @@ onUnmounted(clearTimer)
 </template>
 
 <style scoped>
+/* The six totals are one self-contained dataset, so they keep their card
+   borders while the rest of the app has none — the documented exception to
+   「卡片不是版面骨架」(D24, 用量頁 same pattern). */
 .dashboard__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: var(--space-3);
 }
 
-.dashboard__chip {
+/* Status word plus its count as plain text: no pill, the colour comes from
+   StatusBadge (docs/decisions/2026-08-17-ui-design-restraint.md D17) */
+.dashboard__status {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
   font-variant-numeric: tabular-nums;
 }
 
+/* A separate dataset, but not a framed panel: heading plus hairline-separated
+   rows is enough separation (D16 / D22) */
 .dashboard__recent {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .dashboard__recent-head {
@@ -286,6 +290,12 @@ onUnmounted(clearTimer)
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dashboard__recent-title {
+  font-size: var(--font-size-base);
 }
 
 .dashboard__all {

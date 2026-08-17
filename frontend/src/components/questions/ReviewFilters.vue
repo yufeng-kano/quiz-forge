@@ -18,6 +18,9 @@ import { useQuestionsStore } from '@/stores/questions'
  * counterpart here — narrowing the queue means "review all the 單選題 first",
  * which these two do. Both go to the server as query parameters, so the
  * remaining count and the pages stay consistent with what is on screen.
+ *
+ * The row sits directly on the page's work surface — no card frame around it
+ * (docs/frontend.md 設計節制原則: 卡片不是骨架).
  */
 const { t } = useAppI18n()
 const store = useQuestionsStore()
@@ -41,7 +44,7 @@ const difficulty = computed<string>({
 </script>
 
 <template>
-  <section class="card review-toolbar">
+  <section class="review-toolbar">
     <label class="form-field">
       <span class="form-label">{{ t('bank.filters.type') }}</span>
       <select v-model="questionType" class="form-select">

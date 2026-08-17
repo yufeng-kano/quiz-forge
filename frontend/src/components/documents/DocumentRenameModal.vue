@@ -53,14 +53,8 @@ function onSubmit(): void {
     <form class="rename" @submit.prevent="onSubmit">
       <label class="form-field">
         <span class="form-label">{{ t('documents.rename.label') }}</span>
-        <input
-          v-model="value"
-          class="form-input"
-          type="text"
-          :placeholder="t('documents.rename.placeholder')"
-        />
+        <input v-model="value" class="form-input" type="text" />
       </label>
-      <p class="form-hint">{{ t('documents.rename.hint') }}</p>
     </form>
 
     <template #actions>

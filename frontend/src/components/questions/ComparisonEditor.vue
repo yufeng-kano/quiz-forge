@@ -4,6 +4,7 @@ import { reactive, watch } from 'vue'
 import type { ComparisonDifference, ComparisonPayload } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import StringListEditor from '@/components/questions/StringListEditor.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAppI18n } from '@/i18n'
 
 /**
@@ -123,9 +124,16 @@ function addDifference(): void {
             @input="updateDifference(index, 'b', $event)"
           />
         </div>
-        <button type="button" class="editor-remove" @click="removeDifference(index)">
-          {{ t('editor.remove') }}
-        </button>
+        <AppButton
+          variant="ghost"
+          icon
+          size="sm"
+          :aria-label="t('editor.remove')"
+          :title="t('editor.remove')"
+          @click="removeDifference(index)"
+        >
+          <AppIcon name="close" :size="16" />
+        </AppButton>
       </div>
       <div>
         <AppButton variant="secondary" @click="addDifference">
@@ -153,7 +161,6 @@ function addDifference(): void {
   flex: none;
   padding-top: 0.45rem;
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
   white-space: nowrap;
 }
 

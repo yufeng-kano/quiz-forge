@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 
-import type { Conversation, JobStatus } from '@/api'
+import type { Conversation } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import ProgressText from '@/components/ProgressText.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
 import BankAgentComposer from '@/components/bank-agent/BankAgentComposer.vue'
 import BankAgentMessage from '@/components/bank-agent/BankAgentMessage.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
@@ -21,7 +20,6 @@ import { useToastsStore } from '@/stores/toasts'
  * column is collapsed (docs/decisions/2026-08-17-bank-on-questions-page.md D10).
  */
 defineProps<{
-  turnStatus: JobStatus | null
   turnProgress: string | null
   turnError: string | null
   turnRequestError: string | null
@@ -116,6 +114,7 @@ watch(
       <h2 class="agent__title">{{ t('bank.agent.title') }}</h2>
       <AppButton
         variant="ghost"
+        icon
         size="sm"
         :aria-label="t('bank.agent.close')"
         :title="t('bank.agent.close')"
@@ -148,6 +147,7 @@ watch(
       </label>
       <AppButton
         variant="ghost"
+        icon
         size="sm"
         :disabled="creating"
         :aria-label="t('bank.agent.new')"
@@ -158,6 +158,7 @@ watch(
       </AppButton>
       <AppButton
         variant="ghost"
+        icon
         size="sm"
         :disabled="deleting || store.activeId === null"
         :aria-label="t('bankAgent.conversations.delete')"
@@ -170,15 +171,29 @@ watch(
 
     <p v-if="store.conversationsError !== null" class="error-banner">
       {{ store.conversationsError }}
-      <AppButton variant="secondary" size="sm" @click="store.loadConversations()">
-        {{ t('bankAgent.reload') }}
+      <AppButton
+        variant="secondary"
+        icon
+        size="sm"
+        :aria-label="t('bankAgent.reload')"
+        :title="t('bankAgent.reload')"
+        @click="store.loadConversations()"
+      >
+        <AppIcon name="refresh" :size="16" />
       </AppButton>
     </p>
 
     <p v-if="store.messagesError !== null" class="error-banner">
       {{ store.messagesError }}
-      <AppButton variant="secondary" size="sm" @click="store.loadMessages()">
-        {{ t('bankAgent.reload') }}
+      <AppButton
+        variant="secondary"
+        icon
+        size="sm"
+        :aria-label="t('bankAgent.reload')"
+        :title="t('bankAgent.reload')"
+        @click="store.loadMessages()"
+      >
+        <AppIcon name="refresh" :size="16" />
       </AppButton>
     </p>
 
@@ -200,7 +215,6 @@ watch(
 
     <div class="agent__footer">
       <div v-if="store.isActiveTurnPending" class="agent__turn">
-        <StatusBadge v-if="turnStatus !== null" :status="turnStatus" />
         <span class="agent__turn-label">{{ t('bankAgent.turn.running') }}</span>
         <ProgressText :progress="turnProgress" />
       </div>

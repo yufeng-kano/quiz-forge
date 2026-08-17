@@ -4,7 +4,13 @@ import { RouterLink, type RouteLocationRaw } from 'vue-router'
 import AppSkeleton from './AppSkeleton.vue'
 
 /**
- * One overview number of the Dashboard.
+ * One total of 總覽 or 用量.
+ *
+ * These two pages are the documented exception to 「卡片不是版面骨架」: their
+ * totals are one self-contained dataset, and the card border is what separates
+ * them from the list underneath (docs/frontend.md 視覺風格,
+ * docs/decisions/2026-08-17-drop-page-titles-keep-stat-cards.md D24). Nothing
+ * else in the app is a card — do not reach for this component elsewhere.
  *
  * With `to` the whole card is the link to the page that can act on the number
  * (待審題目 → 審題, 失敗任務 → 任務中心), which is what makes the Dashboard a
@@ -16,7 +22,11 @@ withDefaults(
     label: string
     /** Already-formatted number; the card does no formatting of its own. */
     value: string
-    /** Localised line under the number: a breakdown, a unit, a call to action. */
+    /**
+     * One extra line under the number, and only when it carries a number the
+     * screen does not show anywhere else (分類數, LLM 呼叫次數). Never a
+     * subtitle restating the label (D20).
+     */
     hint?: string
     /** Makes the whole card a link. */
     to?: RouteLocationRaw
@@ -53,6 +63,7 @@ withDefaults(
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  min-width: 0;
   padding: var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -68,7 +79,6 @@ withDefaults(
 
 .stat-card__label {
   color: var(--color-text-muted);
-  font-size: var(--font-size-md);
 }
 
 .stat-card__value {

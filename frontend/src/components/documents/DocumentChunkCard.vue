@@ -2,11 +2,19 @@
 import { computed, ref } from 'vue'
 
 import type { DocumentChunk } from '@/api'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAppI18n } from '@/i18n'
 
 /**
  * One chunk: its category path, its tags and a collapsible view of the text
  * that was classified and embedded.
+ *
+ * A block on the same reading surface as the pages above it — hairline instead
+ * of a card, plain text instead of tag pills, and no panel around the expanded
+ * text (docs/decisions/2026-08-17-ui-design-restraint.md D16 / D17 / D22).
+ * The header row is the `<summary>`, so the chevron alone carries the
+ * expand/collapse affordance (D18) and 已建立向量 — the normal state repeated on
+ * every chunk — is not written out at all (D20); only its absence is.
  */
 const props = defineProps<{
   chunk: DocumentChunk
@@ -24,15 +32,15 @@ const categoryLabel = computed(() =>
     : props.categoryPath.join(t('documentDetail.chunks.categorySeparator')),
 )
 
-const embeddingLabel = computed(() =>
-  props.chunk.has_embedding
-    ? t('documentDetail.chunks.embedded')
-    : t('documentDetail.chunks.notEmbedded'),
-)
+const tagsLabel = computed(() => props.chunk.tags.join(t('documentDetail.chunks.tagSeparator')))
 
 const expanded = ref(false)
 
-/** `<details>` owns the open state; mirror it so the summary label can follow. */
+const toggleLabel = computed(() =>
+  expanded.value ? t('documentDetail.chunks.collapse') : t('documentDetail.chunks.expand'),
+)
+
+/** `<details>` owns the open state; mirror it so the chevron can follow. */
 function onToggle(event: Event): void {
   const details = event.target
   if (details instanceof HTMLDetailsElement) {
@@ -42,101 +50,87 @@ function onToggle(event: Event): void {
 </script>
 
 <template>
-  <article class="chunk-card">
-    <header class="chunk-card__head">
-      <span class="chunk-card__index">
+  <details class="chunk-block" @toggle="onToggle">
+    <summary class="chunk-block__head" :title="toggleLabel">
+      <span class="chunk-block__index">
         {{ t('documentDetail.chunks.chunkNo', { no: index }) }}
       </span>
-      <span class="chunk-card__category" :class="{ 'is-muted': categoryPath.length === 0 }">
+      <span class="chunk-block__category" :class="{ 'is-muted': categoryPath.length === 0 }">
         {{ categoryLabel }}
       </span>
-      <span class="chunk-card__embedding">{{ embeddingLabel }}</span>
-    </header>
+      <span v-if="!chunk.has_embedding" class="chunk-block__embedding">
+        {{ t('documentDetail.chunks.notEmbedded') }}
+      </span>
+      <AppIcon
+        class="chunk-block__chevron"
+        :name="expanded ? 'chevronUp' : 'chevronDown'"
+        :size="16"
+      />
+      <span v-if="chunk.tags.length > 0" class="chunk-block__tags">{{ tagsLabel }}</span>
+    </summary>
 
-    <ul v-if="chunk.tags.length > 0" class="chunk-card__tags">
-      <li v-for="(tag, tagIndex) in chunk.tags" :key="`${tagIndex}-${tag}`" class="chunk-card__tag">
-        {{ tag }}
-      </li>
-    </ul>
-
-    <details class="chunk-card__details" @toggle="onToggle">
-      <summary class="chunk-card__summary">
-        {{ expanded ? t('documentDetail.chunks.collapse') : t('documentDetail.chunks.expand') }}
-      </summary>
-      <p class="chunk-card__content">{{ chunk.content }}</p>
-    </details>
-  </article>
+    <p class="chunk-block__content">{{ chunk.content }}</p>
+  </details>
 </template>
 
 <style scoped>
-.chunk-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.9rem 1.1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-background);
+.chunk-block {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-hairline);
 }
 
-.chunk-card__head {
+.chunk-block__head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.35rem 0.9rem;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  list-style: none;
+  cursor: pointer;
 }
 
-.chunk-card__index {
+.chunk-block__head::-webkit-details-marker {
+  display: none;
+}
+
+.chunk-block__index {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-md);
   font-variant-numeric: tabular-nums;
 }
 
-.chunk-card__category {
+.chunk-block__category {
+  min-width: 0;
   color: var(--color-heading);
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.chunk-card__category.is-muted {
+.chunk-block__category.is-muted {
   color: var(--color-text-muted);
   font-weight: normal;
 }
 
-.chunk-card__embedding {
+/* Only the missing embedding is worth a word: it is why a chunk stays out of
+   semantic search. The normal state is silent. */
+.chunk-block__embedding {
+  color: var(--color-status-pending-text);
+}
+
+.chunk-block__chevron {
   margin-left: auto;
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
 }
 
-.chunk-card__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  list-style: none;
-  padding: 0;
-}
-
-.chunk-card__tag {
-  padding: 0.05rem 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-background-soft);
+/* Tags are open content: plain text on its own row, never pills */
+.chunk-block__tags {
+  width: 100%;
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
 }
 
-.chunk-card__summary {
-  color: var(--color-accent);
-  cursor: pointer;
-  font-size: 0.875rem;
-  width: fit-content;
-}
-
-.chunk-card__content {
-  margin-top: 0.5rem;
-  padding: 0.75rem 0.9rem;
-  border-radius: 6px;
-  background: var(--color-background-soft);
+.chunk-block__content {
+  margin-top: var(--space-2);
+  max-width: var(--reading-max-width);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

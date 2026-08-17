@@ -1,12 +1,22 @@
 <script setup lang="ts">
-/** Empty-state block. The caller resolves the wording from the locale file and
- * passes it in, so this component contains no text of its own. */
+/**
+ * Nothing to show here.
+ *
+ * One centred line of muted text and, when there is somewhere useful to go, an
+ * action under it — no dashed frame and no fill
+ * (docs/frontend.md 視覺風格: 不要虛線卡片框; 設計節制原則 D16/D22).
+ *
+ * `description` is for the rare case where the reason is not obvious from the
+ * title (an invalid id in the URL); it is not a subtitle to hang under every
+ * empty list. The caller resolves the wording from the locale file and passes
+ * it in, so this component contains no text of its own.
+ */
 defineProps<{ title: string; description?: string }>()
 </script>
 
 <template>
   <div class="empty-state">
-    <p class="empty-state__title">{{ title }}</p>
+    <p>{{ title }}</p>
     <p v-if="description" class="empty-state__description">{{ description }}</p>
     <div v-if="$slots.actions" class="empty-state__actions">
       <slot name="actions" />
@@ -19,27 +29,18 @@ defineProps<{ title: string; description?: string }>()
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  padding: 3rem 1.5rem;
-  border: 1px dashed var(--color-border);
-  border-radius: 8px;
-  background: var(--color-background-soft);
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  color: var(--color-text-muted);
   text-align: center;
 }
 
-.empty-state__title {
-  color: var(--color-heading);
-  font-weight: 600;
-}
-
 .empty-state__description {
-  max-width: 32rem;
-  color: var(--color-text-muted);
+  max-width: var(--reading-max-width);
 }
 
 .empty-state__actions {
   display: flex;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+  gap: var(--space-3);
 }
 </style>

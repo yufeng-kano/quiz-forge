@@ -62,9 +62,15 @@ watch(isActive, async (active, wasActive) => {
 <template>
   <div class="status-cell">
     <StatusBadge :status="props.document.status" />
-    <ProgressText v-if="isActive" :progress="progress" />
-    <p v-if="failureText !== null" class="status-cell__error">{{ failureText }}</p>
-    <p v-if="requestError !== null" class="status-cell__error">{{ requestError }}</p>
+    <div v-if="isActive" class="status-cell__line">
+      <ProgressText :progress="progress" />
+    </div>
+    <p v-if="failureText !== null" class="status-cell__error text-ellipsis" :title="failureText">
+      {{ failureText }}
+    </p>
+    <p v-if="requestError !== null" class="status-cell__error text-ellipsis" :title="requestError">
+      {{ requestError }}
+    </p>
   </div>
 </template>
 
@@ -74,11 +80,23 @@ watch(isActive, async (active, wasActive) => {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-1);
+  min-width: 0;
+}
+
+/* The column is a fixed narrow one: every line is cut to one line with the
+   whole text in its tooltip, never wrapped into a six-line row
+   (docs/frontend.md 清單有界原則). */
+.status-cell > * {
+  max-width: 100%;
+}
+
+.status-cell__line {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .status-cell__error {
   color: var(--color-status-failed-text);
-  font-size: var(--font-size-sm);
-  overflow-wrap: anywhere;
 }
 </style>

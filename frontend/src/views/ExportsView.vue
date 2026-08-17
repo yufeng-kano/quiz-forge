@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
 
 import { PAPER_SIZES, answersDocxUrl, questionsDocxUrl, type ExportListItem } from '@/api'
 import AppButton from '@/components/AppButton.vue'
-import EmptyState from '@/components/EmptyState.vue'
 import ProgressText from '@/components/ProgressText.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import ExportHeaderFieldsField from '@/components/exports/ExportHeaderFieldsField.vue'
-import ExportScoringField from '@/components/exports/ExportScoringField.vue'
-import ExportSelectionList from '@/components/exports/ExportSelectionList.vue'
+import ExportQuestionsField from '@/components/exports/ExportQuestionsField.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import type { DataTableColumn } from '@/components/ui/dataTable'
@@ -20,12 +18,7 @@ import { formatDateTime } from '@/i18n/datetime'
 import { translateApiError } from '@/i18n/errors'
 import { formatCount } from '@/i18n/number'
 import { paperSizeLabel } from '@/export/labels'
-import {
-  collectQuestionPoints,
-  collectTypePoints,
-  pruneQuestionPoints,
-  type QuestionPointsDraft,
-} from '@/export/scoring'
+import { collectQuestionPoints, collectTypePoints } from '@/export/scoring'
 import { useExportPrefsStore } from '@/stores/exportPrefs'
 import { useExportSelectionStore } from '@/stores/exportSelection'
 import { useExportsStore } from '@/stores/exports'
@@ -43,13 +36,13 @@ import { useToastsStore } from '@/stores/toasts'
  * selection: its `error` names the ids to fix, and nothing else could be done
  * about it here.
  *
- * 配分 and 表頭欄位 are widgets of their own (`ExportScoringField`,
+ * 題目與配分 and 表頭欄位 are widgets of their own (`ExportQuestionsField`,
  * `ExportHeaderFieldsField`); what stays here is which part of their state is
  * remembered. The paper size, the 表頭 columns and the per-type defaults are
  * preferences and live in `exportPrefs` (localStorage); the per-question
- * overrides describe this one paper and stay in the page, pruned to the
- * selection so a question removed after being scored cannot leave a key the
- * backend would reject.
+ * overrides live with the selection itself in `exportSelection`, which prunes
+ * them when a question is unticked — as page state they were wiped by a round
+ * trip to 題庫 (docs/decisions/2026-08-17-professional-form-pages.md D30).
  */
 const { t } = useAppI18n()
 const selection = useExportSelectionStore()
@@ -67,8 +60,6 @@ const {
 } = useSelectedQuestions()
 
 const title = ref('')
-/** Per-question point overrides for this paper, keyed by question id. */
-const questionPoints = ref<QuestionPointsDraft>({})
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
 
@@ -83,17 +74,30 @@ const canSubmit = computed(
   () => selection.count > 0 && trimmedTitle.value !== '' && !submitting.value && !isActive.value,
 )
 
-// An override for a question that has since been unticked would be a key
-// outside `question_ids`, which the backend answers with 422; dropping it as
-// soon as the selection changes also keeps the modal's total honest.
-watch(
-  () => selection.selectedIds,
-  (ids) => {
-    const kept = pruneQuestionPoints(ids, questionPoints.value)
-    if (Object.keys(kept).length !== Object.keys(questionPoints.value).length) {
-      questionPoints.value = kept
-    }
-  },
+/**
+ * The running job in one line. It carries the paper's title, so it is an
+ * arbitrarily long string: shown ellipsised with the whole line in the tooltip
+ * (docs/frontend.md 清單有界原則).
+ */
+const jobMeta = computed(() => {
+  const entry = store.currentJob
+  if (entry === null) {
+    return ''
+  }
+  return t('exports.job.meta', {
+    id: entry.jobId,
+    title: entry.title,
+    paper: paperSizeLabel(entry.paperSize),
+    count: entry.questionCount,
+    datetime: formatDateTime(entry.submittedAt),
+  })
+})
+
+/** The failure line, which names the offending question ids — same treatment. */
+const jobFailure = computed(() =>
+  error.value === null
+    ? t('exports.job.failedNoDetail')
+    : t('exports.job.failed', { error: error.value }),
 )
 
 const historyColumns = computed<DataTableColumn<ExportListItem>[]>(() => [
@@ -110,6 +114,7 @@ const historyColumns = computed<DataTableColumn<ExportListItem>[]>(() => [
     label: t('exports.history.columns.title'),
     value: (item) => item.title,
     sortValue: (item) => item.title,
+    ellipsis: true,
   },
   {
     key: 'paper_size',
@@ -194,7 +199,7 @@ async function onSubmit(): Promise<void> {
       title: trimmedTitle.value,
       paperSize: prefs.paperSize,
       points: collectTypePoints(selectionTypes.value, prefs.typePoints),
-      questionPoints: collectQuestionPoints(selection.selectedIds, questionPoints.value),
+      questionPoints: collectQuestionPoints(selection.selectedIds, selection.questionPoints),
       headerFields: prefs.headerFields,
     })
     toasts.success(t('exports.form.queued', { id: jobId }))
@@ -210,124 +215,103 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.exports.title')">
+    <PageHeader :page-name="t('nav.exports')">
       <template #actions>
         <AppButton
           variant="secondary"
+          icon
           :disabled="store.historyLoading"
+          :aria-label="t('exports.history.reload')"
+          :title="t('exports.history.reload')"
           @click="store.loadHistory()"
         >
-          {{ t('exports.history.reload') }}
+          <AppIcon name="refresh" />
         </AppButton>
       </template>
     </PageHeader>
 
-    <ExportSelectionList
-      v-if="selection.count > 0"
-      :rows="selectionRows"
-      :loading="selectionLoading"
-      :load-error="selectionError"
-      :loaded="selectionLoaded"
-      @reload="reloadSelection"
-    />
+    <form class="export-form" @submit.prevent="onSubmit">
+      <section class="form-section">
+        <h2 class="form-section__title">{{ t('exports.questions.section') }}</h2>
 
-    <EmptyState
-      v-else
-      :title="t('exports.selection.emptyTitle')"
-      :description="t('exports.selection.emptyDescription')"
-    >
-      <template #actions>
-        <RouterLink class="exports__link" :to="{ name: 'questions' }">
-          {{ t('exports.selection.goBank') }}
-        </RouterLink>
-      </template>
-    </EmptyState>
-
-    <form class="card export-form" @submit.prevent="onSubmit">
-      <h2 class="card-title">{{ t('exports.form.title') }}</h2>
-
-      <div class="export-form__fields">
-        <label class="form-field export-form__title-field">
-          <span class="form-label">{{ t('exports.form.paperTitle') }}</span>
-          <input
-            v-model="title"
-            class="form-input"
-            type="text"
-            required
-            :placeholder="t('exports.form.paperTitlePlaceholder')"
-          />
-          <span class="form-hint">{{ t('exports.form.paperTitleHint') }}</span>
-        </label>
-
-        <label class="form-field">
-          <span class="form-label">{{ t('exports.form.paperSize') }}</span>
-          <select v-model="prefs.paperSize" class="form-select">
-            <option v-for="size in PAPER_SIZES" :key="size.name" :value="size.name">
-              {{ paperSizeLabel(size.name) }}
-            </option>
-          </select>
-          <span class="form-hint">{{ t('exports.form.paperHint') }}</span>
-        </label>
-
-        <ExportScoringField
+        <ExportQuestionsField
           v-model:type-points="prefs.typePoints"
-          v-model:question-points="questionPoints"
           :rows="selectionRows"
           :types="selectionTypes"
+          :loading="selectionLoading"
+          :load-error="selectionError"
+          :loaded="selectionLoaded"
+          @reload="reloadSelection"
         />
+      </section>
+
+      <section class="form-section">
+        <h2 class="form-section__title">{{ t('exports.form.paperSection') }}</h2>
+
+        <div class="export-form__row">
+          <label class="form-field export-form__title-field">
+            <span class="form-label">{{ t('exports.form.paperTitle') }}</span>
+            <input
+              v-model="title"
+              class="form-input"
+              type="text"
+              required
+              :placeholder="t('exports.form.paperTitlePlaceholder')"
+            />
+          </label>
+
+          <label class="form-field export-form__paper-field">
+            <span class="form-label">{{ t('exports.form.paperSize') }}</span>
+            <select v-model="prefs.paperSize" class="form-select">
+              <option v-for="size in PAPER_SIZES" :key="size.name" :value="size.name">
+                {{ paperSizeLabel(size.name) }}
+              </option>
+            </select>
+          </label>
+        </div>
 
         <ExportHeaderFieldsField v-model="prefs.headerFields" />
-      </div>
+      </section>
 
       <p v-if="submitError !== null" class="form-error">{{ submitError }}</p>
 
-      <div>
+      <div class="export-form__actions">
         <AppButton type="submit" :disabled="!canSubmit">
           {{ submitting ? t('exports.form.submitting') : t('exports.form.submit') }}
         </AppButton>
       </div>
     </form>
 
-    <section v-if="store.currentJob !== null" class="card export-job">
+    <section v-if="store.currentJob !== null" class="export-job">
       <div class="export-job__head">
-        <h2 class="card-title">{{ t('exports.job.title') }}</h2>
         <StatusBadge v-if="status !== null" :status="status" />
+        <span v-else class="muted-text">{{ t('job.progress.notStarted') }}</span>
         <ProgressText v-if="isActive" :progress="progress" />
       </div>
 
-      <p class="export-job__meta">
-        {{
-          t('exports.job.meta', {
-            id: store.currentJob.jobId,
-            title: store.currentJob.title,
-            paper: paperSizeLabel(store.currentJob.paperSize),
-            count: store.currentJob.questionCount,
-            datetime: formatDateTime(store.currentJob.submittedAt),
-          })
-        }}
-      </p>
+      <p class="export-job__meta text-ellipsis" :title="jobMeta">{{ jobMeta }}</p>
 
       <p v-if="requestError !== null" class="form-error">{{ requestError }}</p>
 
       <template v-if="status === 'failed'">
-        <p class="form-error">
-          {{
-            error === null ? t('exports.job.failedNoDetail') : t('exports.job.failed', { error })
-          }}
-        </p>
+        <p class="form-error text-ellipsis" :title="jobFailure">{{ jobFailure }}</p>
         <div>
-          <AppButton variant="secondary" @click="retry">{{ t('exports.job.retry') }}</AppButton>
+          <AppButton
+            variant="secondary"
+            icon
+            :aria-label="t('exports.job.retry')"
+            :title="t('exports.job.retry')"
+            @click="retry"
+          >
+            <AppIcon name="refresh" />
+          </AppButton>
         </div>
       </template>
-
-      <p v-else-if="status === 'done'" class="export-job__done">{{ t('exports.job.done') }}</p>
-
-      <p v-else-if="status === null" class="form-hint">{{ t('job.progress.notStarted') }}</p>
     </section>
 
     <section class="export-history">
       <header class="export-history__head">
-        <h2 class="card-title">{{ t('exports.history.title') }}</h2>
+        <h2 class="export-history__title">{{ t('exports.history.title') }}</h2>
         <span class="muted-text">
           {{ t('exports.history.count', { count: formatCount(store.history.length) }) }}
         </span>
@@ -335,8 +319,14 @@ async function onSubmit(): Promise<void> {
 
       <p v-if="store.historyError !== null" class="error-banner">
         {{ store.historyError }}
-        <AppButton variant="secondary" @click="store.loadHistory()">
-          {{ t('exports.history.reload') }}
+        <AppButton
+          variant="secondary"
+          icon
+          :aria-label="t('exports.history.reload')"
+          :title="t('exports.history.reload')"
+          @click="store.loadHistory()"
+        >
+          <AppIcon name="refresh" :size="16" />
         </AppButton>
       </p>
 
@@ -346,30 +336,23 @@ async function onSubmit(): Promise<void> {
         :row-key="(item: ExportListItem) => item.id"
         :loading="store.historyLoading"
         :empty-title="t('exports.history.emptyTitle')"
-        :empty-description="t('exports.history.emptyDescription')"
       >
         <template #downloads="{ row }">
           <div class="export-history__downloads">
             <a v-if="row.questions_available" :href="questionsDocxUrl(row.id)">
               {{ t('exports.history.questions') }}
             </a>
-            <span v-else class="export-history__missing" aria-disabled="true">
+            <span v-else class="export-history__missing" :title="t('exports.history.unavailable')">
               {{ t('exports.history.questions') }}
             </span>
 
             <a v-if="row.answers_available" :href="answersDocxUrl(row.id)">
               {{ t('exports.history.answers') }}
             </a>
-            <span v-else class="export-history__missing" aria-disabled="true">
+            <span v-else class="export-history__missing" :title="t('exports.history.unavailable')">
               {{ t('exports.history.answers') }}
             </span>
           </div>
-          <p
-            v-if="!row.questions_available || !row.answers_available"
-            class="export-history__unavailable"
-          >
-            {{ t('exports.history.unavailable') }}
-          </p>
         </template>
       </DataTable>
     </section>
@@ -377,31 +360,34 @@ async function onSubmit(): Promise<void> {
 </template>
 
 <style scoped>
-.exports__link {
-  color: var(--color-accent);
-}
-
+/* Sections split by hairlines, fields sized to their content, and a readable
+   line length (docs/decisions/2026-08-17-professional-form-pages.md D27/D28) */
 .export-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-5);
+  max-width: 44rem;
 }
 
-.export-form__fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+.export-form__row {
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3) var(--space-4);
 }
 
 .export-form__title-field {
-  grid-column: span 2;
+  flex: 1 1 20rem;
   min-width: 0;
 }
 
-@media (max-width: 720px) {
-  .export-form__title-field {
-    grid-column: auto;
-  }
+.export-form__paper-field {
+  flex: 0 1 15rem;
+}
+
+/* The submit row closes the form the way a dialog footer closes a dialog */
+.export-form__actions {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-hairline);
 }
 
 .export-job {
@@ -419,15 +405,16 @@ async function onSubmit(): Promise<void> {
 
 .export-job__meta {
   color: var(--color-text-muted);
-  font-size: var(--font-size-md);
   font-variant-numeric: tabular-nums;
 }
 
-.export-job__done {
-  color: var(--color-status-done-text);
-}
-
+/* The history is an independent dataset from the selection above it, so it
+   bounds its own height and scrolls inside itself instead of adding its rows
+   to the page's scroll (docs/frontend.md 設計節制原則 D21). The bound is lower
+   than the table's default because this page carries a form above it. */
 .export-history {
+  --data-table-max-height: max(20rem, calc(100vh - 30rem));
+
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -437,8 +424,13 @@ async function onSubmit(): Promise<void> {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: space-between;
   gap: var(--space-3);
+}
+
+/* Names the second dataset on the page; the current job above it is identified
+   by its own status line, not by a heading */
+.export-history__title {
+  font-size: var(--font-size-base);
 }
 
 .export-history__downloads {
@@ -447,14 +439,10 @@ async function onSubmit(): Promise<void> {
   gap: var(--space-1) var(--space-4);
 }
 
+/* A file that was never produced: same size as its link, struck through and in
+   the muted tone, with 「檔案尚未產生」 in its tooltip */
 .export-history__missing {
-  color: var(--color-text-faint);
-  text-decoration: line-through;
-}
-
-.export-history__unavailable {
-  margin-top: var(--space-1);
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  text-decoration: line-through;
 }
 </style>

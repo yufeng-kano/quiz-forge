@@ -3,7 +3,6 @@ import { ref, watch } from 'vue'
 
 import AppButton from '@/components/AppButton.vue'
 import ProgressText from '@/components/ProgressText.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
 import { useJobPolling } from '@/composables/useJobPolling'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
@@ -81,7 +80,6 @@ watch(status, (value, previous) => {
     </span>
 
     <template v-if="isActive">
-      <StatusBadge v-if="status !== null" :status="status" />
       <span class="embed-notice__running">{{ t('bank.embed.running') }}</span>
       <ProgressText :progress="progress" />
     </template>

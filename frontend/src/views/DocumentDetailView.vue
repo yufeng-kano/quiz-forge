@@ -10,6 +10,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import DocumentChunkCard from '@/components/documents/DocumentChunkCard.vue'
 import DocumentPageCard from '@/components/documents/DocumentPageCard.vue'
 import DocumentRenameModal from '@/components/documents/DocumentRenameModal.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import { useConfirm } from '@/composables/useConfirm'
 import { useDocumentDetail } from '@/composables/useDocumentDetail'
@@ -240,10 +241,7 @@ async function onDelete(): Promise<void> {
     />
 
     <template v-else>
-      <PageHeader
-        :title="detail?.title ?? t('pages.documentDetail.title')"
-        :subtitle="t('pages.documentDetail.subtitle', { id: documentId })"
-      >
+      <PageHeader :page-name="t('pages.documentDetail.title')" :heading="detail?.title">
         <template #meta>
           <StatusBadge v-if="detail !== null" :status="detail.status" />
           <span v-if="detail !== null">{{ t(`documents.sourceType.${detail.source_type}`) }}</span>
@@ -254,8 +252,15 @@ async function onDelete(): Promise<void> {
         </template>
 
         <template #actions>
-          <AppButton v-if="detail !== null" variant="secondary" @click="renameOpen = true">
-            {{ t('documents.row.rename') }}
+          <AppButton
+            v-if="detail !== null"
+            variant="secondary"
+            icon
+            :aria-label="t('documents.row.rename')"
+            :title="t('documents.row.rename')"
+            @click="renameOpen = true"
+          >
+            <AppIcon name="edit" :size="16" />
           </AppButton>
           <AppButton
             v-if="jobFailed"
@@ -283,8 +288,15 @@ async function onDelete(): Promise<void> {
 
       <p v-if="error !== null" class="error-banner">
         {{ error }}
-        <AppButton variant="secondary" @click="reload()">
-          {{ t('documentDetail.reload') }}
+        <AppButton
+          variant="secondary"
+          icon
+          size="sm"
+          :aria-label="t('documentDetail.reload')"
+          :title="t('documentDetail.reload')"
+          @click="reload()"
+        >
+          <AppIcon name="refresh" :size="16" />
         </AppButton>
       </p>
 
@@ -294,37 +306,37 @@ async function onDelete(): Promise<void> {
       <p v-if="loading" class="muted-text">{{ t('documentDetail.loading') }}</p>
 
       <div v-if="detail !== null" class="detail">
-        <nav class="detail__outline" :aria-label="t('documentDetail.outline.label')">
-          <p class="detail__outline-title">{{ t('documentDetail.outline.pages') }}</p>
+        <div class="detail__aside">
+          <nav class="detail__outline" :aria-label="t('documentDetail.outline.label')">
+            <ul v-if="pages.length > 0" class="detail__outline-list">
+              <li v-for="page in pages" :key="page.id">
+                <button
+                  class="detail__outline-item"
+                  type="button"
+                  @click="scrollToAnchor(pageAnchorId(page.id))"
+                >
+                  <span>{{ t('documentDetail.pages.pageNo', { no: page.page_no }) }}</span>
+                  <StatusBadge :status="page.status" />
+                </button>
+              </li>
+            </ul>
+            <p v-else class="detail__outline-empty">{{ t('documentDetail.outline.noPages') }}</p>
 
-          <ul v-if="pages.length > 0" class="detail__outline-list">
-            <li v-for="page in pages" :key="page.id">
-              <button
-                class="detail__outline-item"
-                type="button"
-                @click="scrollToAnchor(pageAnchorId(page.id))"
-              >
-                <span>{{ t('documentDetail.pages.pageNo', { no: page.page_no }) }}</span>
-                <StatusBadge :status="page.status" />
-              </button>
-            </li>
-          </ul>
-          <p v-else class="detail__outline-empty">{{ t('documentDetail.outline.noPages') }}</p>
-
-          <button
-            class="detail__outline-item detail__outline-item--section"
-            type="button"
-            @click="scrollToAnchor(CHUNKS_ANCHOR_ID)"
-          >
-            <span>{{ t('documentDetail.chunks.title') }}</span>
-            <span class="detail__outline-count">{{ chunks.length }}</span>
-          </button>
-        </nav>
+            <button
+              class="detail__outline-item detail__outline-item--section"
+              type="button"
+              @click="scrollToAnchor(CHUNKS_ANCHOR_ID)"
+            >
+              <span>{{ t('documentDetail.chunks.title') }}</span>
+              <span class="detail__outline-count">{{ chunks.length }}</span>
+            </button>
+          </nav>
+        </div>
 
         <div class="detail__content">
           <section
             v-if="detail.source_url !== null || detail.summary !== null"
-            class="card detail__facts"
+            class="detail__facts"
           >
             <p v-if="detail.source_url !== null" class="detail__fact">
               <span class="detail__fact-label">{{ t('documentDetail.sourceUrl') }}</span>
@@ -346,13 +358,13 @@ async function onDelete(): Promise<void> {
 
           <section class="detail__section">
             <header class="detail__section-head">
-              <h2 class="card-title">{{ t('documentDetail.pages.title') }}</h2>
+              <h2 class="detail__section-title">{{ t('documentDetail.pages.title') }}</h2>
               <span class="muted-text">
                 {{ t('documentDetail.pages.count', { count: pages.length }) }}
               </span>
             </header>
 
-            <div v-if="pages.length > 0" class="detail__cards">
+            <div v-if="pages.length > 0" class="detail__blocks">
               <div
                 v-for="page in pages"
                 :id="pageAnchorId(page.id)"
@@ -366,22 +378,18 @@ async function onDelete(): Promise<void> {
                 />
               </div>
             </div>
-            <EmptyState
-              v-else
-              :title="t('documentDetail.pages.emptyTitle')"
-              :description="t('documentDetail.pages.emptyDescription')"
-            />
+            <EmptyState v-else :title="t('documentDetail.pages.emptyTitle')" />
           </section>
 
           <section :id="CHUNKS_ANCHOR_ID" class="detail__section detail__anchor">
             <header class="detail__section-head">
-              <h2 class="card-title">{{ t('documentDetail.chunks.title') }}</h2>
+              <h2 class="detail__section-title">{{ t('documentDetail.chunks.title') }}</h2>
               <span class="muted-text">
                 {{ t('documentDetail.chunks.count', { count: chunks.length }) }}
               </span>
             </header>
 
-            <div v-if="chunks.length > 0" class="detail__cards">
+            <div v-if="chunks.length > 0" class="detail__blocks">
               <DocumentChunkCard
                 v-for="(chunk, chunkIndex) in chunks"
                 :key="chunk.id"
@@ -390,11 +398,7 @@ async function onDelete(): Promise<void> {
                 :category-path="categoryPathOf(chunkIndex)"
               />
             </div>
-            <EmptyState
-              v-else
-              :title="t('documentDetail.chunks.emptyTitle')"
-              :description="t('documentDetail.chunks.emptyDescription')"
-            />
+            <EmptyState v-else :title="t('documentDetail.chunks.emptyTitle')" />
           </section>
         </div>
       </div>
@@ -415,9 +419,18 @@ async function onDelete(): Promise<void> {
   display: grid;
   grid-template-columns: 15rem minmax(0, 1fr);
   gap: 0;
-  align-items: start;
 }
 
+/* Full-height side column with a divider, same vocabulary as the document
+   library's folder column — never a floating rounded card (W2). The divider
+   runs the whole column; the outline inside it sticks. */
+.detail__aside {
+  min-width: 0;
+  border-right: 1px solid var(--color-border);
+}
+
+/* The outline bounds its own height and only its page list scrolls, so it
+   never rides along with the reading column (D21). */
 .detail__outline {
   position: sticky;
   /* Clears the page header bar, which sticks at the top of the content region */
@@ -425,22 +438,19 @@ async function onDelete(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  min-height: 0;
   max-height: calc(100vh - var(--page-header-height) - var(--space-6));
-  overflow: auto;
+  overflow: hidden;
   padding: var(--space-3) var(--space-4) var(--space-3) 0;
-  border-right: 1px solid var(--color-border);
-}
-
-.detail__outline-title {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
 }
 
 .detail__outline-list {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 0.1rem;
+  min-height: 0;
+  overflow-y: auto;
   list-style: none;
   padding: 0;
 }
@@ -466,7 +476,9 @@ async function onDelete(): Promise<void> {
   background: var(--color-background-mute);
 }
 
+/* Pinned under the scrolling page list, so the chunk section stays reachable */
 .detail__outline-item--section {
+  flex: none;
   margin-top: var(--space-2);
   border-top: 1px solid var(--color-hairline);
   padding-top: var(--space-2);
@@ -493,10 +505,14 @@ async function onDelete(): Promise<void> {
   padding-left: var(--space-5);
 }
 
+/* Label / value rows on the reading surface, closed by a rule instead of being
+   boxed in a card (D16 / D22) */
 .detail__facts {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-hairline);
 }
 
 .detail__fact {
@@ -532,10 +548,15 @@ async function onDelete(): Promise<void> {
   gap: var(--space-3);
 }
 
-.detail__cards {
+.detail__section-title {
+  font-size: var(--font-size-base);
+}
+
+/* Pages and chunks are blocks on one surface: each block carries its own
+   padding and hairline, so no gap between them (D16 / D22) */
+.detail__blocks {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
 }
 
 /* Outline clicks scroll here, so the sticky header must not cover the target */
@@ -548,12 +569,20 @@ async function onDelete(): Promise<void> {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .detail__aside {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
   .detail__outline {
     position: static;
     max-height: none;
+    overflow: visible;
     padding: 0 0 var(--space-3);
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
+  }
+
+  .detail__outline-list {
+    overflow-y: visible;
   }
 
   .detail__content {

@@ -5,6 +5,7 @@ import { RouterLink } from 'vue-router'
 import AppButton from '@/components/AppButton.vue'
 import ProgressText from '@/components/ProgressText.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useJobPolling } from '@/composables/useJobPolling'
 import { useAppI18n } from '@/i18n'
 import { formatDateTime } from '@/i18n/datetime'
@@ -70,44 +71,41 @@ const difficultyLabel = computed(() =>
 
     <p v-if="requestError !== null" class="form-error">{{ requestError }}</p>
 
-    <template v-if="status === 'failed'">
-      <p class="form-error">
-        {{
-          error === null ? t('generate.jobs.failedNoDetail') : t('generate.jobs.failed', { error })
-        }}
-      </p>
-      <div>
-        <AppButton variant="secondary" @click="retry">{{ t('generate.jobs.retry') }}</AppButton>
-      </div>
-    </template>
+    <div v-if="status === 'failed'" class="job-row__failure">
+      <p class="form-error">{{ error ?? t('generate.jobs.failedNoDetail') }}</p>
+      <AppButton
+        variant="ghost"
+        icon
+        size="sm"
+        :aria-label="t('generate.jobs.retry')"
+        :title="t('generate.jobs.retry')"
+        @click="retry"
+      >
+        <AppIcon name="refresh" :size="16" />
+      </AppButton>
+    </div>
 
     <template v-else-if="status === 'done'">
       <p v-if="error !== null" class="form-error">
         {{ t('generate.jobs.partialError', { error }) }}
       </p>
-      <p class="job-row__done">
-        {{ t('generate.jobs.done') }}
-        <RouterLink class="job-row__link" :to="{ name: 'review' }">
-          {{ t('generate.jobs.goReview') }}
-        </RouterLink>
+      <p>
+        <RouterLink :to="{ name: 'review' }">{{ t('generate.jobs.goReview') }}</RouterLink>
       </p>
     </template>
 
-    <p v-else-if="job === null" class="form-hint">{{ t('job.progress.notStarted') }}</p>
+    <p v-else-if="job === null" class="muted-text">{{ t('job.progress.notStarted') }}</p>
   </article>
 </template>
 
 <style scoped>
-/* The row sits inside the 生成紀錄 card, so it reads as a nested entry — a
-   hairline border on the soft surface — rather than a second card on top of one */
+/* One entry of the history column: the list divides its rows with a hairline,
+   so the row itself carries no border, radius or surface of its own
+   (docs/frontend.md 設計節制原則: 卡片不是骨架) */
 .job-row {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-md);
-  background: var(--color-background-soft);
 }
 
 .job-row__head {
@@ -126,30 +124,31 @@ const difficultyLabel = computed(() =>
 .job-row__items {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-2);
+  gap: var(--space-1) var(--space-4);
   padding: 0;
   list-style: none;
 }
 
 .job-row__item {
   color: var(--color-text);
-  font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
 }
 
+/* Secondary line of the row (id, time, scope, difficulty): the app's muted
+   tone at its readable size, never a shrunken grey line */
 .job-row__meta {
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
 }
 
-.job-row__done {
+.job-row__failure {
   display: flex;
-  flex-wrap: wrap;
+  align-items: flex-start;
   gap: var(--space-2);
-  color: var(--color-status-done-text);
 }
 
-.job-row__link {
-  color: var(--color-accent);
+.job-row__failure .form-error {
+  flex: 1;
+  min-width: 0;
 }
 </style>

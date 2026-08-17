@@ -52,7 +52,6 @@ const segments = computed(() => props.payload.stem.split(FILL_BLANK_MARKER))
   padding: 0 0.3rem;
   border-bottom: 1px solid var(--color-accent);
   color: var(--color-accent-strong);
-  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -67,6 +66,6 @@ const segments = computed(() => props.payload.stem.split(FILL_BLANK_MARKER))
 .fill-blank__answer-label {
   margin-right: 0.4rem;
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
 }
 </style>

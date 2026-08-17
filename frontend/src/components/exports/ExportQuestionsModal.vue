@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 
 import type { ExportPoints, QuestionType } from '@/api'
 import AppButton from '@/components/AppButton.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import type { SelectedQuestionRow } from '@/composables/useSelectedQuestions'
 import {
@@ -11,23 +12,26 @@ import {
   parsePointsInput,
   toScoredQuestions,
   totalPoints,
-  type QuestionPointsDraft,
 } from '@/export/scoring'
 import { useAppI18n } from '@/i18n'
 import { formatCount } from '@/i18n/number'
 import { QUESTION_TYPE_LABEL_KEYS, questionTypeLabel } from '@/questions/labels'
 import { questionPreview } from '@/questions/preview'
+import { useExportSelectionStore } from '@/stores/exportSelection'
 
 /**
- * 配分設定 — every scoring decision of one paper, in one dialog.
+ * 題目與配分 — the selected questions and every scoring decision of one paper,
+ * in one dialog (docs/decisions/2026-08-17-professional-form-pages.md D29).
  *
- * It is a modal rather than part of the form because the per-question list
- * grows with the selection: on the page it would push the submit button below
- * two hundred rows, here it scrolls inside a bounded box while the dialog keeps
- * its size (docs/frontend.md 清單有界原則).
+ * It is a modal rather than part of the form because the list grows with the
+ * selection: on the page it would push the submit button below two hundred
+ * rows, here it scrolls inside a bounded box while the dialog keeps its size
+ * (docs/frontend.md 清單有界原則). Each row carries its own remove button, so
+ * trimming the paper and scoring it are the same pass over the same list.
  *
  * Two layers of scoring, resolved the way the backend resolves them: a default
- * per question type, and an override per question that wins over it. A blank
+ * per question type (`exportPrefs`, persisted), and an override per question
+ * (`exportSelection`, this paper only — D30) that wins over it. A blank
  * override field therefore means 「跟著題型走」, and its placeholder shows the
  * value it would inherit so that blank is never ambiguous.
  *
@@ -47,9 +51,9 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 const typePoints = defineModel<ExportPoints>('typePoints', { required: true })
-const questionPoints = defineModel<QuestionPointsDraft>('questionPoints', { required: true })
 
 const { t } = useAppI18n()
+const selection = useExportSelectionStore()
 
 /** Raw field text, keyed the same way as the committed values. */
 const typeInput = ref<Partial<Record<QuestionType, string>>>({})
@@ -59,21 +63,22 @@ const targetInput = ref('')
 
 const scored = computed(() => toScoredQuestions(props.rows))
 
-const total = computed(() => totalPoints(scored.value, typePoints.value, questionPoints.value))
+const total = computed(() => totalPoints(scored.value, typePoints.value, selection.questionPoints))
 
-const hasOverrides = computed(() => Object.keys(questionPoints.value).length > 0)
+const hasOverrides = computed(() => Object.keys(selection.questionPoints).length > 0)
 
-interface ScoringRowView {
+interface QuestionRowView {
   id: number
   /** Position on the paper, which is the order the questions were picked in. */
   no: number
-  typeLabel: string
+  /** `null` marks a question that is no longer in the approved bank. */
+  typeLabel: string | null
   preview: string
   /** What the empty field would inherit, shown as its placeholder. */
   placeholder: string
 }
 
-const rowViews = computed<ScoringRowView[]>(() =>
+const rowViews = computed<QuestionRowView[]>(() =>
   props.rows.map((row, index) => {
     const question = row.question
     const scoredQuestion = scored.value[index] ?? { id: row.id, type: null }
@@ -81,8 +86,7 @@ const rowViews = computed<ScoringRowView[]>(() =>
     return {
       id: row.id,
       no: index + 1,
-      typeLabel:
-        question === null ? t('exports.scoring.unavailableType') : questionTypeLabel(question.type),
+      typeLabel: question === null ? null : questionTypeLabel(question.type),
       preview: question === null ? t('exports.selection.unavailable') : questionPreview(question),
       // Plain digits, not a grouped number: the placeholder shows what the
       // field would hold if it were typed in.
@@ -95,19 +99,27 @@ const targetTotal = computed(() => parsePointsInput(targetInput.value))
 
 /**
  * Every question has to end up with at least one point, so a target below the
- * question count cannot be split — the button stays disabled and the hint says
- * what the minimum is.
+ * question count cannot be split — the button stays disabled.
  */
 const canDistribute = computed(
   () =>
     props.rows.length > 0 && targetTotal.value !== null && targetTotal.value >= props.rows.length,
 )
 
+/**
+ * The minimum is only worth a line once a target has actually been typed that
+ * cannot be split; a permanent hint would say nothing the empty field does not
+ * (docs/frontend.md 設計節制原則).
+ */
+const targetTooSmall = computed(
+  () => props.rows.length > 0 && targetInput.value.trim() !== '' && !canDistribute.value,
+)
+
 /** Rebuilds the raw fields from the committed values, dropping stale text. */
 function syncQuestionInput(): void {
   const next: Record<number, string> = {}
   for (const row of props.rows) {
-    const points = questionPoints.value[row.id]
+    const points = selection.questionPoints[row.id]
     if (points !== undefined) {
       next[row.id] = String(points)
     }
@@ -164,15 +176,7 @@ function onQuestionInput(questionId: number, event: Event): void {
     return
   }
   questionInput.value = { ...questionInput.value, [questionId]: element.value }
-
-  const parsed = parsePointsInput(element.value)
-  const nextPoints: QuestionPointsDraft = { ...questionPoints.value }
-  if (parsed === null) {
-    delete nextPoints[questionId]
-  } else {
-    nextPoints[questionId] = parsed
-  }
-  questionPoints.value = nextPoints
+  selection.setQuestionPoints(questionId, parsePointsInput(element.value))
 }
 
 /**
@@ -185,20 +189,20 @@ function distribute(): void {
     return
   }
   const shares = distributePoints(wanted, props.rows.length)
-  const next: QuestionPointsDraft = {}
+  const next: Record<number, number> = {}
   props.rows.forEach((row, index) => {
     const share = shares[index]
     if (share !== undefined) {
       next[row.id] = share
     }
   })
-  questionPoints.value = next
+  selection.replaceQuestionPoints(next)
   syncQuestionInput()
 }
 
 /** Drops every override, leaving each question on its type's default again. */
 function clearOverrides(): void {
-  questionPoints.value = {}
+  selection.clearQuestionPoints()
   questionInput.value = {}
 }
 </script>
@@ -207,14 +211,14 @@ function clearOverrides(): void {
   <AppModal
     :open="props.open"
     size="lg"
-    :title="t('exports.scoring.modalTitle')"
+    :title="t('exports.questions.modalTitle')"
     @close="emit('close')"
   >
     <div class="scoring">
       <section class="scoring__section">
         <h3 class="scoring__heading">{{ t('exports.scoring.typeSection') }}</h3>
 
-        <p v-if="props.types.length === 0" class="form-hint">
+        <p v-if="props.types.length === 0" class="muted-text">
           {{ t('exports.scoring.noTypes') }}
         </p>
 
@@ -232,61 +236,73 @@ function clearOverrides(): void {
             />
           </label>
         </div>
-
-        <p class="form-hint">{{ t('exports.scoring.typeHint') }}</p>
       </section>
 
       <section class="scoring__section">
-        <h3 class="scoring__heading">{{ t('exports.scoring.distributeSection') }}</h3>
+        <div class="scoring__question-head">
+          <h3 class="scoring__heading">{{ t('exports.scoring.questionSection') }}</h3>
 
-        <div class="scoring__distribute">
-          <input
-            v-model="targetInput"
-            class="form-input scoring__input"
-            type="number"
-            min="1"
-            step="1"
-            inputmode="numeric"
-            :aria-label="t('exports.scoring.targetLabel')"
-            :placeholder="t('exports.scoring.targetPlaceholder')"
-          />
-          <AppButton variant="secondary" size="sm" :disabled="!canDistribute" @click="distribute">
-            {{ t('exports.scoring.distribute') }}
-          </AppButton>
-        </div>
-
-        <p class="form-hint">
-          {{ t('exports.scoring.distributeHint', { count: props.rows.length }) }}
-        </p>
-      </section>
-
-      <section class="scoring__section">
-        <h3 class="scoring__heading">{{ t('exports.scoring.questionSection') }}</h3>
-
-        <p v-if="rowViews.length === 0" class="form-hint">{{ t('exports.scoring.noRows') }}</p>
-
-        <ul v-else class="scoring__list">
-          <li v-for="row in rowViews" :key="row.id" class="scoring__row">
-            <span class="scoring__no">{{ t('exports.scoring.questionNo', { no: row.no }) }}</span>
-            <span class="scoring__type-tag">{{ row.typeLabel }}</span>
-            <span class="scoring__preview text-ellipsis" :title="row.preview">
-              {{ row.preview }}
-            </span>
+          <div class="scoring__distribute">
             <input
+              v-model="targetInput"
               class="form-input scoring__input"
               type="number"
               min="1"
               step="1"
               inputmode="numeric"
-              :value="questionInput[row.id] ?? ''"
-              :placeholder="row.placeholder"
-              :aria-label="t('exports.scoring.questionInputLabel', { no: row.no })"
-              @input="onQuestionInput(row.id, $event)"
+              :aria-label="t('exports.scoring.targetLabel')"
+              :placeholder="t('exports.scoring.targetPlaceholder')"
             />
+            <AppButton variant="secondary" size="sm" :disabled="!canDistribute" @click="distribute">
+              {{ t('exports.scoring.distribute') }}
+            </AppButton>
+          </div>
+        </div>
+
+        <p v-if="targetTooSmall" class="form-error">
+          {{ t('exports.scoring.distributeMin', { count: props.rows.length }) }}
+        </p>
+
+        <p v-if="rowViews.length === 0" class="muted-text">{{ t('exports.scoring.noRows') }}</p>
+
+        <ul v-else class="scoring__list">
+          <li v-for="row in rowViews" :key="row.id" class="scoring__row">
+            <span class="scoring__no">{{ t('exports.scoring.questionNo', { no: row.no }) }}</span>
+
+            <template v-if="row.typeLabel !== null">
+              <span class="scoring__row-type">{{ row.typeLabel }}</span>
+              <span class="scoring__preview text-ellipsis" :title="row.preview">
+                {{ row.preview }}
+              </span>
+              <input
+                class="form-input scoring__input"
+                type="number"
+                min="1"
+                step="1"
+                inputmode="numeric"
+                :value="questionInput[row.id] ?? ''"
+                :placeholder="row.placeholder"
+                :aria-label="t('exports.scoring.questionInputLabel', { no: row.no })"
+                @input="onQuestionInput(row.id, $event)"
+              />
+            </template>
+
+            <!-- No score field: this row is what would fail the export, and the
+                 remove button beside it is the fix -->
+            <span v-else class="scoring__unavailable">{{ row.preview }}</span>
+
+            <AppButton
+              variant="ghost"
+              icon
+              size="sm"
+              :aria-label="t('exports.selection.remove', { id: row.id })"
+              :title="t('exports.selection.remove', { id: row.id })"
+              @click="selection.deselect(row.id)"
+            >
+              <AppIcon name="close" :size="16" />
+            </AppButton>
           </li>
         </ul>
-
-        <p class="form-hint">{{ t('exports.scoring.questionHint') }}</p>
       </section>
     </div>
 
@@ -296,6 +312,9 @@ function clearOverrides(): void {
       </span>
       <AppButton variant="ghost" :disabled="!hasOverrides" @click="clearOverrides">
         {{ t('exports.scoring.clear') }}
+      </AppButton>
+      <AppButton variant="ghost" :disabled="selection.count === 0" @click="selection.clear()">
+        {{ t('exports.selection.clear') }}
       </AppButton>
       <AppButton @click="emit('close')">{{ t('exports.scoring.done') }}</AppButton>
     </template>
@@ -316,7 +335,7 @@ function clearOverrides(): void {
 }
 
 .scoring__heading {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-base);
 }
 
 .scoring__types {
@@ -334,7 +353,16 @@ function clearOverrides(): void {
 
 .scoring__type-label {
   color: var(--color-text);
-  font-size: var(--font-size-md);
+}
+
+/* The split writes per-question overrides, so it sits on the heading line of
+   the list it rewrites instead of being a section of its own */
+.scoring__question-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
 }
 
 .scoring__distribute {
@@ -347,7 +375,6 @@ function clearOverrides(): void {
 .scoring__input {
   width: 5.5rem;
   flex: none;
-  font-variant-numeric: tabular-nums;
 }
 
 /* The one part of the dialog that grows with the selection, so it is the one
@@ -355,7 +382,7 @@ function clearOverrides(): void {
 .scoring__list {
   display: flex;
   flex-direction: column;
-  max-height: min(22rem, 50vh);
+  max-height: min(24rem, 55vh);
   overflow-y: auto;
   padding: 0;
   border: 1px solid var(--color-border);
@@ -377,24 +404,31 @@ function clearOverrides(): void {
 
 .scoring__no {
   flex: none;
-  width: 2.5rem;
+  width: 4.5rem;
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.scoring__type-tag {
+/* Question type: a closed set of short words, so plain text in the heading
+   tone rather than a pill (docs/frontend.md 設計節制原則) */
+.scoring__row-type {
   flex: none;
-  width: 4.5rem;
+  width: 5rem;
   color: var(--color-heading);
-  font-size: var(--font-size-sm);
+  white-space: nowrap;
 }
 
 .scoring__preview {
   flex: 1;
   min-width: 0;
   color: var(--color-text);
-  font-size: var(--font-size-md);
+}
+
+.scoring__unavailable {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-status-failed-text);
 }
 
 /* Sits at the left end of the dialog's action row, opposite the buttons */

@@ -73,6 +73,9 @@
   --radius-lg: 10px;
   --radius-pill: 999px;
 
+  /* 鍵盤與輸入焦點的外圈；顏色是 --color-accent 的低透明度版 */
+  --focus-ring: 0 0 0 3px rgba(75, 107, 138, 0.18);
+
   /* 陰影克制使用：只有浮層（modal、toast、下拉）才脫離平面 */
   --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.04);
   --shadow-md: 0 6px 20px rgba(24, 24, 27, 0.08);

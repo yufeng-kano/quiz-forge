@@ -126,21 +126,6 @@ export function collectQuestionPoints(
   return Object.keys(collected).length === 0 ? undefined : collected
 }
 
-/** Drops draft overrides whose question is no longer selected. */
-export function pruneQuestionPoints(
-  selectedIds: readonly number[],
-  questionPoints: Readonly<QuestionPointsDraft>,
-): QuestionPointsDraft {
-  const kept: QuestionPointsDraft = {}
-  for (const id of selectedIds) {
-    const points = questionPoints[id]
-    if (points !== undefined) {
-      kept[id] = points
-    }
-  }
-  return kept
-}
-
 /**
  * The type defaults restricted to the types actually on the paper.
  *

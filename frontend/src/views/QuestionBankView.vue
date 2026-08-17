@@ -83,10 +83,11 @@ const browseSnapshot = ref<BankBrowseSnapshot | null>(null)
 const restoringBrowse = ref(false)
 const listWrap = ref<HTMLElement | null>(null)
 
-const pageTitle = computed(() =>
+/** Header count: how many questions the left column is currently listing. */
+const headerCount = computed(() =>
   leftView.value === 'selected'
-    ? t('bank.pageTitleSelected', { count: formatCount(selection.count) })
-    : t('bank.pageTitle', { count: formatCount(store.bankTotal) }),
+    ? t('bank.headerCountSelected', { count: formatCount(selection.count) })
+    : t('bank.headerCount', { count: formatCount(store.bankTotal) }),
 )
 
 function conversationQuery(): string | null {
@@ -368,17 +369,19 @@ function onCategoriesChanged(): void {
 
 <template>
   <div class="page page--workspace">
-    <PageHeader :title="pageTitle">
+    <PageHeader :page-name="t('nav.questions')">
+      <template #meta>{{ headerCount }}</template>
+
       <template #actions>
         <AppButton
           v-if="!agentOpen"
           variant="secondary"
+          icon
           :aria-label="t('bank.agent.open')"
           :title="t('bank.agent.open')"
           @click="openAgent"
         >
           <AppIcon name="conversations" :size="16" />
-          <span>{{ t('bank.agent.title') }}</span>
         </AppButton>
         <AppButton variant="secondary" @click="categoriesOpen = true">
           {{ t('bank.categories.action') }}
@@ -419,15 +422,29 @@ function onCategoriesChanged(): void {
 
           <p v-if="leftView === 'bank' && store.bankError !== null" class="error-banner">
             {{ store.bankError }}
-            <AppButton variant="secondary" @click="store.loadBank()">
-              {{ t('bank.reload') }}
+            <AppButton
+              variant="secondary"
+              icon
+              size="sm"
+              :aria-label="t('bank.reload')"
+              :title="t('bank.reload')"
+              @click="store.loadBank()"
+            >
+              <AppIcon name="refresh" :size="16" />
             </AppButton>
           </p>
 
           <p v-if="leftView === 'selected' && selectedLoadError !== null" class="error-banner">
             {{ selectedLoadError }}
-            <AppButton variant="secondary" @click="reloadSelected()">
-              {{ t('bank.reload') }}
+            <AppButton
+              variant="secondary"
+              icon
+              size="sm"
+              :aria-label="t('bank.reload')"
+              :title="t('bank.reload')"
+              @click="reloadSelected()"
+            >
+              <AppIcon name="refresh" :size="16" />
             </AppButton>
           </p>
         </div>
@@ -443,7 +460,11 @@ function onCategoriesChanged(): void {
             </ul>
 
             <ul
-              v-else-if="focusedQuestionId !== null && focusedQuestion !== undefined && focusedQuestion !== null"
+              v-else-if="
+                focusedQuestionId !== null &&
+                focusedQuestion !== undefined &&
+                focusedQuestion !== null
+              "
               class="bank__list"
             >
               <li :id="questionAnchorId(focusedQuestion.id)">
@@ -468,11 +489,7 @@ function onCategoriesChanged(): void {
               </li>
             </ul>
 
-            <EmptyState
-              v-else-if="store.bankLoaded"
-              :title="t('bank.emptyTitle')"
-              :description="t('bank.emptyDescription')"
-            >
+            <EmptyState v-else-if="store.bankLoaded" :title="t('bank.emptyTitle')">
               <template #actions>
                 <RouterLink class="bank__link" :to="{ name: 'review' }">
                   {{ t('bank.goReview') }}
@@ -507,11 +524,7 @@ function onCategoriesChanged(): void {
               </li>
             </ul>
 
-            <EmptyState
-              v-else
-              :title="t('bank.emptySelectedTitle')"
-              :description="t('bank.emptySelectedDescription')"
-            />
+            <EmptyState v-else :title="t('bank.emptySelectedTitle')" />
           </template>
         </div>
 
@@ -528,6 +541,7 @@ function onCategoriesChanged(): void {
       <aside v-if="!agentOpen" class="bank__rail">
         <AppButton
           variant="ghost"
+          icon
           size="sm"
           :aria-label="t('bank.agent.open')"
           :title="t('bank.agent.open')"
@@ -540,7 +554,6 @@ function onCategoriesChanged(): void {
       <BankAgentColumn
         v-else
         class="bank__agent"
-        :turn-status="status"
         :turn-progress="progress"
         :turn-error="error"
         :turn-request-error="requestError"

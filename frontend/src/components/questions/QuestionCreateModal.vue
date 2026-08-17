@@ -128,7 +128,6 @@ async function onSubmit(): Promise<void> {
               {{ t(QUESTION_TYPE_LABEL_KEYS[type]) }}
             </option>
           </select>
-          <span class="form-hint">{{ t('bank.create.typeHint') }}</span>
         </label>
 
         <label class="form-field">
@@ -152,7 +151,6 @@ async function onSubmit(): Promise<void> {
         <input v-model="asDraft" type="checkbox" />
         <span>{{ t('bank.create.asDraft') }}</span>
       </label>
-      <p class="form-hint">{{ t('bank.create.statusHint') }}</p>
 
       <p v-if="submitError !== null" class="form-error">{{ submitError }}</p>
     </form>

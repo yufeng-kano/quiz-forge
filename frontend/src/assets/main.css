@@ -23,22 +23,32 @@ a:hover {
 
 /* Shared page layout.
 
-   The shell (`App.vue` + `PageHeader`) owns the sidebar, the per-page header
-   bar and the padding of the content region; a view only stacks its own blocks
-   with `.page` inside that region. */
+   The shell (`App.vue` + `PageHeader`) owns the sidebar and the scrolling of
+   the content region; a view only stacks its own blocks with `.page` inside
+   that region.
+
+   The gutter of the content region is padding of the page itself, because
+   `PageHeader` bleeds across it with `margin: 0 calc(-1 * var(--content-padding-x))`.
+   A negative margin only stays inside the box when the padding it cancels
+   belongs to an ancestor the header sits inside: with the gutter on the scroll
+   frame instead, the header's border box ended one gutter past the frame's
+   content edge and every page that scrolls grew a horizontal scrollbar as wide
+   as the gutter. */
 .page {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  padding-inline: var(--content-padding-x);
 }
 
-/* Non-workspace pages (總覽／審題／出題／匯出／用量／文件詳情) scroll
-   themselves. `.app-main` stays `overflow: hidden` so a workspace page
-   cannot turn the main column into a shared scroll frame. */
+/* Non-workspace pages (總覽／審題／出題／匯出／用量／文件詳情) keep their
+   natural height and scroll as part of `.app-main`; `flex: none` stops the
+   flex column from squashing a long page back into the viewport. The closing
+   band under the content is theirs, so a workspace page can end flush with the
+   viewport bottom instead of standing on an empty strip. */
 .page:not(.page--workspace) {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
+  flex: none;
+  padding-bottom: var(--space-7);
 }
 
 /* Opt-in for list / split workspaces (documents / jobs / 題庫). Non-workspace
@@ -53,19 +63,6 @@ a:hover {
   gap: 0;
 }
 
-/* Surface used by every content block that is not a table: cards, panels,
-   filter bars. One definition so borders and radii stay identical everywhere */
-.card {
-  padding: var(--space-4) var(--space-5);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-background);
-}
-
-.card-title {
-  font-size: var(--font-size-base);
-}
-
 /* Single-line truncation for anything that can arrive arbitrarily long — a
    document title taken from a web page, a URL, a category path.
 
@@ -78,6 +75,21 @@ a:hover {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+/* Kept in the accessibility tree, taken out of the layout: the page name each
+   `PageHeader` carries as its `<h1>` (docs/frontend.md 頁首文案 D23) and any
+   other label the visual design has no room for. `position: absolute` keeps it
+   from occupying a line in its flex or grid parent. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* Secondary line of text (counts, timestamps, hints) */
@@ -105,12 +117,12 @@ a:hover {
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-1);
 }
 
 .form-label {
   color: var(--color-heading);
-  font-size: 0.875rem;
+  font-size: var(--font-size-md);
   font-weight: 600;
 }
 
@@ -119,12 +131,30 @@ a:hover {
 .form-select {
   width: 100%;
   min-width: 0;
-  padding: 0.4rem 0.6rem;
+  padding: 0.45rem 0.7rem;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--color-background);
   color: var(--color-text);
   font: inherit;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+/* 數字欄位靠 tabular figures 對齊，且欄寬由 caller 依內容收窄（D28） */
+.form-input[type='number'] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 原生 select 外觀各瀏覽器不一：改為自繪 chevron，右側留出箭頭位 */
+.form-select {
+  appearance: none;
+  padding-right: 2.1rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 16px 16px;
 }
 
 .form-textarea {
@@ -132,62 +162,69 @@ a:hover {
   line-height: 1.6;
 }
 
+.form-input:hover:not(:disabled):not(:focus),
+.form-textarea:hover:not(:disabled):not(:focus),
+.form-select:hover:not(:disabled):not(:focus) {
+  border-color: var(--color-border-hover);
+}
+
 .form-input:focus,
 .form-textarea:focus,
 .form-select:focus {
   border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
   outline: none;
+}
+
+/* 表單分區（D27）：hairline 分隔的欄位群，小節標題可見 */
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.form-section + .form-section {
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-hairline);
+}
+
+.form-section__title {
+  color: var(--color-heading);
+  font-size: var(--font-size-md);
+  font-weight: 600;
 }
 
 .form-hint {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--font-size-md);
 }
 
 .form-error {
   color: var(--color-status-failed-text);
-  font-size: 0.875rem;
+  font-size: var(--font-size-md);
   overflow-wrap: anywhere;
 }
 
 /* Shared question editor layout: the six type editors differ only in which
-   fields they show, so the row / remove-button / radio presentation lives here */
+   fields they show, so the row and radio presentation lives here */
 .editor-form {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: var(--space-4);
 }
 
 .editor-row {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .editor-radio {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: var(--space-1);
   cursor: pointer;
   white-space: nowrap;
-}
-
-.editor-remove {
-  flex: none;
-  padding: 0.4rem 0.6rem;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: none;
-  color: var(--color-text-muted);
-  font: inherit;
-  font-size: 0.875rem;
-  cursor: pointer;
-}
-
-.editor-remove:hover {
-  border-color: var(--color-status-failed-border);
-  background: var(--color-status-failed-bg);
-  color: var(--color-status-failed-text);
 }
 
 /* Shared question rendering: the six type components share the stem and list

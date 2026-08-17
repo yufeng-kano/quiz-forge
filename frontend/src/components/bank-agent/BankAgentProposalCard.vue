@@ -117,15 +117,17 @@ function onOpen(): void {
 
 .proposal__meta {
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+/* 淡字「已選」 is what the decision asks for here; only the size is raised out
+   of the shrunken-grey range (docs/…/2026-08-17-bank-on-questions-page.md D14) */
 .proposal__selected {
   margin-left: auto;
   color: var(--color-text-faint);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   white-space: nowrap;
 }
 

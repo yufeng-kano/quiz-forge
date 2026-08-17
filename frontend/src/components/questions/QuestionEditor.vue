@@ -59,14 +59,15 @@ function onSave(): void {
 </template>
 
 <style scoped>
+/* The form takes the place of the rendered question inside the row; a left
+   rule is all the separation it needs, the same way the quoted source text is
+   marked (docs/frontend.md 設計節制原則 — 分割線優先於面板). */
 .question-editor {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-background-soft);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-accent);
 }
 
 .question-editor__actions {

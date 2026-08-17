@@ -3,6 +3,7 @@ import { reactive, watch } from 'vue'
 
 import type { SingleChoicePayload } from '@/api'
 import AppButton from '@/components/AppButton.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAppI18n } from '@/i18n'
 import { optionLetter } from '@/questions/options'
 
@@ -73,7 +74,7 @@ function addOption(): void {
     <div class="form-field">
       <span class="form-label">{{ t('questions.labels.options') }}</span>
       <div v-for="(option, index) in draft.options" :key="index" class="editor-row editor__option">
-        <label class="editor-radio">
+        <label class="editor-radio" :title="t('editor.markCorrect')">
           <input v-model="draft.answer_index" type="radio" :value="index" />
           <span class="editor__marker">
             {{ t('questions.option.marker', { letter: optionLetter(index) }) }}
@@ -85,11 +86,17 @@ function addOption(): void {
           :value="option"
           @input="updateOption(index, $event)"
         />
-        <button type="button" class="editor-remove" @click="removeOption(index)">
-          {{ t('editor.remove') }}
-        </button>
+        <AppButton
+          variant="ghost"
+          icon
+          size="sm"
+          :aria-label="t('editor.remove')"
+          :title="t('editor.remove')"
+          @click="removeOption(index)"
+        >
+          <AppIcon name="close" :size="16" />
+        </AppButton>
       </div>
-      <p class="form-hint">{{ t('editor.markCorrect') }}</p>
       <div>
         <AppButton variant="secondary" @click="addOption">{{ t('editor.addOption') }}</AppButton>
       </div>
@@ -109,6 +116,5 @@ function addOption(): void {
 
 .editor__marker {
   color: var(--color-text-muted);
-  font-size: 0.875rem;
 }
 </style>

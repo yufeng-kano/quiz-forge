@@ -115,8 +115,6 @@ async function removeCategory(category: Category): Promise<void> {
 
 <template>
   <AppModal :open="props.open" size="lg" :title="t('bank.categories.title')" @close="emit('close')">
-    <p class="muted-text">{{ t('bank.categories.hint') }}</p>
-
     <p v-if="store.loading" class="form-hint">{{ t('bank.categories.loading') }}</p>
     <p v-else-if="store.loadError !== null" class="form-error">{{ store.loadError }}</p>
     <p v-else-if="rows.length === 0" class="form-hint">{{ t('bank.categories.empty') }}</p>

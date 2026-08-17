@@ -113,24 +113,22 @@ function clearAll(): void {
     @close="emit('close')"
   >
     <div class="picker">
-      <label class="form-field">
-        <span class="form-label">{{ t('generate.scope.categories.search') }}</span>
-        <input
-          v-model="search"
-          class="form-input"
-          type="search"
-          :placeholder="t('generate.scope.categories.searchPlaceholder')"
-        />
-      </label>
+      <input
+        v-model="search"
+        class="form-input"
+        type="search"
+        :aria-label="t('generate.scope.categories.search')"
+        :placeholder="t('generate.scope.categories.search')"
+      />
 
-      <p v-if="store.loading && store.tree.length === 0" class="form-hint">
+      <p v-if="store.loading && store.tree.length === 0" class="muted-text">
         {{ t('generate.scope.categories.loading') }}
       </p>
       <p v-else-if="store.loadError !== null" class="form-error">{{ store.loadError }}</p>
-      <p v-else-if="store.tree.length === 0" class="form-hint">
+      <p v-else-if="store.tree.length === 0" class="muted-text">
         {{ t('generate.scope.categories.empty') }}
       </p>
-      <p v-else-if="filteredTree.length === 0" class="form-hint">
+      <p v-else-if="filteredTree.length === 0" class="muted-text">
         {{ t('generate.scope.categories.noMatch') }}
       </p>
 
@@ -165,8 +163,6 @@ function clearAll(): void {
           </ul>
         </li>
       </ul>
-
-      <p class="form-hint">{{ t('generate.scope.categories.hint') }}</p>
     </div>
 
     <template #actions>

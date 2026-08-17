@@ -78,24 +78,22 @@ function clearAll(): void {
     @close="emit('close')"
   >
     <div class="picker">
-      <label class="form-field">
-        <span class="form-label">{{ t('generate.scope.documents.search') }}</span>
-        <input
-          v-model="search"
-          class="form-input"
-          type="search"
-          :placeholder="t('generate.scope.documents.searchPlaceholder')"
-        />
-      </label>
+      <input
+        v-model="search"
+        class="form-input"
+        type="search"
+        :aria-label="t('generate.scope.documents.search')"
+        :placeholder="t('generate.scope.documents.search')"
+      />
 
-      <p v-if="store.loading && store.documents.length === 0" class="form-hint">
+      <p v-if="store.loading && store.documents.length === 0" class="muted-text">
         {{ t('generate.scope.documents.loading') }}
       </p>
       <p v-else-if="store.loadError !== null" class="form-error">{{ store.loadError }}</p>
-      <p v-else-if="store.documents.length === 0" class="form-hint">
+      <p v-else-if="store.documents.length === 0" class="muted-text">
         {{ t('generate.scope.documents.empty') }}
       </p>
-      <p v-else-if="filtered.length === 0" class="form-hint">
+      <p v-else-if="filtered.length === 0" class="muted-text">
         {{ t('generate.scope.documents.noMatch') }}
       </p>
 
@@ -124,8 +122,6 @@ function clearAll(): void {
           </label>
         </li>
       </ul>
-
-      <p class="form-hint">{{ t('generate.scope.documents.readyOnly') }}</p>
     </div>
 
     <template #actions>
@@ -202,6 +198,6 @@ function clearAll(): void {
   flex-wrap: wrap;
   gap: var(--space-1) var(--space-3);
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
 }
 </style>

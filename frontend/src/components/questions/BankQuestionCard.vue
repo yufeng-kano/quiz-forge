@@ -27,6 +27,9 @@ import { useToastsStore } from '@/stores/toasts'
  * 複製 / 丟棄 are icon-only: they are secondary next to the checkbox
  * (docs/decisions/2026-08-17-bank-on-questions-page.md D12). Review keeps
  * labelled 採用／丟棄／編輯 buttons.
+ *
+ * Every row here is `approved`, so the card only shows a status when one is
+ * not (docs/frontend.md 設計節制原則 — 不重述外框已經說過的事).
  */
 const props = defineProps<{ question: QuestionListItem }>()
 
@@ -69,7 +72,7 @@ async function onDuplicate(): Promise<void> {
 </script>
 
 <template>
-  <QuestionCard :question="question" flush>
+  <QuestionCard :question="question" expected-status="approved">
     <template #select>
       <input
         type="checkbox"
@@ -83,6 +86,7 @@ async function onDuplicate(): Promise<void> {
     <template #actions>
       <AppButton
         variant="ghost"
+        icon
         size="sm"
         :disabled="acting !== null"
         :aria-label="t('bank.duplicateAria', { id: question.id })"
@@ -93,6 +97,7 @@ async function onDuplicate(): Promise<void> {
       </AppButton>
       <AppButton
         variant="ghost"
+        icon
         size="sm"
         :disabled="acting !== null"
         :aria-label="t('bank.rejectAria', { id: question.id })"

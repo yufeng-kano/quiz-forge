@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import AppButton from '@/components/AppButton.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAppI18n } from '@/i18n'
 
 /**
  * Editable list of plain strings — option lists, aspects, blank answers, key
  * points. Every list in the question editors is edited through this one
- * component, so they all behave the same: one row per entry, a remove button
- * per row, one add button at the end.
+ * component, so they all behave the same: one row per entry, an icon-only
+ * remove control per row (docs/frontend.md 設計節制原則 — 有慣用 icon 就不放
+ * 字), one add button at the end.
  *
  * The list is a `v-model`, and every change assigns a new array rather than
  * mutating the one passed in, so the parent's payload draft is only ever
@@ -70,9 +72,16 @@ function addItem(): void {
         :placeholder="placeholder"
         @input="updateItem(index, $event)"
       />
-      <button type="button" class="editor-remove" @click="removeItem(index)">
-        {{ t('editor.remove') }}
-      </button>
+      <AppButton
+        variant="ghost"
+        icon
+        size="sm"
+        :aria-label="t('editor.remove')"
+        :title="t('editor.remove')"
+        @click="removeItem(index)"
+      >
+        <AppIcon name="close" :size="16" />
+      </AppButton>
     </div>
 
     <div class="list-editor__add">
@@ -88,7 +97,6 @@ function addItem(): void {
   flex: none;
   padding-top: 0.45rem;
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
   white-space: nowrap;
 }
 

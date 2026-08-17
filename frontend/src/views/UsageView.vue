@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import { getUsage, type UsageSummary } from '@/api'
 import AppButton from '@/components/AppButton.vue'
-import EmptyState from '@/components/EmptyState.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import StatCard from '@/components/ui/StatCard.vue'
@@ -19,10 +19,11 @@ import { modelRows, purposeRows, type UsageTableRow } from '@/usage/rows'
  * (.rule 使用者體驗規則: 提供使用者查看累計用量).
  *
  * Everything on the page comes from one `GET /api/v1/usage` response: the four
- * grand totals as cards, plus the same numbers broken down by model and by
- * purpose as two sortable tables. There is nothing to poll — usage only
- * changes when a job runs — so the page loads once and offers a refresh
- * button, whose failure is a toast rather than a silent no-op.
+ * grand totals as `StatCard`s, plus the same numbers broken down by model and
+ * by purpose as two sortable tables, each its own bounded scroll region. There
+ * is nothing to poll — usage only changes when a job runs — so the page loads
+ * once and offers a refresh button, whose failure is a toast rather than a
+ * silent no-op.
  */
 const { t } = useAppI18n()
 const toasts = useToastsStore()
@@ -41,6 +42,33 @@ const isEmpty = computed(
 )
 
 const total = computed(() => summary.value?.total ?? null)
+
+/** First load only; a refresh keeps the numbers on screen instead of blanking them. */
+const totalsLoading = computed(() => loading.value && total.value === null)
+
+/** The four grand totals, headline number first. */
+const totals = computed(() => [
+  {
+    key: 'total_tokens',
+    label: t('usage.metric.totalTokens'),
+    value: total.value?.total_tokens,
+  },
+  {
+    key: 'prompt_tokens',
+    label: t('usage.metric.promptTokens'),
+    value: total.value?.prompt_tokens,
+  },
+  {
+    key: 'completion_tokens',
+    label: t('usage.metric.completionTokens'),
+    value: total.value?.completion_tokens,
+  },
+  {
+    key: 'call_count',
+    label: t('usage.metric.callCount'),
+    value: total.value?.call_count,
+  },
+])
 
 /**
  * The breakdown tables carry the same four numbers and differ only in what
@@ -120,89 +148,97 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <PageHeader :title="t('pages.usage.title')">
+    <PageHeader :page-name="t('nav.usage')">
       <template #actions>
-        <AppButton variant="secondary" :disabled="loading" @click="load">
-          {{ t('usage.refresh') }}
+        <AppButton
+          variant="secondary"
+          icon
+          :disabled="loading"
+          :aria-label="t('usage.refresh')"
+          :title="t('usage.refresh')"
+          @click="load"
+        >
+          <AppIcon name="refresh" :size="16" />
         </AppButton>
       </template>
     </PageHeader>
 
-    <p v-if="loadError !== null" class="error-banner">
-      {{ loadError }}
-      <AppButton variant="secondary" :disabled="loading" @click="load">
-        {{ t('usage.refresh') }}
-      </AppButton>
-    </p>
+    <p v-if="loadError !== null" class="error-banner">{{ loadError }}</p>
 
-    <section class="usage__cards">
+    <section class="usage__totals">
       <StatCard
-        :label="t('usage.metric.totalTokens')"
-        :value="formatCount(total?.total_tokens ?? 0)"
-        :hint="t('usage.totals.hint')"
-        :loading="loading && total === null"
-      />
-      <StatCard
-        :label="t('usage.metric.promptTokens')"
-        :value="formatCount(total?.prompt_tokens ?? 0)"
-        :loading="loading && total === null"
-      />
-      <StatCard
-        :label="t('usage.metric.completionTokens')"
-        :value="formatCount(total?.completion_tokens ?? 0)"
-        :loading="loading && total === null"
-      />
-      <StatCard
-        :label="t('usage.metric.callCount')"
-        :value="formatCount(total?.call_count ?? 0)"
-        :loading="loading && total === null"
+        v-for="metric in totals"
+        :key="metric.key"
+        :label="metric.label"
+        :value="formatCount(metric.value ?? 0)"
+        :loading="totalsLoading"
       />
     </section>
 
-    <EmptyState
-      v-if="isEmpty"
-      :title="t('usage.emptyTitle')"
-      :description="t('usage.emptyDescription')"
-    />
+    <p v-if="isEmpty" class="usage__empty">{{ t('usage.emptyTitle') }}</p>
 
     <template v-else>
-      <section class="usage__section">
-        <h2 class="card-title">{{ t('usage.byModel.title') }}</h2>
+      <!-- The tables carry no heading of their own: the first column already
+           names what each one groups by (docs/frontend.md 設計節制原則 D19).
+           The name stays as the region's accessible name. -->
+      <section class="usage__section" :aria-label="t('usage.byModel.title')">
         <DataTable
           :columns="modelColumns"
           :rows="byModel"
           :row-key="(row: UsageTableRow) => row.key"
           :loading="loading && byModel.length === 0"
           :empty-title="t('usage.emptyTitle')"
-        />
+        >
+          <template #label="{ row }">
+            <span class="usage__row-label text-ellipsis" :title="row.label">{{ row.label }}</span>
+          </template>
+        </DataTable>
       </section>
 
-      <section class="usage__section">
-        <h2 class="card-title">{{ t('usage.byPurpose.title') }}</h2>
+      <section class="usage__section" :aria-label="t('usage.byPurpose.title')">
         <DataTable
           :columns="purposeColumns"
           :rows="byPurpose"
           :row-key="(row: UsageTableRow) => row.key"
           :loading="loading && byPurpose.length === 0"
           :empty-title="t('usage.emptyTitle')"
-        />
+        >
+          <template #label="{ row }">
+            <span class="usage__row-label text-ellipsis" :title="row.label">{{ row.label }}</span>
+          </template>
+        </DataTable>
       </section>
     </template>
   </div>
 </template>
 
 <style scoped>
-.usage__cards {
+/* The four totals are one self-contained dataset, so they keep their card
+   borders while the rest of the app has none — the documented exception to
+   「卡片不是版面骨架」(docs/frontend.md 視覺風格, D24). */
+.usage__totals {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
   gap: var(--space-3);
 }
 
+.usage__empty {
+  padding: var(--space-6) 0;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* A model name (`openrouter/…`) and an unknown purpose string are open-ended:
+   one line with the full text in the tooltip, never a pill and never wrapped
+   (docs/frontend.md 清單有界原則, D17). */
+.usage__row-label {
+  color: var(--color-heading);
+  font-weight: 600;
+}
+
+/* Two independent datasets, so each table bounds its own height and owns its
+   own scrollbar instead of pushing the other off screen (D21). */
 .usage__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  /* Two tables share the page, so neither takes the full viewport height */
-  --data-table-max-height: max(18rem, calc(100vh - 28rem));
+  --data-table-max-height: max(18rem, calc(50vh - 6rem));
 }
 </style>

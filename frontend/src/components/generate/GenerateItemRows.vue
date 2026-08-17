@@ -11,6 +11,7 @@ import {
   type QuestionType,
 } from '@/api'
 import AppButton from '@/components/AppButton.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAppI18n } from '@/i18n'
 import { QUESTION_TYPE_LABEL_KEYS } from '@/questions/labels'
 
@@ -99,10 +100,11 @@ function removeRow(index: number): void {
     <ul class="combos__rows">
       <li v-for="(item, index) in items" :key="item.question_type" class="combos__row">
         <label class="form-field combos__type">
-          <span class="form-label">{{ t('generate.form.type') }}</span>
+          <span v-if="index === 0" class="form-label">{{ t('generate.form.type') }}</span>
           <select
             class="form-select"
             :value="item.question_type"
+            :aria-label="t('generate.form.type')"
             @change="onTypeChange(index, $event)"
           >
             <option v-for="type in availableTypes(index)" :key="type" :value="type">
@@ -112,7 +114,7 @@ function removeRow(index: number): void {
         </label>
 
         <label class="form-field combos__count">
-          <span class="form-label">{{ t('generate.form.count') }}</span>
+          <span v-if="index === 0" class="form-label">{{ t('generate.form.count') }}</span>
           <input
             class="form-input"
             type="number"
@@ -120,33 +122,32 @@ function removeRow(index: number): void {
             :min="GENERATE_COUNT_MIN"
             :max="GENERATE_COUNT_MAX"
             :value="item.count"
+            :aria-label="t('generate.form.count')"
             @input="onCountInput(index, $event)"
           />
         </label>
 
+        <!-- md square: the same height as the controls it stands beside -->
         <AppButton
           variant="ghost"
-          size="sm"
-          class="combos__remove"
+          icon
           :disabled="!canRemove"
+          :aria-label="t('generate.form.removeItem')"
+          :title="t('generate.form.removeItem')"
           @click="removeRow(index)"
         >
-          {{ t('generate.form.removeItem') }}
+          <AppIcon name="close" :size="16" />
         </AppButton>
       </li>
     </ul>
 
-    <div class="combos__footer">
+    <!-- A lone plus square under the rows reads as decoration, so this add
+         action carries its label (docs/decisions/2026-08-17-professional-form-pages.md D28) -->
+    <div>
       <AppButton variant="secondary" size="sm" :disabled="!canAdd" @click="addRow">
+        <AppIcon name="plus" :size="16" />
         {{ t('generate.form.addItem') }}
       </AppButton>
-      <span class="form-hint">
-        {{
-          canAdd
-            ? t('generate.form.countHint', { min: GENERATE_COUNT_MIN, max: GENERATE_COUNT_MAX })
-            : t('generate.form.addItemFull')
-        }}
-      </span>
     </div>
   </div>
 </template>
@@ -173,24 +174,14 @@ function removeRow(index: number): void {
   gap: var(--space-2) var(--space-3);
 }
 
+/* Field widths follow their content (D28): six short type names, a number of
+   at most three digits — neither needs the column's full width */
 .combos__type {
-  flex: 1 1 12rem;
-  min-width: 0;
+  flex: 0 1 14rem;
+  min-width: 8rem;
 }
 
 .combos__count {
-  flex: 0 0 7rem;
-}
-
-.combos__remove {
-  /* Sits on the same baseline as the two fields, whose labels add a line above */
-  margin-bottom: 0.25rem;
-}
-
-.combos__footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
+  flex: 0 0 6rem;
 }
 </style>

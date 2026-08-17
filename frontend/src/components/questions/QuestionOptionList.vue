@@ -69,7 +69,7 @@ const { t } = useAppI18n()
 
 .option-list__correct {
   color: var(--color-status-done-text);
-  font-size: 0.8125rem;
+  font-weight: 600;
   white-space: nowrap;
 }
 </style>

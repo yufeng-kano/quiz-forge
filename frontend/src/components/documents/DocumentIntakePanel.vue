@@ -129,7 +129,6 @@ async function onSubmitUrl(): Promise<void> {
       <label class="form-label" for="document-url-input">
         {{ t('documents.intake.urlLabel') }}
       </label>
-      <p class="intake__hint">{{ t('documents.intake.urlHint') }}</p>
       <div class="intake__url-row">
         <input
           id="document-url-input"

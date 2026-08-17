@@ -23,7 +23,9 @@ import { useQuestionsStore } from '@/stores/questions'
  * embedding call server-side (docs/question-bank.md 題目向量化與語意搜尋).
  *
  * The two searches are not alternatives — `q` stays the literal hard condition
- * and `similar_to` reorders whatever is left, which is what the hint says.
+ * and `similar_to` reorders whatever is left. That is not written on the page:
+ * standing explanatory copy is forbidden
+ * (docs/decisions/2026-08-17-ui-design-restraint.md D20).
  *
  * The category filter is two selects because `categories` is a subject/topic
  * hierarchy, but `GET /api/v1/questions` takes a single `category_id` and
@@ -215,19 +217,13 @@ const topics = computed<Category[]>(() => {
       </label>
     </div>
 
-    <div class="bank-toolbar__footer">
-      <div class="bank-toolbar__hints">
-        <p v-if="categoriesStore.loading" class="form-hint">
-          {{ t('bank.filters.loadingCategories') }}
-        </p>
-        <p v-else-if="categoriesStore.loadError !== null" class="form-error">
-          {{ categoriesStore.loadError }}
-        </p>
-
-        <p v-if="store.filters.similarTo !== ''" class="form-hint">
-          {{ t('bank.filters.similarHint') }}
-        </p>
-      </div>
+    <div
+      v-if="categoriesStore.loadError !== null || store.hasActiveFilter"
+      class="bank-toolbar__footer"
+    >
+      <p v-if="categoriesStore.loadError !== null" class="form-error bank-toolbar__error">
+        {{ categoriesStore.loadError }}
+      </p>
 
       <AppButton
         v-if="store.hasActiveFilter"
@@ -262,18 +258,16 @@ const topics = computed<Category[]>(() => {
   min-width: 12rem;
 }
 
-.bank-toolbar__hints {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-}
-
 .bank-toolbar__footer {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--space-2) var(--space-3);
+}
+
+.bank-toolbar__error {
+  min-width: 0;
+  margin-right: auto;
 }
 </style>

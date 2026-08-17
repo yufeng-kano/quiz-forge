@@ -30,7 +30,6 @@ const props = withDefaults(
     skeletonRowCount?: number
     /** Shown instead of rows once a load has finished with nothing to show. */
     emptyTitle?: string
-    emptyDescription?: string
     /** Rows react to hover and emit `rowClick`; the caller still provides a real link in a cell. */
     clickableRows?: boolean
     /**
@@ -196,10 +195,7 @@ function onRowDragStart(row: T, event: DragEvent): void {
           <tr>
             <td class="data-table__empty" :colspan="props.columns.length">
               <slot name="empty">
-                <EmptyState
-                  :title="props.emptyTitle ?? t('table.emptyTitle')"
-                  :description="props.emptyDescription"
-                />
+                <EmptyState :title="props.emptyTitle ?? t('table.emptyTitle')" />
               </slot>
             </td>
           </tr>
@@ -225,7 +221,12 @@ function onRowDragStart(row: T, event: DragEvent): void {
                 { 'data-table__cell--nowrap': column.nowrap },
               ]"
             >
-              <slot :name="column.key" :row="row">{{ column.value?.(row) ?? '' }}</slot>
+              <slot :name="column.key" :row="row">
+                <span v-if="column.ellipsis" class="text-ellipsis" :title="column.value?.(row)">
+                  {{ column.value?.(row) ?? '' }}
+                </span>
+                <template v-else>{{ column.value?.(row) ?? '' }}</template>
+              </slot>
             </td>
           </tr>
         </tbody>
@@ -242,6 +243,10 @@ function onRowDragStart(row: T, event: DragEvent): void {
   overflow: hidden;
 }
 
+/* In a workspace the table is not a card standing next to the sidebar: the
+   filter row above it and the table are one work surface, so the frame and the
+   radius go away and the header's own bottom rule does the dividing
+   (docs/frontend.md 視覺風格 / 設計節制原則 D16). */
 .data-table--fill {
   display: flex;
   flex: 1;
@@ -249,6 +254,8 @@ function onRowDragStart(row: T, event: DragEvent): void {
   align-self: stretch;
   min-height: 0;
   height: 100%;
+  border: none;
+  border-radius: 0;
 }
 
 /* The scroll container is the table's own box: it keeps a wide table from
@@ -275,6 +282,9 @@ function onRowDragStart(row: T, event: DragEvent): void {
   font-size: var(--font-size-md);
 }
 
+/* Header text stays at the table's own size: weight, the shell background and
+   the rule under it already separate it from the rows, so it does not have to
+   be shrunk and greyed as well (docs/frontend.md 設計節制原則 D20). */
 .data-table__table th {
   position: sticky;
   top: 0;
@@ -282,8 +292,7 @@ function onRowDragStart(row: T, event: DragEvent): void {
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-shell);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  color: var(--color-heading);
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
@@ -336,7 +345,7 @@ function onRowDragStart(row: T, event: DragEvent): void {
 }
 
 .data-table__sort:hover {
-  color: var(--color-heading);
+  color: var(--color-accent);
 }
 
 .data-table__empty {
@@ -355,11 +364,6 @@ function onRowDragStart(row: T, event: DragEvent): void {
 .data-table--fill .data-table__empty {
   height: 100%;
   vertical-align: middle;
-}
-
-.data-table__empty :deep(.empty-state) {
-  border: none;
-  background: none;
 }
 
 .data-table__sr-only {

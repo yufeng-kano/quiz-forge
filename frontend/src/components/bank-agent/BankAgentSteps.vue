@@ -49,30 +49,37 @@ function categoryName(categoryId: number): string {
   return category?.name ?? t('bankAgent.steps.filterCategoryUnknown', { id: categoryId })
 }
 
-/** One search step's conditions as display chips, in the order they narrow. */
-function filterChips(filters: BankAgentSearchFilters): string[] {
+/**
+ * One search step's conditions as plain lines, in the order they narrow.
+ *
+ * These are open-ended values — a semantic query is a whole sentence, a
+ * category is a user-visible name — so they are text, never pills: a pill
+ * cannot wrap and its border would cut through the word in this narrow column
+ * (docs/decisions/2026-08-17-ui-design-restraint.md D17).
+ */
+function filterLines(filters: BankAgentSearchFilters): string[] {
   if (isEmptySearchFilters(filters)) {
     return [t('bankAgent.steps.noFilters')]
   }
-  const chips: string[] = []
+  const lines: string[] = []
   if (filters.similarTo !== null) {
-    chips.push(t('bankAgent.steps.filterSimilarTo', { value: filters.similarTo }))
+    lines.push(t('bankAgent.steps.filterSimilarTo', { value: filters.similarTo }))
   }
   if (filters.q !== null) {
-    chips.push(t('bankAgent.steps.filterQ', { value: filters.q }))
+    lines.push(t('bankAgent.steps.filterQ', { value: filters.q }))
   }
   if (filters.type !== null) {
-    chips.push(
+    lines.push(
       t('bankAgent.steps.filterType', { value: t(QUESTION_TYPE_LABEL_KEYS[filters.type]) }),
     )
   }
   if (filters.difficulty !== null) {
-    chips.push(t('bankAgent.steps.filterDifficulty', { value: filters.difficulty }))
+    lines.push(t('bankAgent.steps.filterDifficulty', { value: filters.difficulty }))
   }
   if (filters.categoryId !== null) {
-    chips.push(t('bankAgent.steps.filterCategory', { value: categoryName(filters.categoryId) }))
+    lines.push(t('bankAgent.steps.filterCategory', { value: categoryName(filters.categoryId) }))
   }
-  return chips
+  return lines
 }
 
 /**
@@ -123,14 +130,14 @@ function onApply(filters: BankAgentSearchFilters): void {
           <p class="steps__title">
             {{ t('bankAgent.steps.searchTitle', { step: step.step, count: step.hitCount }) }}
           </p>
-          <ul class="steps__chips">
+          <ul class="steps__filters">
             <li
-              v-for="chip in filterChips(step.filters)"
-              :key="chip"
-              class="steps__chip text-ellipsis"
-              :title="chip"
+              v-for="line in filterLines(step.filters)"
+              :key="line"
+              class="steps__filter text-ellipsis"
+              :title="line"
             >
-              {{ chip }}
+              {{ line }}
             </li>
           </ul>
           <AppButton size="sm" variant="ghost" @click="onApply(step.filters)">
@@ -172,7 +179,7 @@ function onApply(filters: BankAgentSearchFilters): void {
   background: none;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   cursor: pointer;
 }
 
@@ -207,13 +214,13 @@ function onApply(filters: BankAgentSearchFilters): void {
 
 .steps__title {
   color: var(--color-heading);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   font-variant-numeric: tabular-nums;
 }
 
-.steps__chips {
+.steps__filters {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: var(--space-1);
   max-width: 100%;
   padding: 0;
@@ -221,13 +228,9 @@ function onApply(filters: BankAgentSearchFilters): void {
 }
 
 /* A semantic query can be a whole sentence: one line, full text in the tooltip */
-.steps__chip {
+.steps__filter {
   max-width: 100%;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-pill);
-  background: var(--color-background-mute);
   color: var(--color-text);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
 }
 </style>

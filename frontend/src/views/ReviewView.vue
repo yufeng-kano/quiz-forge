@@ -7,6 +7,7 @@ import AppButton from '@/components/AppButton.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import ReviewFilters from '@/components/questions/ReviewFilters.vue'
 import ReviewQuestionCard from '@/components/questions/ReviewQuestionCard.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import AppPagination from '@/components/ui/AppPagination.vue'
 import AppSkeleton from '@/components/ui/AppSkeleton.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
@@ -36,8 +37,8 @@ const store = useQuestionsStore()
 const toasts = useToastsStore()
 const { confirm } = useConfirm()
 
-/** Placeholder cards while the first page loads. */
-const SKELETON_CARDS = 3
+/** Placeholder rows while the first page loads. */
+const SKELETON_ROWS = 3
 
 const selectedIds = ref<number[]>([])
 const batchProgress = ref<{ done: number; total: number } | null>(null)
@@ -138,115 +139,132 @@ watch([() => store.draftFilters, () => store.draftsPage], () => {
 
 <template>
   <div class="page">
-    <PageHeader :title="t('review.pageTitle', { count: formatCount(store.draftsTotal) })">
-      <template v-if="selectedCount > 0" #meta>
-        <span>{{ t('review.batch.selected', { count: selectedCount }) }}</span>
-      </template>
+    <PageHeader :page-name="t('nav.review')">
+      <template #meta>{{
+        t('review.headerCount', { count: formatCount(store.draftsTotal) })
+      }}</template>
 
       <template #actions>
         <AppButton
           variant="secondary"
+          icon
           :disabled="store.draftsLoading || isBatchRunning"
+          :aria-label="t('review.reload')"
+          :title="t('review.reload')"
           @click="store.loadDrafts()"
         >
-          {{ t('review.reload') }}
+          <AppIcon name="refresh" :size="16" />
         </AppButton>
       </template>
     </PageHeader>
 
-    <ReviewFilters />
+    <div class="review">
+      <ReviewFilters />
 
-    <p v-if="store.draftsError !== null" class="error-banner">
-      {{ store.draftsError }}
-      <AppButton variant="secondary" @click="store.loadDrafts()">
-        {{ t('review.reload') }}
-      </AppButton>
-    </p>
+      <p v-if="store.draftsError !== null" class="error-banner">
+        {{ store.draftsError }}
+        <AppButton variant="secondary" @click="store.loadDrafts()">
+          {{ t('review.reload') }}
+        </AppButton>
+      </p>
 
-    <div v-if="store.draftCount > 0" class="card review__batch">
-      <label class="review__select-all">
-        <input
-          type="checkbox"
-          :checked="allVisibleSelected"
-          :disabled="isBatchRunning"
-          @change="toggleSelectAll"
-        />
-        <span>{{ t('review.batch.selectAll', { count: store.draftCount }) }}</span>
-      </label>
-
-      <AppButton
-        size="sm"
-        :disabled="selectedCount === 0 || isBatchRunning"
-        @click="runBatch('approve')"
-      >
-        {{ t('review.batch.approve', { count: selectedCount }) }}
-      </AppButton>
-      <AppButton
-        variant="secondary"
-        size="sm"
-        :disabled="selectedCount === 0 || isBatchRunning"
-        @click="runBatch('reject')"
-      >
-        {{ t('review.batch.reject', { count: selectedCount }) }}
-      </AppButton>
-
-      <span v-if="batchProgress !== null" class="muted-text">
-        {{ t('review.batch.progress', { done: batchProgress.done, total: batchProgress.total }) }}
-      </span>
-    </div>
-
-    <ul v-if="store.draftsLoading && store.draftCount === 0" class="review__list">
-      <li v-for="index in SKELETON_CARDS" :key="`skeleton-${index}`" class="card">
-        <AppSkeleton width="30%" />
-        <AppSkeleton />
-        <AppSkeleton width="70%" />
-      </li>
-    </ul>
-
-    <template v-else-if="store.draftCount > 0">
-      <ul class="review__list">
-        <li v-for="question in store.drafts" :key="question.id">
-          <ReviewQuestionCard
-            :question="question"
-            :selected="isSelected(question)"
-            :busy="isBatchRunning"
-            @toggle-select="toggleSelect(question)"
+      <div v-if="store.draftCount > 0" class="review__batch">
+        <label class="review__select-all">
+          <input
+            type="checkbox"
+            :checked="allVisibleSelected"
+            :disabled="isBatchRunning"
+            @change="toggleSelectAll"
           />
+          <span>{{ t('review.batch.selectAll') }}</span>
+        </label>
+
+        <span v-if="selectedCount > 0" class="muted-text">
+          {{ t('review.batch.selected', { count: selectedCount }) }}
+        </span>
+
+        <AppButton
+          size="sm"
+          :disabled="selectedCount === 0 || isBatchRunning"
+          @click="runBatch('approve')"
+        >
+          {{ t('review.batch.approve') }}
+        </AppButton>
+        <AppButton
+          variant="secondary"
+          size="sm"
+          :disabled="selectedCount === 0 || isBatchRunning"
+          @click="runBatch('reject')"
+        >
+          {{ t('review.batch.reject') }}
+        </AppButton>
+
+        <span v-if="batchProgress !== null" class="muted-text">
+          {{ t('review.batch.progress', { done: batchProgress.done, total: batchProgress.total }) }}
+        </span>
+      </div>
+
+      <ul v-if="store.draftsLoading && store.draftCount === 0" class="review__list">
+        <li v-for="index in SKELETON_ROWS" :key="`skeleton-${index}`" class="review__skeleton">
+          <AppSkeleton width="30%" />
+          <AppSkeleton />
+          <AppSkeleton width="70%" />
         </li>
       </ul>
 
-      <AppPagination
-        v-if="store.draftsPageCount > 1"
-        :page="store.draftsPage"
-        :page-count="store.draftsPageCount"
-        :total="store.draftsTotal"
-        :disabled="store.draftsLoading || isBatchRunning"
-        @change="store.setDraftsPage($event)"
-      />
-    </template>
+      <template v-else-if="store.draftCount > 0">
+        <ul class="review__list">
+          <li v-for="question in store.drafts" :key="question.id">
+            <ReviewQuestionCard
+              :question="question"
+              :selected="isSelected(question)"
+              :busy="isBatchRunning"
+              @toggle-select="toggleSelect(question)"
+            />
+          </li>
+        </ul>
 
-    <EmptyState
-      v-else-if="store.draftsLoaded"
-      :title="t('review.emptyTitle')"
-      :description="
-        store.hasActiveDraftFilter ? t('review.emptyFiltered') : t('review.emptyDescription')
-      "
-    >
-      <template #actions>
-        <RouterLink class="review__link" :to="{ name: 'generate' }">
-          {{ t('review.goGenerate') }}
-        </RouterLink>
+        <AppPagination
+          v-if="store.draftsPageCount > 1"
+          :page="store.draftsPage"
+          :page-count="store.draftsPageCount"
+          :total="store.draftsTotal"
+          :disabled="store.draftsLoading || isBatchRunning"
+          @change="store.setDraftsPage($event)"
+        />
       </template>
-    </EmptyState>
+
+      <EmptyState
+        v-else-if="store.draftsLoaded"
+        :title="store.hasActiveDraftFilter ? t('review.emptyFiltered') : t('review.emptyTitle')"
+      >
+        <template #actions>
+          <RouterLink class="review__link" :to="{ name: 'generate' }">
+            {{ t('review.goGenerate') }}
+          </RouterLink>
+        </template>
+      </EmptyState>
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* Filters, batch row and the queue are one work surface: the only rule is the
+   one under the toolbar, and the questions below are separated by their own
+   row hairlines (docs/frontend.md 設計節制原則 — 卡片不是骨架). */
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
 .review__batch {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .review__select-all {
@@ -260,9 +278,16 @@ watch([() => store.draftFilters, () => store.draftsPage], () => {
 .review__list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   padding: 0;
   list-style: none;
+}
+
+.review__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-hairline);
 }
 
 .review__link {

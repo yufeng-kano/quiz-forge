@@ -46,10 +46,17 @@ const sidebarCollapsed = ref(false)
   grid-template-columns: var(--sidebar-width-collapsed) minmax(0, 1fr);
 }
 
-/* Flex column so workspace pages can `flex: 1` into the leftover height.
-   `overflow: hidden` keeps `/questions` from sharing one scroll frame
-   (docs/decisions/2026-08-17-bank-on-questions-page.md D13). Non-workspace
-   pages scroll their own `.page` in main.css. */
+/* Flex column so workspace pages can `flex: 1` into the leftover height, and
+   the scroll frame for the pages that keep their natural height instead.
+   A workspace page is exactly as tall as this column and clips itself, so it
+   can never turn this into a scroll frame shared with the 題庫 columns
+   (docs/decisions/2026-08-17-bank-on-questions-page.md D13).
+
+   The content region's gutter is padding of `.page` (main.css), not of this
+   column: `PageHeader` bleeds across the gutter with a negative margin, and
+   that bleed only stays inside the scroll frame while the gutter belongs to a
+   box the header sits inside. There is no bottom padding here either — that
+   band would sit under a workspace page and leave it short of the viewport. */
 .app-main {
   display: flex;
   flex-direction: column;
@@ -58,8 +65,7 @@ const sidebarCollapsed = ref(false)
   height: 100%;
   width: 100%;
   max-width: var(--content-max-width);
-  padding: 0 var(--content-padding-x) var(--space-7);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 /* Same breakpoint as the sidebar's own collapse rule */

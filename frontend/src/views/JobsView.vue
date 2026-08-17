@@ -12,6 +12,7 @@ import {
 import AppButton from '@/components/AppButton.vue'
 import ProgressText from '@/components/ProgressText.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import DataTable from '@/components/ui/DataTable.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import type { DataTableColumn } from '@/components/ui/dataTable'
@@ -94,10 +95,14 @@ const columns = computed<DataTableColumn<Job>[]>(() => [
     label: t('jobs.columns.actions'),
     labelHidden: true,
     align: 'end',
-    width: '7rem',
-    nowrap: true,
+    width: '2.75rem',
   },
 ])
+
+/** Tooltip and accessible name of the icon-only retry button. */
+function retryLabel(job: Job): string {
+  return retryingJobId.value === job.id ? t('jobs.retrying') : t('jobs.retry')
+}
 
 /** A finished job may still carry its final count (`40/40 pages`), worth showing. */
 function hasProgress(job: Job): boolean {
@@ -169,40 +174,46 @@ onUnmounted(clearTimer)
 
 <template>
   <div class="page page--workspace">
-    <PageHeader :title="t('pages.jobs.title')">
+    <PageHeader :page-name="t('nav.jobs')">
       <template #actions>
-        <AppButton variant="secondary" :disabled="store.loading" @click="store.load()">
-          {{ t('jobs.refresh') }}
+        <AppButton
+          variant="secondary"
+          icon
+          :disabled="store.loading"
+          :aria-label="t('jobs.refresh')"
+          :title="t('jobs.refresh')"
+          @click="store.load()"
+        >
+          <AppIcon name="refresh" />
         </AppButton>
       </template>
     </PageHeader>
 
-    <p v-if="store.loadError !== null" class="error-banner">
-      {{ store.loadError }}
-      <AppButton variant="secondary" @click="store.load()">{{ t('jobs.refresh') }}</AppButton>
-    </p>
+    <p v-if="store.loadError !== null" class="error-banner">{{ store.loadError }}</p>
 
     <div class="workspace">
       <div class="workspace__toolbar">
-        <div class="form-field">
-          <label class="form-label" for="jobs-status-filter">{{ t('jobs.filters.status') }}</label>
-          <select id="jobs-status-filter" v-model="selectedStatus" class="form-select">
-            <option value="">{{ t('jobs.filters.anyStatus') }}</option>
-            <option v-for="status in statusOptions" :key="status" :value="status">
-              {{ t(`status.${status}`) }}
-            </option>
-          </select>
-        </div>
+        <select
+          v-model="selectedStatus"
+          class="form-select workspace__filter"
+          :aria-label="t('jobs.filters.status')"
+        >
+          <option value="">{{ t('jobs.filters.anyStatus') }}</option>
+          <option v-for="status in statusOptions" :key="status" :value="status">
+            {{ t(`status.${status}`) }}
+          </option>
+        </select>
 
-        <div class="form-field">
-          <label class="form-label" for="jobs-kind-filter">{{ t('jobs.filters.kind') }}</label>
-          <select id="jobs-kind-filter" v-model="selectedKind" class="form-select">
-            <option value="">{{ t('jobs.filters.anyKind') }}</option>
-            <option v-for="kind in kindOptions" :key="kind" :value="kind">
-              {{ jobKindLabel(kind) }}
-            </option>
-          </select>
-        </div>
+        <select
+          v-model="selectedKind"
+          class="form-select workspace__filter"
+          :aria-label="t('jobs.filters.kind')"
+        >
+          <option value="">{{ t('jobs.filters.anyKind') }}</option>
+          <option v-for="kind in kindOptions" :key="kind" :value="kind">
+            {{ jobKindLabel(kind) }}
+          </option>
+        </select>
       </div>
 
       <DataTable
@@ -211,7 +222,6 @@ onUnmounted(clearTimer)
         :row-key="(job: Job) => job.id"
         :loading="store.loading"
         :empty-title="t('jobs.emptyTitle')"
-        :empty-description="t('jobs.emptyDescription')"
         fill-height
       >
         <template #status="{ row }">
@@ -223,7 +233,6 @@ onUnmounted(clearTimer)
             v-if="hasProgress(row) || !isTerminalJobStatus(row.status)"
             :progress="row.progress"
           />
-          <span v-else class="jobs__muted">{{ t('jobs.none') }}</span>
         </template>
 
         <template #error="{ row }">
@@ -234,18 +243,20 @@ onUnmounted(clearTimer)
           >
             {{ row.error }}
           </span>
-          <span v-else class="jobs__muted">{{ t('jobs.none') }}</span>
         </template>
 
         <template #actions="{ row }">
           <AppButton
             v-if="row.status === 'failed'"
-            variant="secondary"
+            variant="ghost"
+            icon
             size="sm"
             :disabled="retryingJobId === row.id"
+            :aria-label="retryLabel(row)"
+            :title="retryLabel(row)"
             @click="onRetry(row)"
           >
-            {{ retryingJobId === row.id ? t('jobs.retrying') : t('jobs.retry') }}
+            <AppIcon name="refresh" :size="16" />
           </AppButton>
         </template>
       </DataTable>
@@ -269,16 +280,12 @@ onUnmounted(clearTimer)
   display: flex;
   flex: none;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-3);
   padding: var(--space-3) 0;
 }
 
-.workspace__toolbar .form-field {
-  min-width: 12rem;
-}
-
-.jobs__muted {
-  color: var(--color-text-faint);
+.workspace__filter {
+  width: 11rem;
 }
 
 .jobs__error {

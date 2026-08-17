@@ -21,24 +21,8 @@
     "usage": "用量"
   },
   "pages": {
-    "dashboard": {
-      "title": "總覽"
-    },
     "documentDetail": {
-      "title": "文件詳情",
-      "subtitle": "文件 #{id}"
-    },
-    "jobs": {
-      "title": "任務中心"
-    },
-    "generate": {
-      "title": "出題"
-    },
-    "exports": {
-      "title": "匯出"
-    },
-    "usage": {
-      "title": "用量"
+      "title": "文件詳情"
     }
   },
   "table": {
@@ -86,15 +70,10 @@
     "cards": {
       "documents": "文件",
       "drafts": "待審題目",
-      "draftsCta": "前往審題處理",
-      "draftsIdle": "目前沒有待審題目。",
       "questions": "題目總數",
-      "questionsHint": "已採用 {count} 題",
       "chunks": "分段",
       "chunksHint": "分類 {count} 個",
       "failedJobs": "失敗任務",
-      "failedJobsCta": "前往任務中心重試",
-      "failedJobsIdle": "目前沒有失敗任務。",
       "tokens": "累計 token",
       "tokensHint": "共 {count} 次 LLM 呼叫"
     },
@@ -110,9 +89,7 @@
     "retry": "重試",
     "retrying": "重新排入中…",
     "retryQueued": "任務 #{id} 已重新排入佇列。",
-    "none": "—",
     "emptyTitle": "沒有符合條件的任務",
-    "emptyDescription": "調整篩選條件，或先上傳文件、建立出題與匯出任務。",
     "filters": {
       "status": "狀態",
       "kind": "種類",
@@ -131,8 +108,8 @@
     }
   },
   "documents": {
-    "pageTitle": "文件 - 共 {count} 份",
-    "filteredPageTitle": "文件 - {count} / {total} 份",
+    "headerCount": "共 {count} 份",
+    "headerCountFiltered": "{count} / {total} 份",
     "intake": {
       "open": "上傳",
       "modalTitle": "上傳檔案或匯入網址",
@@ -143,7 +120,6 @@
       "uploaded": "已建立文件「{title}」，開始解析。",
       "unsupportedFile": "不支援的檔案格式：{name}",
       "urlLabel": "網址匯入",
-      "urlHint": "貼上網頁網址，系統會抓取內文並摘要。",
       "urlPlaceholder": "https://example.com/article",
       "urlSubmit": "匯入",
       "importing": "匯入中…",
@@ -155,18 +131,14 @@
       "reload": "重新載入",
       "activeSummary": "{count} 份解析尚未完成",
       "emptyTitle": "尚未有任何文件",
-      "emptyDescription": "上傳掃描件、PDF、Word、圖片，或貼上網址匯入網頁內容。",
-      "noMatchTitle": "沒有符合條件的文件",
-      "noMatchDescription": "換個關鍵字或資料夾，或選「全部」看所有文件。"
+      "noMatchTitle": "沒有符合條件的文件"
     },
     "folders": {
-      "title": "資料夾",
       "label": "資料夾篩選",
       "all": "全部",
       "unfiled": "未分類",
       "loading": "載入資料夾中…",
       "empty": "尚未建立資料夾。按欄頭加號建立一個，再把文件列拖進來。",
-      "create": "新增",
       "createAriaLabel": "新增資料夾",
       "createSubmit": "建立",
       "nameLabel": "資料夾名稱",
@@ -183,7 +155,6 @@
       "deleted": "已刪除資料夾「{name}」。",
       "moveAction": "移至資料夾",
       "moveTitle": "移至資料夾",
-      "moveDescription": "選擇「{title}」要放入的資料夾。",
       "moveEmpty": "尚未建立資料夾，可先在文件庫左側新增。",
       "moveCurrent": "目前所在",
       "moved": "已將「{title}」移至「{folder}」。",
@@ -193,8 +164,6 @@
     "rename": {
       "title": "文件改名",
       "label": "文件標題",
-      "placeholder": "輸入新的文件標題",
-      "hint": "只改文件在系統內的顯示名稱，不影響原始檔案。",
       "submit": "儲存",
       "saving": "儲存中…",
       "renamed": "已改名為「{title}」。"
@@ -244,7 +213,6 @@
     "retryQueued": "解析已重新排入佇列。",
     "outline": {
       "label": "文件大綱",
-      "pages": "頁面",
       "noPages": "尚未產生頁面。"
     },
     "rechunk": {
@@ -259,9 +227,8 @@
       "title": "頁面",
       "count": "共 {count} 頁",
       "emptyTitle": "尚未產生頁面",
-      "emptyDescription": "解析完成後，每一頁的 Markdown 會顯示在這裡。",
       "pageNo": "第 {no} 頁",
-      "retry": "重試此頁",
+      "retryAria": "重試第 {no} 頁",
       "retrying": "重新排入中…",
       "noContent": "此頁尚未產生內容。",
       "retryQueued": "此頁已重新排入解析佇列。"
@@ -270,11 +237,10 @@
       "title": "分段與分類",
       "count": "共 {count} 段",
       "emptyTitle": "尚未產生分段",
-      "emptyDescription": "頁面解析完成後，系統會切分內容並標註分類與標籤。",
       "chunkNo": "分段 {no}",
       "uncategorized": "未分類",
       "categorySeparator": " › ",
-      "embedded": "已建立向量",
+      "tagSeparator": "、",
       "notEmbedded": "尚無向量",
       "expand": "展開全文",
       "collapse": "收合"
@@ -297,11 +263,10 @@
       "prefix": "難度：{difficulty}"
     },
     "card": {
-      "identity": "題目 #{id} · 建立於 {datetime}",
+      "id": "#{id}",
       "unknownType": "未知題型（{type}）",
       "unreadableTitle": "題目內容格式無法解析",
-      "emptyStem": "（題幹空白）",
-      "unreadableDescription": "此題儲存的欄位不符合題型定義，無法顯示或編輯，建議丟棄後重新出題。"
+      "emptyStem": "（題幹空白）"
     },
     "labels": {
       "stem": "題幹",
@@ -337,7 +302,7 @@
     },
     "fillBlank": {
       "blankNo": "第 {no} 格",
-      "markerHint": "以四個底線 ____ 標記空格，答案項數必須等於空格數。",
+      "markerHint": "以四個底線 ____ 標記空格。",
       "countMatch": "空格 {blanks} 個、答案 {answers} 項",
       "countMismatch": "空格 {blanks} 個、答案 {answers} 項，數量不一致，儲存會被伺服器拒絕。"
     }
@@ -356,11 +321,10 @@
     "differenceRow": "相異點第 {no} 列"
   },
   "review": {
-    "pageTitle": "審題 - 待審 {count} 題",
+    "headerCount": "待審 {count} 題",
     "reload": "重新載入",
     "emptyTitle": "目前沒有待審題目",
-    "emptyDescription": "到出題頁建立出題任務，生成的題目會先進入待審清單。",
-    "emptyFiltered": "目前的篩選條件下沒有待審題目，可清除篩選再看看。",
+    "emptyFiltered": "篩選條件下沒有待審題目",
     "goGenerate": "前往出題",
     "approve": "採用",
     "approving": "採用中…",
@@ -371,10 +335,10 @@
     "saved": "題目 #{id} 已儲存。",
     "batch": {
       "checkbox": "選取題目 #{id}",
-      "selectAll": "全選本頁 {count} 題",
+      "selectAll": "全選本頁",
       "selected": "已選取 {count} 題",
-      "approve": "批次採用（{count}）",
-      "reject": "批次丟棄（{count}）",
+      "approve": "批次採用",
+      "reject": "批次丟棄",
       "approveTitle": "批次採用題目",
       "approveMessage": "確定採用選取的 {count} 題？採用後會進入題庫與匯出範圍。",
       "approveConfirm": "確定採用",
@@ -391,19 +355,15 @@
       "show": "對照原文",
       "hide": "收合原文",
       "loading": "載入原文中…",
-      "title": "來源分段",
-      "chunk": "分段 #{id}",
       "empty": "這一題沒有可對照的來源分段。"
     }
   },
   "bank": {
-    "pageTitle": "題庫 - 共 {count} 題",
-    "pageTitleSelected": "已選 - 共 {count} 題",
+    "headerCount": "共 {count} 題",
+    "headerCountSelected": "已選 {count} 題",
     "reload": "重新載入",
     "emptyTitle": "沒有符合條件的已採用題目",
-    "emptyDescription": "先到審題頁採用題目、手動新增題目，或放寬篩選條件。",
     "emptySelectedTitle": "尚未選取題目",
-    "emptySelectedDescription": "在題庫勾選題目。選題助手只帶你去看題，要自己勾。",
     "goReview": "前往審題",
     "views": {
       "bank": "題庫",
@@ -426,11 +386,9 @@
       "action": "新增題目",
       "title": "新增題目",
       "type": "題型",
-      "typeHint": "切換題型會清空目前填寫的內容。",
       "difficulty": "難度",
       "difficultyNone": "不指定",
       "asDraft": "先存為待審草稿",
-      "statusHint": "預設直接採用進題庫；勾選後會存成待審，可在審題頁再確認。",
       "submit": "建立題目",
       "submitting": "建立中…",
       "created": "已建立題目 #{id}。"
@@ -438,7 +396,6 @@
     "categories": {
       "action": "管理分類",
       "title": "管理分類",
-      "hint": "分類由文件解析時自動建立，這裡只能改名或刪除；仍有分段引用或仍有子分類的分類無法刪除。",
       "loading": "載入分類中…",
       "empty": "尚無分類；文件解析完成後會自動建立。",
       "rename": "改名",
@@ -461,16 +418,13 @@
       "anyDifficulty": "全部難度",
       "anySubject": "全部科目",
       "anyTopic": "全部主題",
-      "loadingCategories": "載入分類中…",
       "reset": "清除篩選",
       "similar": "語意搜尋",
-      "similarPlaceholder": "描述你要的題目，例如：三角函數的實際應用",
-      "similarHint": "語意搜尋改變排序並濾掉相似度過低的題目，其他篩選照常生效；尚未向量化的題目不會出現。"
+      "similarPlaceholder": "描述你要的題目，例如：三角函數的實際應用"
     },
     "selection": {
       "checkbox": "選取題目 #{id}",
       "selected": "已選取 {count} 題",
-      "viewSelected": "查看已選",
       "goExport": "前往匯出",
       "clear": "清除選取",
       "unavailable": "題目 #{id} 已不在已採用題庫"
@@ -540,23 +494,21 @@
     }
   },
   "generate": {
+    "sections": {
+      "scope": "出題範圍",
+      "settings": "題目設定"
+    },
     "form": {
-      "scopeTitle": "出題範圍",
-      "scopeHint": "至少選擇一份文件或一個分類；兩者都選時只取同時符合的內容。",
-      "comboTitle": "題型與數量",
-      "comboHint": "可加入多個題型，一個任務一次出完；同一個題型只能出現一次。",
       "type": "題型",
       "count": "題數",
-      "countHint": "每個題型可出 {min} 到 {max} 題。",
       "addItem": "新增題型",
-      "addItemFull": "六種題型都已加入。",
-      "removeItem": "移除",
+      "removeItem": "移除此題型",
       "total": "共 {count} 題，約 {calls} 次 LLM 呼叫",
       "difficulty": "難度",
-      "difficultyAny": "不指定（由模型自行判斷）",
+      "difficultyAny": "不指定",
       "submit": "建立出題任務",
       "submitting": "建立中…",
-      "queued": "出題任務 #{id} 已建立，進度顯示於右側。"
+      "queued": "出題任務 #{id} 已建立"
     },
     "scope": {
       "remove": "移除「{label}」",
@@ -568,93 +520,78 @@
         "label": "文件",
         "select": "選擇文件",
         "none": "尚未選擇文件",
-        "selected": "已選 {count} 份",
         "unknown": "文件 #{id}",
         "modalTitle": "選擇文件",
         "search": "搜尋標題",
-        "searchPlaceholder": "輸入文件標題關鍵字",
         "loading": "載入文件中…",
         "empty": "尚無文件；請先到文件頁上傳或匯入。",
         "noMatch": "沒有符合關鍵字的文件。",
-        "readyOnly": "只有解析完成的文件可以出題；其他狀態會顯示目前進度且無法勾選。",
         "checkbox": "選取文件「{title}」"
       },
       "categories": {
         "label": "分類",
         "select": "選擇分類",
         "none": "尚未選擇分類",
-        "selected": "已選 {count} 個",
         "unknown": "分類 #{id}",
         "modalTitle": "選擇分類",
         "search": "搜尋分類",
-        "searchPlaceholder": "輸入科目或主題關鍵字",
         "loading": "載入分類中…",
         "empty": "尚無分類；文件解析完成後會自動建立。",
         "noMatch": "沒有符合關鍵字的分類。",
         "selectSubject": "選取整個科目",
-        "pathSeparator": " › ",
-        "hint": "勾選科目等於勾選其下所有主題；沒有主題的科目才會直接以科目出題。"
+        "pathSeparator": " › "
       }
     },
     "jobs": {
-      "title": "本次工作階段的出題任務",
+      "title": "出題紀錄",
       "count": "共 {count} 筆",
-      "empty": "尚未建立出題任務；建立後會在這裡顯示進度。",
+      "empty": "尚未建立出題任務",
       "total": "共 {count} 題",
       "item": "{type} {count} 題",
       "meta": "任務 #{id} · 建立於 {datetime} · 文件 {documents} 份、分類 {categories} 個 · {difficulty}",
-      "done": "出題完成，題目已進入待審清單。",
       "goReview": "前往審題",
       "partialError": "部分題目未完成：{error}",
-      "failed": "出題任務失敗：{error}",
-      "failedNoDetail": "出題任務失敗，未取得失敗原因。",
+      "failedNoDetail": "未取得失敗原因",
       "retry": "重試任務"
     }
   },
   "exports": {
     "paperOption": "{name}（{width} × {height} mm）",
+    "questions": {
+      "section": "題目與配分",
+      "open": "檢視與配分",
+      "modalTitle": "題目與配分"
+    },
     "selection": {
-      "title": "待匯出題目",
       "count": "已選取 {count} 題",
       "loading": "載入題目資料中…",
       "reload": "重新載入",
-      "item": "題目 #{id}",
-      "remove": "移除",
+      "remove": "移除題目 #{id}",
       "clear": "清除全部選取",
       "unavailable": "已不在已採用題庫",
       "unavailableHint": "標示「已不在已採用題庫」的題目會讓匯出任務失敗，請先移除或重新採用。",
       "emptyTitle": "尚未選取要匯出的題目",
-      "emptyDescription": "到題庫頁勾選已採用的題目，勾選結果會保留到這裡。",
       "goBank": "前往題庫"
     },
     "form": {
-      "title": "建立匯出",
+      "paperSection": "考卷設定",
       "paperTitle": "考卷標題",
       "paperTitlePlaceholder": "例如：第一次段考 自然科",
-      "paperTitleHint": "會印在考卷第一行，必填。",
       "paperSize": "紙張尺寸",
-      "paperHint": "B4、B3 採台灣考卷慣用的 JIS 尺寸，比同名 ISO 尺寸略大。",
       "submit": "建立匯出任務",
       "submitting": "建立中…",
       "queued": "匯出任務 #{id} 已建立。"
     },
     "scoring": {
-      "label": "配分",
-      "open": "配分設定",
       "summary": "合計總分 {total} 分（{scored} / {count} 題已配分）",
       "summaryNone": "尚未設定配分，考卷保留手填配分欄。",
-      "summaryEmpty": "尚未選取題目，選好題目後可設定配分。",
-      "modalTitle": "配分設定",
       "typeSection": "每題型預設配分",
-      "typeHint": "只列出目前選取題目的題型；留空表示該題型不印配分。",
       "noTypes": "目前選取的題目尚未載入題型資料。",
-      "distributeSection": "依目標總分平均分配",
       "targetLabel": "目標總分",
       "targetPlaceholder": "總分",
       "distribute": "平均分配",
-      "distributeHint": "把目標總分平均分給選取的 {count} 題（除不盡的餘數配給前面的題目），結果寫入逐題配分；目標總分需大於或等於題數。",
-      "questionSection": "逐題配分（可覆寫題型預設）",
-      "questionHint": "留空表示沿用該題型的預設配分，欄位提示即為沿用的分數。",
+      "distributeMin": "目標總分需大於或等於題數（{count}）。",
+      "questionSection": "逐題配分",
       "questionNo": "第 {no} 題",
       "questionInputLabel": "第 {no} 題配分",
       "inheritNone": "未配分",
@@ -669,17 +606,14 @@
       "class": "班級",
       "seat": "座號",
       "name": "姓名",
-      "score": "總分欄",
-      "hint": "勾選要印在卷首學生資訊列的欄位；全部取消則整列省略。"
+      "score": "總分欄"
     },
     "job": {
-      "title": "匯出進度",
       "meta": "任務 #{id} · {title} · {paper} · {count} 題 · 建立於 {datetime}",
-      "done": "匯出完成，可於下方紀錄下載題目卷與答案卷。",
       "doneToast": "「{title}」匯出完成，可於匯出紀錄下載。",
       "failed": "匯出失敗：{error}",
       "failedNoDetail": "匯出失敗，未取得失敗原因。",
-      "failedToast": "「{title}」匯出失敗，詳情見下方匯出進度。",
+      "failedToast": "「{title}」匯出失敗，原因見下方。",
       "retry": "重試任務"
     },
     "history": {
@@ -695,25 +629,20 @@
         "createdAt": "建立時間",
         "downloads": "下載"
       },
-      "questions": "下載題目卷",
-      "answers": "下載答案卷",
+      "questions": "題目卷",
+      "answers": "答案卷",
       "unavailable": "檔案尚未產生",
-      "emptyTitle": "尚未有任何匯出紀錄",
-      "emptyDescription": "建立匯出任務後，歷次紀錄與下載連結會顯示在這裡。"
+      "emptyTitle": "尚未有任何匯出紀錄"
     }
   },
   "usage": {
     "refresh": "重新整理",
     "emptyTitle": "尚未有任何 LLM 用量紀錄",
-    "emptyDescription": "解析文件、分類或出題後，每次呼叫的模型與 token 用量會累計在這裡。",
     "metric": {
       "callCount": "呼叫次數",
       "promptTokens": "輸入 token",
       "completionTokens": "輸出 token",
       "totalTokens": "總 token"
-    },
-    "totals": {
-      "hint": "輸入與輸出 token 的總和"
     },
     "byModel": {
       "title": "依模型",

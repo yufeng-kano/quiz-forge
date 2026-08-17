@@ -53,12 +53,14 @@ function select(target: FolderTarget): void {
 
 <template>
   <AppModal :open="props.open" :title="t('documents.folders.moveTitle')" @close="emit('close')">
+    <!-- Which document is being moved is the only thing the dialog title does
+         not already say, so it is shown as the plain title, not a sentence. -->
     <p
       v-if="props.document !== null"
-      class="muted-text text-ellipsis"
+      class="move__subject text-ellipsis"
       :title="props.document.title"
     >
-      {{ t('documents.folders.moveDescription', { title: props.document.title }) }}
+      {{ props.document.title }}
     </p>
 
     <p v-if="folders.loading && folders.folders.length === 0" class="form-hint">
@@ -145,6 +147,11 @@ function select(target: FolderTarget): void {
   cursor: default;
 }
 
+.move__subject {
+  color: var(--color-heading);
+  font-weight: 600;
+}
+
 .move__name {
   min-width: 0;
 }
@@ -152,6 +159,5 @@ function select(target: FolderTarget): void {
 .move__current {
   flex: none;
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
 }
 </style>

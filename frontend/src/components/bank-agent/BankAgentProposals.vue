@@ -49,15 +49,20 @@ watch(() => props.questionIds, resolve)
 </template>
 
 <style scoped>
+/* Spacing, not a panel, separates the proposals from the reply above them
+   (docs/decisions/2026-08-17-ui-design-restraint.md D22) */
 .proposals {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  margin-top: var(--space-2);
 }
 
+/* The count is the one thing the bounded scroll box hides, so it is kept —
+   at a readable size rather than shrunken grey (D20) */
 .proposals__title {
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   font-weight: 600;
 }
 

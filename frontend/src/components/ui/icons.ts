@@ -37,6 +37,8 @@ export const ICON_PATHS = {
   plus: ['M12 5v14', 'M5 12h14'],
   more: ['M5 12h2', 'M11 12h2', 'M17 12h2'],
   duplicate: ['M8 8h11v11H8z', 'M5 5h11v3', 'M5 5v11h3'],
+  /* Pencil: body from the tip at the lower left, plus the ferrule line */
+  edit: ['M4 20h4L19 9l-4-4L4 16z', 'M14 6l4 4'],
 
   /* Feedback */
   success: ['M12 4a8 8 0 100 16 8 8 0 000-16z', 'M8.5 12.3l2.4 2.4 4.6-5.1'],

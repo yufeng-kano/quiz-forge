@@ -49,12 +49,10 @@ function remove(id: number): void {
       <AppButton variant="secondary" size="sm" @click="pickerOpen = true">
         {{ t('generate.scope.documents.select') }}
       </AppButton>
-      <span class="scope-field__state">
-        {{
-          selectedIds.length === 0
-            ? t('generate.scope.documents.none')
-            : t('generate.scope.documents.selected', { count: selectedIds.length })
-        }}
+      <!-- Only the empty state needs words: once there is a selection the chips
+           below are the count (docs/frontend.md 設計節制原則: 不重述) -->
+      <span v-if="selectedIds.length === 0" class="scope-field__state">
+        {{ t('generate.scope.documents.none') }}
       </span>
     </div>
 

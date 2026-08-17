@@ -32,6 +32,12 @@ import { useToastsStore } from '@/stores/toasts'
  * The checkbox feeds the page's batch selection; the source text comes from
  * `GET /api/v1/questions/{id}` and is fetched the first time it is asked for,
  * not for every card in the list.
+ *
+ * The queue is a list of questions divided by hairlines, not a stack of
+ * floating bordered cards, and the source text is quoted with a left rule
+ * instead of a second frame inside the first
+ * (docs/frontend.md 設計節制原則 — 卡片不是骨架、禁止卡中卡). Every row here
+ * is a `draft`, so the card only shows a status when one is not.
  */
 const props = defineProps<{ question: QuestionListItem; selected: boolean; busy: boolean }>()
 
@@ -122,7 +128,7 @@ async function onReject(): Promise<void> {
 </script>
 
 <template>
-  <QuestionCard :question="question">
+  <QuestionCard :question="question" expected-status="draft">
     <template #select>
       <input
         type="checkbox"
@@ -172,7 +178,6 @@ async function onReject(): Promise<void> {
 
     <template #footer>
       <section v-if="sourceOpen" class="review-source">
-        <h4 class="review-source__title">{{ t('review.source.title') }}</h4>
         <p v-if="detailLoading" class="form-hint">{{ t('review.source.loading') }}</p>
         <p v-else-if="detailError !== null" class="form-error">{{ detailError }}</p>
         <template v-else-if="detail !== null">
@@ -184,9 +189,6 @@ async function onReject(): Promise<void> {
             :key="chunk.id"
             class="review-source__chunk"
           >
-            <p class="review-source__chunk-id">
-              {{ t('review.source.chunk', { id: chunk.id }) }}
-            </p>
             <MarkdownContent :source="chunk.content" />
           </article>
         </template>
@@ -202,18 +204,14 @@ async function onReject(): Promise<void> {
   cursor: pointer;
 }
 
+/* Quoted source material: a left rule marks it as not-the-question, which is
+   all the distinction it needs inside the row. */
 .review-source {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-background-soft);
-}
-
-.review-source__title {
-  font-size: var(--font-size-md);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border);
 }
 
 .review-source__chunk {
@@ -227,11 +225,5 @@ async function onReject(): Promise<void> {
 .review-source__chunk:first-of-type {
   padding-top: 0;
   border-top: none;
-}
-
-.review-source__chunk-id {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
 }
 </style>

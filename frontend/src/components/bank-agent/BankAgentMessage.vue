@@ -67,9 +67,11 @@ const meta = computed(() =>
   background: var(--color-accent-soft);
 }
 
+/* Readable secondary line, not shrunken grey filler: it is the only thing that
+   says who is speaking (docs/decisions/2026-08-17-ui-design-restraint.md D20) */
 .message__meta {
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
 }
 
 .message__content {

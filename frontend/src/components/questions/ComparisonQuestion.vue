@@ -89,15 +89,15 @@ const { t } = useAppI18n()
 
 .comparison__aspects-label {
   color: var(--color-text-muted);
-  font-size: 0.8125rem;
 }
 
-.comparison__aspect {
-  padding: 0.05rem 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: var(--color-background-soft);
-  font-size: 0.8125rem;
+/* Aspects are free-form LLM output, so they are plain wrapping text separated
+   by a neutral dot — a pill would cut a long one through its own border
+   (docs/frontend.md 設計節制原則 — pill 只留封閉集合的短詞). */
+.comparison__aspect:not(:last-child)::after {
+  margin-left: 0.35rem;
+  color: var(--color-text-faint);
+  content: '·';
 }
 
 .comparison__table-scroll {
