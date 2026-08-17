@@ -511,18 +511,21 @@ export interface QuestionPatch {
 
 /**
  * One `items[]` entry of `POST /api/v1/generate`
- * (`backend.schemas.question.GenerateItemIn`): a question type and how many of
- * it to draft. `count` must be positive and no two entries of one request may
- * carry the same `question_type` — both are 422 on the server.
+ * (`backend.schemas.question.GenerateItemIn`): a question type, how many of it
+ * to draft, and optionally that item's own difficulty
+ * (docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md D31).
+ * `count` must be positive and no two entries of one request may carry the
+ * same `question_type` — both are 422 on the server.
  */
 export interface GenerateItem {
   question_type: QuestionType
   count: number
+  difficulty?: string
 }
 
 /**
  * Request body of `POST /api/v1/generate` (docs/question-bank.md 出題流程
- * step 1 — 多個「題型 × 數量」項目，一個 job 出完).
+ * step 1 — 多個「題型 × 數量 × 難度」項目，一個 job 出完).
  *
  * At least one scope list is required and `items` must not be empty. The whole
  * combination is drafted by a single job whose progress counts every question
@@ -532,7 +535,6 @@ export interface GenerateRequest {
   document_ids?: number[]
   category_ids?: number[]
   items: GenerateItem[]
-  difficulty?: string | null
 }
 
 /** `POST /api/v1/generate` — the id of the queued `generate_questions` job. */

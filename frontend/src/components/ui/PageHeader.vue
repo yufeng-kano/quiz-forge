@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import AppButton from '@/components/AppButton.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
+
 /**
  * Header bar of a page: the page name and its count on the left, its primary
  * actions on the right.
@@ -22,11 +25,26 @@ defineProps<{
   pageName: string
   /** Replaces the page name when the page's title is data (文件詳情). */
   heading?: string
+  /** Localised aria-label; renders the back icon button on the left. */
+  backLabel?: string
 }>()
+
+const emit = defineEmits<{ back: [] }>()
 </script>
 
 <template>
   <header class="page-header-bar">
+    <AppButton
+      v-if="backLabel !== undefined"
+      variant="secondary"
+      icon
+      :aria-label="backLabel"
+      :title="backLabel"
+      @click="emit('back')"
+    >
+      <AppIcon name="chevronLeft" :size="16" />
+    </AppButton>
+
     <h1 class="page-header-bar__title text-ellipsis" :title="heading">
       {{ heading ?? pageName }}
     </h1>

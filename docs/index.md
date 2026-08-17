@@ -53,6 +53,7 @@
 | `docs/decisions/2026-08-17-ui-design-restraint.md` | 全站設計節制通則 D16–D22：禁卡中卡、pill 只留封閉集合短詞、icon 優先、不重述外框、不寫多餘文字與灰色小字、獨立區域各自捲動 |
 | `docs/decisions/2026-08-17-drop-page-titles-keep-stat-cards.md` | D23 頁首不再放頁名（推翻同日頁首精簡決策的「只留頁名」）、D24 總覽與用量的總計維持 `StatCard` 卡片（D16 的明確例外）；D23 頁名部分已被同日 D25 推翻 |
 | `docs/decisions/2026-08-17-professional-form-pages.md` | 表單頁專業化 D25–D30：頁首恢復頁名（推翻 D23）、出題頁分欄工作區、表單分區小節標題、控制項樣式升級、匯出「題目與配分」合併 widget、逐題配分移入 store 修跨頁消失 bug |
+| `docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md` | D31–D35：出題逐題型難度（`items[].difficulty`）、出題頁首放送出鈕與 icon 化觸發鈕（調整 D28）、配分改「目標總分＋題型百分比＋平均分配」（廢 `typePoints` 偏好）、修 `parsePointsInput` 對 number 的 crash、出題頁三欄並排（範圍｜題目設定｜紀錄） |
 | `docs/decisions/2026-08-17-documents-folder-delete-icon.md` | L5 文件庫資料夾列刪除改 trash icon；按下仍走 ConfirmDialog。D18 的明確例外，只限資料夾列 |
 | `docs/decisions/2026-08-17-documents-workspace-flush.md` | L6 工作區貼齊外框不另加左右內距、L7 搜尋列與表格同一塊並加分隔線；左右緣已被同日 L8 推翻 |
 | `docs/decisions/2026-08-17-documents-workspace-bleed.md` | L8 文件庫工作區左右出血，與頁首底線同寬；推翻 L6「停在 page gutter」 |

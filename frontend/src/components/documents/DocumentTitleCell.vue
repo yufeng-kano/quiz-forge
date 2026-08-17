@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 
 import type { DocumentListItem } from '@/api'
+import { displayUrl } from '@/utils/url'
 
 /**
  * A document's title in the library table: one line, cut with an ellipsis, the
@@ -14,14 +15,18 @@ import type { DocumentListItem } from '@/api'
  */
 const props = defineProps<{ document: DocumentListItem }>()
 
+// URL imports carry the address as their title; show the decoded, readable
+// form in both the cell and the tooltip (src/utils/url.ts).
+const displayTitle = computed(() => displayUrl(props.document.title))
+
 const tooltip = computed(() => {
   const url = props.document.source_url
-  return url === null ? props.document.title : `${props.document.title}\n${url}`
+  return url === null ? displayTitle.value : `${displayTitle.value}\n${displayUrl(url)}`
 })
 </script>
 
 <template>
-  <span class="document-title text-ellipsis" :title="tooltip">{{ props.document.title }}</span>
+  <span class="document-title text-ellipsis" :title="tooltip">{{ displayTitle }}</span>
 </template>
 
 <style scoped>

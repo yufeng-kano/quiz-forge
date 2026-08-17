@@ -704,6 +704,45 @@ async def test_multi_item_job_generates_every_combo_with_shared_progress_total(
     assert schema_names.count("ShortAnswerQuestion") == 1
 
 
+async def test_per_item_difficulty_wins_over_job_level_fallback(monkeypatch) -> None:
+    """docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md D31 —
+    each item carries its own difficulty; an item without one falls back to the
+    job-level key that pre-D31 payloads carried."""
+    document_id = await _make_document()
+    category_id = await _make_category()
+    for i in range(3):
+        await _make_chunk(document_id=document_id, category_id=category_id, content=f"內容{i}")
+
+    fake_client = _fake_llm_client(_canned_handler([]))
+    monkeypatch.setattr(generation_module, "get_llm_client", lambda: fake_client)
+
+    job_id = await _run_job(
+        {
+            "document_ids": [document_id],
+            "category_ids": None,
+            "items": [
+                {"question_type": "single_choice", "count": 1, "difficulty": "困難"},
+                {"question_type": "true_false", "count": 1, "difficulty": None},
+                {"question_type": "short_answer", "count": 1},
+            ],
+            "difficulty": "簡單",
+        }
+    )
+
+    job = await _get_job(job_id)
+    assert job.status == "done"
+    assert job.progress == "3/3"
+
+    [single_choice] = await _questions_for_type("single_choice")
+    assert single_choice.difficulty == "困難"
+    # Both "difficulty: None" and a missing key mean "not specified for this
+    # item" and inherit the job-level fallback.
+    [true_false] = await _questions_for_type("true_false")
+    assert true_false.difficulty == "簡單"
+    [short_answer] = await _questions_for_type("short_answer")
+    assert short_answer.difficulty == "簡單"
+
+
 async def test_one_item_with_no_eligible_material_does_not_abort_the_other_items(
     monkeypatch,
 ) -> None:

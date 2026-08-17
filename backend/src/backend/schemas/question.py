@@ -9,22 +9,26 @@ from backend.questions.schemas import QuestionType
 
 
 class GenerateItemIn(BaseModel):
-    """One `POST /v1/generate` `items[]` entry — a question type and how many
-    of it to draft (docs/question-bank.md 出題流程 step 1 — 多個「題型 × 數量」
-    項目，一個 job 出完)."""
+    """One `POST /v1/generate` `items[]` entry — a question type, how many of
+    it to draft, and optionally that item's own difficulty
+    (docs/question-bank.md 出題流程 step 1 — 多個「題型 × 數量 × 難度」項目，
+    一個 job 出完；docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md
+    D31)."""
 
     question_type: QuestionType
     count: int = Field(gt=0)
+    difficulty: str | None = None
 
 
 class GenerateIn(BaseModel):
-    """`POST /v1/generate` body — scope, shared difficulty, and one or more
-    `{question_type, count}` combos generated together by a single job."""
+    """`POST /v1/generate` body — scope and one or more
+    `{question_type, count, difficulty?}` combos generated together by a single
+    job. The request-level shared `difficulty` is gone (D31); pydantic ignores
+    it if an old client still sends one."""
 
     document_ids: list[int] | None = None
     category_ids: list[int] | None = None
     items: list[GenerateItemIn] = Field(min_length=1)
-    difficulty: str | None = None
 
     @model_validator(mode="after")
     def _scope_not_empty(self) -> "GenerateIn":

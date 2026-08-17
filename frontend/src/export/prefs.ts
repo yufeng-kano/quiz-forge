@@ -2,14 +2,18 @@
  * Shape and parsing of the 匯出 preferences kept in `localStorage`.
  *
  * What survives a browser restart is the setup of the form, not the work in
- * progress: the paper size, which 表頭 columns are printed, and the default
- * points of each question type (docs/frontend.md 匯出頁). The question
- * selection and the per-question overrides stay in the session — they belong to
- * one particular paper, not to how this teacher always builds papers.
+ * progress: the paper size, which 表頭 columns are printed, the target total
+ * and each question type's share of it in percent
+ * (docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md D33).
+ * The question selection and the per-question points stay in the session —
+ * they belong to one particular paper, not to how this teacher always builds
+ * papers.
  *
  * The stored value comes from an earlier run of a possibly older build, so it
  * is never trusted: every field is checked on its own and an unusable one falls
- * back to its default while the rest is still honoured.
+ * back to its default while the rest is still honoured. The pre-D33
+ * `typePoints` key is simply ignored by this parser — same storage key, no
+ * migration needed.
  */
 
 import {
@@ -18,8 +22,8 @@ import {
   findPaperSize,
   isQuestionType,
   type ExportHeaderFields,
-  type ExportPoints,
   type PaperSize,
+  type QuestionType,
 } from '@/api'
 
 /**
@@ -28,11 +32,19 @@ import {
  */
 export const EXPORT_PREFS_STORAGE_KEY = 'quiz-forge:export-prefs:v1'
 
+/** Each question type's share of the target total, in whole percent (1–100). */
+export type ExportTypePercents = Partial<Record<QuestionType, number>>
+
+/** The 依比例分配 tool's default target when nothing was stored yet. */
+export const DEFAULT_TARGET_TOTAL = 100
+
 export interface ExportPrefs {
   paperSize: PaperSize
   headerFields: ExportHeaderFields
-  /** Default points per question type; a type absent from it carries no marks. */
-  typePoints: ExportPoints
+  /** 依比例分配／全部平均 target total, a positive integer. */
+  targetTotal: number
+  /** A type absent from it has no percentage set. */
+  typePercents: ExportTypePercents
 }
 
 /**
@@ -50,7 +62,8 @@ export function defaultExportPrefs(): ExportPrefs {
   return {
     paperSize: DEFAULT_PAPER_SIZE,
     headerFields: defaultHeaderFields(),
-    typePoints: {},
+    targetTotal: DEFAULT_TARGET_TOTAL,
+    typePercents: {},
   }
 }
 
@@ -76,24 +89,29 @@ function parseHeaderFields(value: unknown): ExportHeaderFields {
   return fields
 }
 
-function parseTypePoints(value: unknown): ExportPoints {
-  const points: ExportPoints = {}
+function parseTargetTotal(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+}
+
+function parseTypePercents(value: unknown): ExportTypePercents {
+  const percents: ExportTypePercents = {}
   if (!isRecord(value)) {
-    return points
+    return percents
   }
   for (const [type, stored] of Object.entries(value)) {
-    // A type this build no longer knows, or a score the backend would reject
-    // as non-positive, is dropped rather than carried into a request.
+    // A type this build no longer knows, or a share outside 1–100, is dropped
+    // rather than fed into the distribution tool.
     if (
       isQuestionType(type) &&
       typeof stored === 'number' &&
       Number.isInteger(stored) &&
-      stored > 0
+      stored > 0 &&
+      stored <= 100
     ) {
-      points[type] = stored
+      percents[type] = stored
     }
   }
-  return points
+  return percents
 }
 
 /** Reads whatever was stored into a usable `ExportPrefs`, never throwing. */
@@ -105,6 +123,7 @@ export function parseExportPrefs(value: unknown): ExportPrefs {
   return {
     paperSize: parsePaperSize(value['paperSize']) ?? defaults.paperSize,
     headerFields: parseHeaderFields(value['headerFields']),
-    typePoints: parseTypePoints(value['typePoints']),
+    targetTotal: parseTargetTotal(value['targetTotal']) ?? defaults.targetTotal,
+    typePercents: parseTypePercents(value['typePercents']),
   }
 }

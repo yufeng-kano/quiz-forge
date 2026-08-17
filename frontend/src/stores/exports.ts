@@ -20,20 +20,20 @@ import {
   listExports,
   type ExportHeaderFields,
   type ExportListItem,
-  type ExportPoints,
   type ExportQuestionPoints,
   type PaperSize,
 } from '@/api'
 import { translateApiError } from '@/i18n/errors'
 
-/** What the 匯出 form sends, minus the ids it takes from the selection. */
+/** What the 匯出 form sends, minus the ids it takes from the selection.
+
+    `points` (per-type defaults) is gone since D33: the type-level tool writes
+    the per-question map, so `question_points` is the whole scoring story. */
 export interface ExportSubmission {
   title: string
   paperSize: PaperSize
-  /** Omitted entirely when no type was given a score. */
-  points?: ExportPoints
   /**
-   * Per-question overrides, already restricted to the current selection: a key
+   * Per-question points, already restricted to the current selection: a key
    * outside `question_ids` is a 422 (docs/export.md 配分參數). Omitted when no
    * question carries one.
    */
@@ -93,12 +93,11 @@ export const useExportsStore = defineStore('exports', () => {
     questionIds: readonly number[],
     submission: ExportSubmission,
   ): Promise<number> {
-    const { title, paperSize, points, questionPoints, headerFields } = submission
+    const { title, paperSize, questionPoints, headerFields } = submission
     const result = await createExportJob({
       question_ids: [...questionIds],
       paper_size: paperSize,
       title,
-      ...(points === undefined ? {} : { points }),
       ...(questionPoints === undefined ? {} : { question_points: questionPoints }),
       header_fields: headerFields,
     })

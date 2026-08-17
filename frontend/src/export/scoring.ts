@@ -1,43 +1,29 @@
 /**
- * The arithmetic behind 配分設定 (docs/frontend.md 匯出頁).
+ * The arithmetic behind 題目與配分 (docs/frontend.md 匯出頁).
  *
- * A question's score comes from one of two places: its own override, or the
- * default of its type — the override wins, exactly as the backend resolves
- * them (docs/export.md 配分參數). Nothing here touches the API or the DOM, so
- * the rule lives in one place and both the summary line on the page and the
- * running total inside the modal read the same number.
+ * Since docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md
+ * D33 a paper's scoring is exactly the per-question map in `exportSelection`:
+ * the type-level control is a *tool* (each type's share of the target total in
+ * percent, split evenly inside the type) that writes that map, not a second
+ * layer the backend has to resolve. Nothing here touches the API or the DOM,
+ * so the rules live in one place and the summary line on the page and the
+ * running total inside the modal read the same numbers.
  */
 
-import type { ExportPoints, ExportQuestionPoints, QuestionType } from '@/api'
-import { isQuestionType } from '@/api'
-import type { SelectedQuestionRow } from '@/composables/useSelectedQuestions'
-
-/** A selected question reduced to what scoring needs. */
-export interface ScoredQuestion {
-  id: number
-  /** `null` when the question could not be resolved or has an unknown type. */
-  type: QuestionType | null
-}
-
-/** Per-question overrides while they are being edited, keyed by question id. */
-export type QuestionPointsDraft = Record<number, number>
-
-export function toScoredQuestions(rows: readonly SelectedQuestionRow[]): ScoredQuestion[] {
-  return rows.map((row) => {
-    const type = row.question?.type
-    return { id: row.id, type: type !== undefined && isQuestionType(type) ? type : null }
-  })
-}
+import type { ExportQuestionPoints } from '@/api'
 
 /**
- * A points field's value, or `null` when the field carries no usable score.
+ * A numeric field's value, or `null` when the field carries no usable score.
  *
- * Only positive whole numbers count: blank, zero and anything the field cannot
- * be read as are all "no score for this", which is what the backend's
- * "points value must be positive" rule leaves room for.
+ * Accepts `string | number` because Vue's `v-model` on an
+ * `<input type="number">` auto-casts to `number` (D34 — the `.trim()` crash);
+ * everything is normalised to text before validation. Only positive whole
+ * numbers count: blank, zero and anything unreadable are all "no score for
+ * this", which is what the backend's "points value must be positive" rule
+ * leaves room for.
  */
-export function parsePointsInput(raw: string): number | null {
-  const trimmed = raw.trim()
+export function parsePointsInput(raw: string | number): number | null {
+  const trimmed = String(raw).trim()
   if (trimmed === '' || !/^\d+$/.test(trimmed)) {
     return null
   }
@@ -45,44 +31,26 @@ export function parsePointsInput(raw: string): number | null {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 }
 
-/** The type default a question inherits when it has no override of its own. */
-export function inheritedPoints(
-  question: ScoredQuestion,
-  typePoints: Readonly<ExportPoints>,
-): number | null {
-  return question.type === null ? null : (typePoints[question.type] ?? null)
-}
-
-/** What a question is actually worth, override first, then its type default. */
-export function effectivePoints(
-  question: ScoredQuestion,
-  typePoints: Readonly<ExportPoints>,
-  questionPoints: Readonly<QuestionPointsDraft>,
-): number | null {
-  return questionPoints[question.id] ?? inheritedPoints(question, typePoints)
+/** A percentage field's value: a whole number of percent in 1–100, or `null`. */
+export function parsePercentInput(raw: string | number): number | null {
+  const parsed = parsePointsInput(raw)
+  return parsed !== null && parsed <= 100 ? parsed : null
 }
 
 /** Sum of every selected question's score; an unscored question adds nothing. */
 export function totalPoints(
-  questions: readonly ScoredQuestion[],
-  typePoints: Readonly<ExportPoints>,
-  questionPoints: Readonly<QuestionPointsDraft>,
+  questionIds: readonly number[],
+  questionPoints: Readonly<Record<number, number>>,
 ): number {
-  return questions.reduce(
-    (total, question) => total + (effectivePoints(question, typePoints, questionPoints) ?? 0),
-    0,
-  )
+  return questionIds.reduce((total, id) => total + (questionPoints[id] ?? 0), 0)
 }
 
 /** How many of the selected questions carry a score. */
 export function scoredCount(
-  questions: readonly ScoredQuestion[],
-  typePoints: Readonly<ExportPoints>,
-  questionPoints: Readonly<QuestionPointsDraft>,
+  questionIds: readonly number[],
+  questionPoints: Readonly<Record<number, number>>,
 ): number {
-  return questions.filter(
-    (question) => effectivePoints(question, typePoints, questionPoints) !== null,
-  ).length
+  return questionIds.filter((id) => questionPoints[id] !== undefined).length
 }
 
 /**
@@ -105,43 +73,49 @@ export function distributePoints(target: number, count: number): number[] {
 }
 
 /**
+ * Splits `target` into one integer share per percentage, by largest remainder:
+ * every share starts at the floor of its exact value and the leftover points go
+ * one at a time to the largest fractional parts (ties to the earlier entry).
+ *
+ * When the percents sum to 100 the shares sum to `target` exactly. The caller
+ * validates that; this function just never invents or drops a point relative
+ * to `round(target × Σpercent / 100)`.
+ */
+export function percentShares(target: number, percents: readonly number[]): number[] {
+  const exact = percents.map((percent) => (target * percent) / 100)
+  const shares = exact.map(Math.floor)
+  let leftover =
+    Math.round(exact.reduce((sum, value) => sum + value, 0)) -
+    shares.reduce((sum, value) => sum + value, 0)
+  const order = exact
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction || a.index - b.index)
+  for (const { index } of order) {
+    if (leftover <= 0) {
+      break
+    }
+    shares[index] = (shares[index] ?? 0) + 1
+    leftover -= 1
+  }
+  return shares
+}
+
+/**
  * The overrides restricted to the questions that are still selected.
  *
- * A key outside `question_ids` is a 422 (docs/export.md 配分參數), and a
- * question removed from the selection after being given a score would leave
- * exactly such a key behind, so the request is built from the selection rather
- * than from the draft.
+ * A key outside `question_ids` is a 422 (docs/export.md 配分參數); the store
+ * already prunes on deselect, but the request is still built from the
+ * selection so no ordering of events can leave a stray key.
  */
 export function collectQuestionPoints(
   selectedIds: readonly number[],
-  questionPoints: Readonly<QuestionPointsDraft>,
+  questionPoints: Readonly<Record<number, number>>,
 ): ExportQuestionPoints | undefined {
   const collected: ExportQuestionPoints = {}
   for (const id of selectedIds) {
     const points = questionPoints[id]
     if (points !== undefined) {
       collected[String(id)] = points
-    }
-  }
-  return Object.keys(collected).length === 0 ? undefined : collected
-}
-
-/**
- * The type defaults restricted to the types actually on the paper.
- *
- * The defaults are remembered across sessions, so they can name a type that
- * this selection does not contain; such an entry would print nothing and only
- * makes the request harder to read.
- */
-export function collectTypePoints(
-  types: readonly QuestionType[],
-  typePoints: Readonly<ExportPoints>,
-): ExportPoints | undefined {
-  const collected: ExportPoints = {}
-  for (const type of types) {
-    const points = typePoints[type]
-    if (points !== undefined) {
-      collected[type] = points
     }
   }
   return Object.keys(collected).length === 0 ? undefined : collected

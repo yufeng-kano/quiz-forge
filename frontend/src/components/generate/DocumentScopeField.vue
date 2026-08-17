@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import { SCOPE_CHIP_VISIBLE_LIMIT } from '@/api'
 import AppButton from '@/components/AppButton.vue'
+import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAppI18n } from '@/i18n'
 import { useDocumentsStore } from '@/stores/documents'
 import DocumentPickerModal from './DocumentPickerModal.vue'
@@ -43,18 +44,27 @@ function remove(id: number): void {
 
 <template>
   <div class="scope-field">
-    <span class="form-label">{{ t('generate.scope.documents.label') }}</span>
-
-    <div class="scope-field__control">
-      <AppButton variant="secondary" size="sm" @click="pickerOpen = true">
-        {{ t('generate.scope.documents.select') }}
+    <!-- The trigger is a plus icon right after the label: its position names
+         its purpose (docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md D32) -->
+    <div class="scope-field__head">
+      <span class="form-label">{{ t('generate.scope.documents.label') }}</span>
+      <AppButton
+        variant="ghost"
+        icon
+        size="sm"
+        :aria-label="t('generate.scope.documents.select')"
+        :title="t('generate.scope.documents.select')"
+        @click="pickerOpen = true"
+      >
+        <AppIcon name="plus" :size="16" />
       </AppButton>
-      <!-- Only the empty state needs words: once there is a selection the chips
-           below are the count (docs/frontend.md 設計節制原則: 不重述) -->
-      <span v-if="selectedIds.length === 0" class="scope-field__state">
-        {{ t('generate.scope.documents.none') }}
-      </span>
     </div>
+
+    <!-- Only the empty state needs words: once there is a selection the chips
+         below are the count (docs/frontend.md 設計節制原則: 不重述) -->
+    <span v-if="selectedIds.length === 0" class="scope-field__state">
+      {{ t('generate.scope.documents.none') }}
+    </span>
 
     <ScopeChips
       :chips="chips"
@@ -81,11 +91,10 @@ function remove(id: number): void {
   min-width: 0;
 }
 
-.scope-field__control {
+.scope-field__head {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-1);
 }
 
 .scope-field__state {

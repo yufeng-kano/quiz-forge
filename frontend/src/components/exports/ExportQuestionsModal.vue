@@ -1,22 +1,23 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 
-import type { ExportPoints, QuestionType } from '@/api'
+import type { QuestionType } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import AppModal from '@/components/ui/AppModal.vue'
 import type { SelectedQuestionRow } from '@/composables/useSelectedQuestions'
 import {
   distributePoints,
-  inheritedPoints,
+  parsePercentInput,
   parsePointsInput,
-  toScoredQuestions,
+  percentShares,
   totalPoints,
 } from '@/export/scoring'
 import { useAppI18n } from '@/i18n'
 import { formatCount } from '@/i18n/number'
-import { QUESTION_TYPE_LABEL_KEYS, questionTypeLabel } from '@/questions/labels'
+import { questionTypeLabel } from '@/questions/labels'
 import { questionPreview } from '@/questions/preview'
+import { useExportPrefsStore } from '@/stores/exportPrefs'
 import { useExportSelectionStore } from '@/stores/exportSelection'
 
 /**
@@ -29,17 +30,20 @@ import { useExportSelectionStore } from '@/stores/exportSelection'
  * (docs/frontend.md 清單有界原則). Each row carries its own remove button, so
  * trimming the paper and scoring it are the same pass over the same list.
  *
- * Two layers of scoring, resolved the way the backend resolves them: a default
- * per question type (`exportPrefs`, persisted), and an override per question
- * (`exportSelection`, this paper only — D30) that wins over it. A blank
- * override field therefore means 「跟著題型走」, and its placeholder shows the
- * value it would inherit so that blank is never ambiguous.
+ * Scoring is the per-question map in `exportSelection` and nothing else
+ * (docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md D33).
+ * The tools at the top only write that map: 全部平均 splits the target total
+ * evenly over every question, 依比例分配 gives each question type its
+ * percentage of the target (a habit, persisted in `exportPrefs`) and splits
+ * evenly inside the type. The per-question fields stay editable for manual
+ * fine-tuning afterwards.
  *
  * The fields keep their own raw text while the committed values stay numbers:
  * a half-typed 「1」 on the way to 「12」 belongs on screen, but only a positive
- * whole number is a score the backend accepts, so anything else simply drops
- * the entry. Every keystroke commits, which is what keeps the running total in
- * the footer live.
+ * whole number is a value worth committing, so anything else simply drops the
+ * entry. Every keystroke commits, which is what keeps the running total in the
+ * footer live. All numeric fields read `element.value` instead of `v-model`
+ * (D34 — `v-model` on a number input auto-casts to `number`).
  */
 const props = defineProps<{
   open: boolean
@@ -50,20 +54,18 @@ const props = defineProps<{
 
 const emit = defineEmits<{ close: [] }>()
 
-const typePoints = defineModel<ExportPoints>('typePoints', { required: true })
-
 const { t } = useAppI18n()
+const prefs = useExportPrefsStore()
 const selection = useExportSelectionStore()
 
 /** Raw field text, keyed the same way as the committed values. */
-const typeInput = ref<Partial<Record<QuestionType, string>>>({})
-const questionInput = ref<Record<number, string>>({})
-/** 依目標總分平均分配 target; client-side only, never sent anywhere. */
 const targetInput = ref('')
+const percentInput = ref<Partial<Record<QuestionType, string>>>({})
+const questionInput = ref<Record<number, string>>({})
 
-const scored = computed(() => toScoredQuestions(props.rows))
+const selectedIds = computed(() => props.rows.map((row) => row.id))
 
-const total = computed(() => totalPoints(scored.value, typePoints.value, selection.questionPoints))
+const total = computed(() => totalPoints(selectedIds.value, selection.questionPoints))
 
 const hasOverrides = computed(() => Object.keys(selection.questionPoints).length > 0)
 
@@ -74,36 +76,46 @@ interface QuestionRowView {
   /** `null` marks a question that is no longer in the approved bank. */
   typeLabel: string | null
   preview: string
-  /** What the empty field would inherit, shown as its placeholder. */
-  placeholder: string
 }
 
 const rowViews = computed<QuestionRowView[]>(() =>
   props.rows.map((row, index) => {
     const question = row.question
-    const scoredQuestion = scored.value[index] ?? { id: row.id, type: null }
-    const inherited = inheritedPoints(scoredQuestion, typePoints.value)
     return {
       id: row.id,
       no: index + 1,
       typeLabel: question === null ? null : questionTypeLabel(question.type),
       preview: question === null ? t('exports.selection.unavailable') : questionPreview(question),
-      // Plain digits, not a grouped number: the placeholder shows what the
-      // field would hold if it were typed in.
-      placeholder: inherited === null ? t('exports.scoring.inheritNone') : String(inherited),
     }
   }),
 )
 
-const targetTotal = computed(() => parsePointsInput(targetInput.value))
+/** The 依比例分配 groups: each present type with its questions in paper order. */
+const typeGroups = computed(() =>
+  props.types.map((type) => ({
+    type,
+    label: questionTypeLabel(type),
+    ids: props.rows
+      .filter((row) => row.question !== null && row.question.type === type)
+      .map((row) => row.id),
+    percent: prefs.typePercents[type] ?? null,
+  })),
+)
+
+const percentSum = computed(() =>
+  typeGroups.value.reduce((sum, group) => sum + (group.percent ?? 0), 0),
+)
+
+const allPercentsSet = computed(
+  () => typeGroups.value.length > 0 && typeGroups.value.every((group) => group.percent !== null),
+)
 
 /**
  * Every question has to end up with at least one point, so a target below the
  * question count cannot be split — the button stays disabled.
  */
-const canDistribute = computed(
-  () =>
-    props.rows.length > 0 && targetTotal.value !== null && targetTotal.value >= props.rows.length,
+const canDistributeAll = computed(
+  () => props.rows.length > 0 && prefs.targetTotal >= props.rows.length,
 )
 
 /**
@@ -111,8 +123,36 @@ const canDistribute = computed(
  * cannot be split; a permanent hint would say nothing the empty field does not
  * (docs/frontend.md 設計節制原則).
  */
-const targetTooSmall = computed(
-  () => props.rows.length > 0 && targetInput.value.trim() !== '' && !canDistribute.value,
+const targetTooSmall = computed(() => props.rows.length > 0 && !canDistributeAll.value)
+
+/** One integer share per group, only meaningful while the percents sum to 100. */
+const groupShares = computed<number[] | null>(() => {
+  if (!allPercentsSet.value || percentSum.value !== 100) {
+    return null
+  }
+  return percentShares(
+    prefs.targetTotal,
+    typeGroups.value.map((group) => group.percent ?? 0),
+  )
+})
+
+/** The first type whose share cannot give each of its questions one point. */
+const shareTooSmall = computed(() => {
+  const shares = groupShares.value
+  if (shares === null) {
+    return null
+  }
+  for (const [index, group] of typeGroups.value.entries()) {
+    const share = shares[index] ?? 0
+    if (group.ids.length > 0 && share < group.ids.length) {
+      return { label: group.label, share, count: group.ids.length }
+    }
+  }
+  return null
+})
+
+const canDistributeByPercent = computed(
+  () => groupShares.value !== null && shareTooSmall.value === null && selectedIds.value.length > 0,
 )
 
 /** Rebuilds the raw fields from the committed values, dropping stale text. */
@@ -128,16 +168,16 @@ function syncQuestionInput(): void {
 }
 
 function syncInputs(): void {
+  targetInput.value = String(prefs.targetTotal)
   const next: Partial<Record<QuestionType, string>> = {}
   for (const type of props.types) {
-    const points = typePoints.value[type]
-    if (points !== undefined) {
-      next[type] = String(points)
+    const percent = prefs.typePercents[type]
+    if (percent !== undefined) {
+      next[type] = String(percent)
     }
   }
-  typeInput.value = next
+  percentInput.value = next
   syncQuestionInput()
-  targetInput.value = ''
 }
 
 // Each opening starts from what is actually committed: the selection may have
@@ -151,23 +191,33 @@ watch(
   },
 )
 
-function onTypeInput(type: QuestionType, event: Event): void {
+function onTargetInput(event: Event): void {
   const element = event.target
   if (!(element instanceof HTMLInputElement)) {
     return
   }
-  const nextInput: Partial<Record<QuestionType, string>> = { ...typeInput.value }
-  nextInput[type] = element.value
-  typeInput.value = nextInput
-
+  targetInput.value = element.value
   const parsed = parsePointsInput(element.value)
-  const nextPoints: ExportPoints = { ...typePoints.value }
-  if (parsed === null) {
-    delete nextPoints[type]
-  } else {
-    nextPoints[type] = parsed
+  if (parsed !== null) {
+    prefs.targetTotal = parsed
   }
-  typePoints.value = nextPoints
+}
+
+function onPercentInput(type: QuestionType, event: Event): void {
+  const element = event.target
+  if (!(element instanceof HTMLInputElement)) {
+    return
+  }
+  percentInput.value = { ...percentInput.value, [type]: element.value }
+
+  const parsed = parsePercentInput(element.value)
+  const next = { ...prefs.typePercents }
+  if (parsed === null) {
+    delete next[type]
+  } else {
+    next[type] = parsed
+  }
+  prefs.typePercents = next
 }
 
 function onQuestionInput(questionId: number, event: Event): void {
@@ -179,16 +229,12 @@ function onQuestionInput(questionId: number, event: Event): void {
   selection.setQuestionPoints(questionId, parsePointsInput(element.value))
 }
 
-/**
- * 依目標總分平均分配 — writes the split as per-question overrides so it survives
- * the type defaults and is exactly what the paper will carry.
- */
-function distribute(): void {
-  const wanted = targetTotal.value
-  if (wanted === null || !canDistribute.value) {
+/** 全部平均 — the target split evenly over every selected question. */
+function distributeAll(): void {
+  if (!canDistributeAll.value) {
     return
   }
-  const shares = distributePoints(wanted, props.rows.length)
+  const shares = distributePoints(prefs.targetTotal, props.rows.length)
   const next: Record<number, number> = {}
   props.rows.forEach((row, index) => {
     const share = shares[index]
@@ -200,7 +246,27 @@ function distribute(): void {
   syncQuestionInput()
 }
 
-/** Drops every override, leaving each question on its type's default again. */
+/** 依比例分配 — each type gets its percentage, split evenly inside the type. */
+function distributeByPercent(): void {
+  const shares = groupShares.value
+  if (shares === null || !canDistributeByPercent.value) {
+    return
+  }
+  const next: Record<number, number> = {}
+  typeGroups.value.forEach((group, groupIndex) => {
+    const groupPoints = distributePoints(shares[groupIndex] ?? 0, group.ids.length)
+    group.ids.forEach((id, index) => {
+      const points = groupPoints[index]
+      if (points !== undefined) {
+        next[id] = points
+      }
+    })
+  })
+  selection.replaceQuestionPoints(next)
+  syncQuestionInput()
+}
+
+/** Drops every score, leaving the paper back on hand-filled 配分 blanks. */
 function clearOverrides(): void {
   selection.clearQuestionPoints()
   questionInput.value = {}
@@ -216,52 +282,87 @@ function clearOverrides(): void {
   >
     <div class="scoring">
       <section class="scoring__section">
-        <h3 class="scoring__heading">{{ t('exports.scoring.typeSection') }}</h3>
+        <h3 class="scoring__heading">{{ t('exports.scoring.toolsSection') }}</h3>
 
-        <p v-if="props.types.length === 0" class="muted-text">
-          {{ t('exports.scoring.noTypes') }}
-        </p>
-
-        <div v-else class="scoring__types">
-          <label v-for="type in props.types" :key="type" class="scoring__type">
-            <span class="scoring__type-label">{{ t(QUESTION_TYPE_LABEL_KEYS[type]) }}</span>
+        <div class="scoring__target">
+          <label class="scoring__target-field">
+            <span>{{ t('exports.scoring.targetLabel') }}</span>
             <input
               class="form-input scoring__input"
               type="number"
               min="1"
               step="1"
               inputmode="numeric"
-              :value="typeInput[type] ?? ''"
-              @input="onTypeInput(type, $event)"
+              :value="targetInput"
+              @input="onTargetInput"
             />
           </label>
-        </div>
-      </section>
-
-      <section class="scoring__section">
-        <div class="scoring__question-head">
-          <h3 class="scoring__heading">{{ t('exports.scoring.questionSection') }}</h3>
-
-          <div class="scoring__distribute">
-            <input
-              v-model="targetInput"
-              class="form-input scoring__input"
-              type="number"
-              min="1"
-              step="1"
-              inputmode="numeric"
-              :aria-label="t('exports.scoring.targetLabel')"
-              :placeholder="t('exports.scoring.targetPlaceholder')"
-            />
-            <AppButton variant="secondary" size="sm" :disabled="!canDistribute" @click="distribute">
-              {{ t('exports.scoring.distribute') }}
-            </AppButton>
-          </div>
+          <AppButton
+            variant="secondary"
+            size="sm"
+            :disabled="!canDistributeAll"
+            @click="distributeAll"
+          >
+            {{ t('exports.scoring.distributeAll') }}
+          </AppButton>
         </div>
 
         <p v-if="targetTooSmall" class="form-error">
           {{ t('exports.scoring.distributeMin', { count: props.rows.length }) }}
         </p>
+
+        <template v-if="typeGroups.length > 0">
+          <div class="scoring__percents">
+            <label v-for="group in typeGroups" :key="group.type" class="scoring__percent">
+              <span class="scoring__percent-label">
+                {{ t('exports.scoring.percentOf', { type: group.label, count: group.ids.length }) }}
+              </span>
+              <input
+                class="form-input scoring__input scoring__input--percent"
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                inputmode="numeric"
+                :value="percentInput[group.type] ?? ''"
+                :aria-label="t('exports.scoring.percentInputLabel', { type: group.label })"
+                @input="onPercentInput(group.type, $event)"
+              />
+              <span class="scoring__percent-sign">%</span>
+            </label>
+          </div>
+
+          <div class="scoring__percent-actions">
+            <span
+              class="scoring__percent-sum"
+              :class="{ 'scoring__percent-sum--off': allPercentsSet && percentSum !== 100 }"
+            >
+              {{ t('exports.scoring.percentSum', { sum: percentSum }) }}
+            </span>
+            <AppButton
+              variant="secondary"
+              size="sm"
+              :disabled="!canDistributeByPercent"
+              @click="distributeByPercent"
+            >
+              {{ t('exports.scoring.distributeByPercent') }}
+            </AppButton>
+          </div>
+
+          <p v-if="shareTooSmall !== null" class="form-error">
+            {{
+              t('exports.scoring.percentShareTooSmall', {
+                type: shareTooSmall.label,
+                share: shareTooSmall.share,
+                count: shareTooSmall.count,
+              })
+            }}
+          </p>
+        </template>
+      </section>
+
+      <section class="scoring__section">
+        <h3 class="scoring__heading">{{ t('exports.scoring.questionSection') }}</h3>
 
         <p v-if="rowViews.length === 0" class="muted-text">{{ t('exports.scoring.noRows') }}</p>
 
@@ -281,7 +382,7 @@ function clearOverrides(): void {
                 step="1"
                 inputmode="numeric"
                 :value="questionInput[row.id] ?? ''"
-                :placeholder="row.placeholder"
+                :placeholder="t('exports.scoring.inheritNone')"
                 :aria-label="t('exports.scoring.questionInputLabel', { no: row.no })"
                 @input="onQuestionInput(row.id, $event)"
               />
@@ -338,43 +439,66 @@ function clearOverrides(): void {
   font-size: var(--font-size-base);
 }
 
-.scoring__types {
+.scoring__target {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
 }
 
-.scoring__type {
+.scoring__target-field {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   white-space: nowrap;
 }
 
-.scoring__type-label {
+.scoring__percents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.scoring__percent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.scoring__percent-label {
   color: var(--color-text);
 }
 
-/* The split writes per-question overrides, so it sits on the heading line of
-   the list it rewrites instead of being a section of its own */
-.scoring__question-head {
+.scoring__percent-sign {
+  color: var(--color-text-muted);
+}
+
+.scoring__percent-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2) var(--space-3);
 }
 
-.scoring__distribute {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
+.scoring__percent-sum {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+/* Percents are typed toward 100: being off it is the one live validation the
+   sum line carries */
+.scoring__percent-sum--off {
+  color: var(--color-status-failed-text);
 }
 
 .scoring__input {
   width: 5.5rem;
   flex: none;
+}
+
+.scoring__input--percent {
+  width: 4.5rem;
 }
 
 /* The one part of the dialog that grows with the selection, so it is the one

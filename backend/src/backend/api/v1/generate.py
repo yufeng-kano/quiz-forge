@@ -25,7 +25,6 @@ async def create_generation_job(
             "document_ids": body.document_ids,
             "category_ids": body.category_ids,
             "items": [item.model_dump() for item in body.items],
-            "difficulty": body.difficulty,
         },
     )
     session.add(job)

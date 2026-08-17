@@ -18,11 +18,10 @@ import { createGenerationJob, type GenerateItem, type GenerateRequest } from '@/
 
 export interface GenerationJobEntry {
   jobId: number
-  /** The 題型 × 數量 combos sent, in the order the form listed them. */
+  /** The 題型 × 數量 × 難度 combos sent, in the order the form listed them. */
   items: GenerateItem[]
   /** Questions asked for across every item — what the job's progress counts. */
   totalCount: number
-  difficulty: string | null
   documentCount: number
   categoryCount: number
   /** ISO timestamp of the submission, formatted for display by the view. */
@@ -41,7 +40,6 @@ export const useGenerationStore = defineStore('generation', () => {
       jobId: result.job_id,
       items,
       totalCount: items.reduce((total, item) => total + item.count, 0),
-      difficulty: request.difficulty ?? null,
       documentCount: request.document_ids?.length ?? 0,
       categoryCount: request.category_ids?.length ?? 0,
       submittedAt: new Date().toISOString(),

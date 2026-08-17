@@ -8,6 +8,7 @@ import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
 import { useDocumentsStore } from '@/stores/documents'
 import { useToastsStore } from '@/stores/toasts'
+import { encodeUrl, normalizeUrlInput } from '@/utils/url'
 
 /**
  * The two document intake paths of docs/ingestion.md: a file (dropped or
@@ -79,14 +80,25 @@ async function onDrop(event: DragEvent): Promise<void> {
   await uploadFile(file)
 }
 
+/**
+ * The input shows the decoded, readable form of the address (src/utils/url.ts);
+ * the backend gets the percent-encoded value.
+ */
+function onUrlInput(): void {
+  const normalized = normalizeUrlInput(url.value)
+  if (normalized !== url.value) {
+    url.value = normalized
+  }
+}
+
 async function onSubmitUrl(): Promise<void> {
-  const trimmed = url.value.trim()
-  if (trimmed === '' || importing.value) {
+  const target = encodeUrl(normalizeUrlInput(url.value))
+  if (target === '' || importing.value) {
     return
   }
   importing.value = true
   try {
-    const result = await store.importUrl(trimmed)
+    const result = await store.importUrl(target)
     url.value = ''
     emit('created')
     toasts.success(t('documents.intake.imported', { title: result.document.title }))
@@ -138,6 +150,7 @@ async function onSubmitUrl(): Promise<void> {
           required
           :placeholder="t('documents.intake.urlPlaceholder')"
           :disabled="importing"
+          @input="onUrlInput"
         />
         <AppButton type="submit" :disabled="importing || url.trim() === ''">
           {{ importing ? t('documents.intake.importing') : t('documents.intake.urlSubmit') }}

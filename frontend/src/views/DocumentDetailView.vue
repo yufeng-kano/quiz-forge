@@ -21,6 +21,7 @@ import { translateApiError } from '@/i18n/errors'
 import { useDocumentsStore } from '@/stores/documents'
 import { useToastsStore } from '@/stores/toasts'
 import { buildCategoryIndex, resolveCategoryPath } from '@/utils/categories'
+import { displayUrl, encodeUrl } from '@/utils/url'
 
 /** `:id` comes from the router's `props: true`; route params are always strings. */
 const props = defineProps<{ id: string }>()
@@ -35,6 +36,11 @@ const documentId = computed<number | null>(() => {
   const parsed = Number(props.id)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null
 })
+
+/** Header back button — returns to the library list. */
+function goBack(): void {
+  void router.push({ name: 'documents' })
+}
 
 /**
  * The job worth watching: the one a page retry or a rechunk just created,
@@ -85,6 +91,15 @@ const jobFailureText = computed(() => {
 
 const pages = computed(() => detail.value?.pages ?? [])
 const chunks = computed(() => detail.value?.chunks ?? [])
+
+// URL imports store the address as the title; the page shows the decoded,
+// readable form (src/utils/url.ts) while the link target keeps the encoded
+// value.
+const displayTitle = computed(() => (detail.value === null ? '' : displayUrl(detail.value.title)))
+const sourceUrlDisplay = computed(() => {
+  const url = detail.value?.source_url
+  return url === undefined || url === null ? '' : displayUrl(url)
+})
 
 /** Only a document with parsed pages can be chunked again (the endpoint 409s otherwise). */
 const canRechunk = computed(() => pages.value.some((page) => page.status === 'ready'))
@@ -241,7 +256,12 @@ async function onDelete(): Promise<void> {
     />
 
     <template v-else>
-      <PageHeader :page-name="t('pages.documentDetail.title')" :heading="detail?.title">
+      <PageHeader
+      :page-name="t('pages.documentDetail.title')"
+      :heading="displayTitle"
+      :back-label="t('documentDetail.back')"
+      @back="goBack"
+    >
         <template #meta>
           <StatusBadge v-if="detail !== null" :status="detail.status" />
           <span v-if="detail !== null">{{ t(`documents.sourceType.${detail.source_type}`) }}</span>
@@ -342,12 +362,12 @@ async function onDelete(): Promise<void> {
               <span class="detail__fact-label">{{ t('documentDetail.sourceUrl') }}</span>
               <a
                 class="detail__fact-url text-ellipsis"
-                :href="detail.source_url"
-                :title="detail.source_url"
+                :href="encodeUrl(detail.source_url)"
+                :title="sourceUrlDisplay"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {{ detail.source_url }}
+                {{ sourceUrlDisplay }}
               </a>
             </p>
             <p v-if="detail.summary !== null && detail.summary.trim() !== ''" class="detail__fact">

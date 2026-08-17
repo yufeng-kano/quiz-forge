@@ -18,7 +18,7 @@ import { formatDateTime } from '@/i18n/datetime'
 import { translateApiError } from '@/i18n/errors'
 import { formatCount } from '@/i18n/number'
 import { paperSizeLabel } from '@/export/labels'
-import { collectQuestionPoints, collectTypePoints } from '@/export/scoring'
+import { collectQuestionPoints } from '@/export/scoring'
 import { useExportPrefsStore } from '@/stores/exportPrefs'
 import { useExportSelectionStore } from '@/stores/exportSelection'
 import { useExportsStore } from '@/stores/exports'
@@ -38,11 +38,15 @@ import { useToastsStore } from '@/stores/toasts'
  *
  * 題目與配分 and 表頭欄位 are widgets of their own (`ExportQuestionsField`,
  * `ExportHeaderFieldsField`); what stays here is which part of their state is
- * remembered. The paper size, the 表頭 columns and the per-type defaults are
- * preferences and live in `exportPrefs` (localStorage); the per-question
- * overrides live with the selection itself in `exportSelection`, which prunes
- * them when a question is unticked — as page state they were wiped by a round
- * trip to 題庫 (docs/decisions/2026-08-17-professional-form-pages.md D30).
+ * remembered. The paper size, the 表頭 columns, the target total and the
+ * per-type percentages are preferences and live in `exportPrefs`
+ * (localStorage); the per-question points live with the selection itself in
+ * `exportSelection`, which prunes them when a question is unticked — as page
+ * state they were wiped by a round trip to 題庫
+ * (docs/decisions/2026-08-17-professional-form-pages.md D30). The request
+ * carries `question_points` only — the type-level tool writes the per-question
+ * map instead of a second scoring layer
+ * (docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md D33).
  */
 const { t } = useAppI18n()
 const selection = useExportSelectionStore()
@@ -198,7 +202,6 @@ async function onSubmit(): Promise<void> {
     const jobId = await store.submit(selection.selectedIds, {
       title: trimmedTitle.value,
       paperSize: prefs.paperSize,
-      points: collectTypePoints(selectionTypes.value, prefs.typePoints),
       questionPoints: collectQuestionPoints(selection.selectedIds, selection.questionPoints),
       headerFields: prefs.headerFields,
     })
@@ -235,7 +238,6 @@ async function onSubmit(): Promise<void> {
         <h2 class="form-section__title">{{ t('exports.questions.section') }}</h2>
 
         <ExportQuestionsField
-          v-model:type-points="prefs.typePoints"
           :rows="selectionRows"
           :types="selectionTypes"
           :loading="selectionLoading"

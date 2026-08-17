@@ -20,7 +20,7 @@
 ## API
 
 - `POST /api/v1/exports`（question_ids + paper_size + 配分與表頭選項，全部必須 `approved`，否則 job 失敗並列出違規 id）→ export job。
-- 配分參數：每題型預設配分（既有）＋ `question_points`（`{question_id: 分數}`，逐題覆寫，優先於題型預設）。
+- 配分參數：每題型預設配分 `points`（API 保留、Word render 邏輯不變）＋ `question_points`（`{question_id: 分數}`，逐題覆寫，優先於題型預設）。前端自 `docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md` D33 起只送 `question_points`（配分工具以「目標總分＋題型百分比＋平均分配」產生逐題配分）。
 - 表頭選項 `header_fields`：`class`／`seat`／`name`／`score`（總分欄）四個布林，預設全開；控制卷首學生資訊列與總分顯示。
 - `GET /api/v1/exports` 歷次紀錄；`GET /api/v1/exports/{id}/questions.docx`、`.../answers.docx` 下載。
 - 檔案落在 `DATA_DIR/exports/{id}-questions.docx` 與 `{id}-answers.docx`。

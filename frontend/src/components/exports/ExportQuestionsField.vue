@@ -2,11 +2,11 @@
 import { computed, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
-import type { ExportPoints, QuestionType } from '@/api'
+import type { QuestionType } from '@/api'
 import AppButton from '@/components/AppButton.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import type { SelectedQuestionRow } from '@/composables/useSelectedQuestions'
-import { scoredCount, toScoredQuestions, totalPoints } from '@/export/scoring'
+import { scoredCount, totalPoints } from '@/export/scoring'
 import { useAppI18n } from '@/i18n'
 import { formatCount } from '@/i18n/number'
 import { useExportSelectionStore } from '@/stores/exportSelection'
@@ -37,8 +37,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ reload: [] }>()
 
-const typePoints = defineModel<ExportPoints>('typePoints', { required: true })
-
 const { t } = useAppI18n()
 const selection = useExportSelectionStore()
 
@@ -49,8 +47,6 @@ const hasUnavailable = computed(
   () => props.loaded && props.rows.some((row) => row.question === null),
 )
 
-const scored = computed(() => toScoredQuestions(props.rows))
-
 const summary = computed(() => {
   if (selection.count === 0) {
     return t('exports.selection.emptyTitle')
@@ -59,16 +55,14 @@ const summary = computed(() => {
   if (props.loading) {
     parts.push(t('exports.selection.loading'))
   } else {
-    const withPoints = scoredCount(scored.value, typePoints.value, selection.questionPoints)
+    const withPoints = scoredCount(selection.selectedIds, selection.questionPoints)
     parts.push(
       withPoints === 0
         ? t('exports.scoring.summaryNone')
         : t('exports.scoring.summary', {
-            total: formatCount(
-              totalPoints(scored.value, typePoints.value, selection.questionPoints),
-            ),
+            total: formatCount(totalPoints(selection.selectedIds, selection.questionPoints)),
             scored: withPoints,
-            count: scored.value.length,
+            count: selection.count,
           }),
     )
   }
@@ -112,7 +106,6 @@ const summary = computed(() => {
     <p v-if="hasUnavailable" class="form-error">{{ t('exports.selection.unavailableHint') }}</p>
 
     <ExportQuestionsModal
-      v-model:type-points="typePoints"
       :open="modalOpen"
       :rows="props.rows"
       :types="props.types"

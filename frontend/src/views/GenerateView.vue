@@ -18,7 +18,6 @@ import PageHeader from '@/components/ui/PageHeader.vue'
 import { useAppI18n } from '@/i18n'
 import { translateApiError } from '@/i18n/errors'
 import { formatCount } from '@/i18n/number'
-import { DIFFICULTY_LABEL_KEYS, DIFFICULTY_LEVELS } from '@/questions/labels'
 import { useGenerationStore } from '@/stores/generation'
 import { useToastsStore } from '@/stores/toasts'
 
@@ -28,14 +27,15 @@ import { useToastsStore } from '@/stores/toasts'
  *
  * A split workspace (docs/decisions/2026-08-17-professional-form-pages.md D26):
  * the form on the left in two titled sections, the session's jobs in a rail on
- * the right with its own header and scrollbar. The scope and the combos are
- * deliberately kept after a submit, since asking for more of the same material
- * is the common next step — the form stays where it is while the jobs it
- * produced report next to it.
+ * the right with its own header and scrollbar. The submit button is the page
+ * header's primary action, wired to the form by its native `form` attribute
+ * (docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md D32).
+ * The scope and the combos are deliberately kept after a submit, since asking
+ * for more of the same material is the common next step — the form stays where
+ * it is while the jobs it produced report next to it.
  *
- * `difficulty` is free text on the backend and goes straight into the prompt,
- * so the option values are the localised level names themselves — see
- * `src/questions/labels.ts`.
+ * Difficulty is a per-row choice of the 題目設定 section (D31), not a field of
+ * this view.
  */
 const { t } = useAppI18n()
 const store = useGenerationStore()
@@ -46,15 +46,11 @@ const categoryIds = ref<number[]>([])
 const items = ref<GenerateItem[]>([
   { question_type: QUESTION_TYPES[0], count: GENERATE_COUNT_DEFAULT },
 ])
-const difficulty = ref('')
 
 const submitting = ref(false)
 const submitError = ref<string | null>(null)
 
 const hasScope = computed(() => documentIds.value.length > 0 || categoryIds.value.length > 0)
-
-/** What the job's progress will count, and what the user is billed for. */
-const totalCount = computed(() => items.value.reduce((total, item) => total + item.count, 0))
 
 /** Mirrors `GenerateIn`: a scope, at least one item, and every count positive. */
 const canSubmit = computed(
@@ -78,9 +74,6 @@ async function onSubmit(): Promise<void> {
   if (categoryIds.value.length > 0) {
     request.category_ids = [...categoryIds.value]
   }
-  if (difficulty.value !== '') {
-    request.difficulty = difficulty.value
-  }
 
   submitting.value = true
   submitError.value = null
@@ -99,48 +92,30 @@ async function onSubmit(): Promise<void> {
 
 <template>
   <div class="page page--workspace generate-page">
-    <PageHeader :page-name="t('nav.generate')" />
+    <PageHeader :page-name="t('nav.generate')">
+      <template #actions>
+        <!-- Native `form` attribute: a submit button outside the form element -->
+        <AppButton type="submit" form="generate-form" :disabled="!canSubmit">
+          {{ submitting ? t('generate.form.submitting') : t('generate.form.submit') }}
+        </AppButton>
+      </template>
+    </PageHeader>
 
     <div class="generate">
-      <form class="generate__form" @submit.prevent="onSubmit">
-        <section class="form-section">
+      <!-- `display: contents`: the two sections are the grid's first two
+           columns while staying inside one submittable <form> (D35) -->
+      <form id="generate-form" class="generate__form" @submit.prevent="onSubmit">
+        <section class="generate__col">
           <h2 class="form-section__title">{{ t('generate.sections.scope') }}</h2>
-          <div class="generate__scope">
-            <DocumentScopeField v-model="documentIds" />
-            <CategoryScopeField v-model="categoryIds" />
-          </div>
+          <DocumentScopeField v-model="documentIds" />
+          <CategoryScopeField v-model="categoryIds" />
         </section>
 
-        <section class="form-section">
-          <h2 class="form-section__title">{{ t('generate.sections.settings') }}</h2>
-
+        <!-- Section heading and its add trigger live inside GenerateItemRows -->
+        <section class="generate__col generate__col--settings">
           <GenerateItemRows v-model="items" />
-
-          <label class="form-field generate__difficulty">
-            <span class="form-label">{{ t('generate.form.difficulty') }}</span>
-            <select v-model="difficulty" class="form-select">
-              <option value="">{{ t('generate.form.difficultyAny') }}</option>
-              <option
-                v-for="level in DIFFICULTY_LEVELS"
-                :key="level"
-                :value="t(DIFFICULTY_LABEL_KEYS[level])"
-              >
-                {{ t(DIFFICULTY_LABEL_KEYS[level]) }}
-              </option>
-            </select>
-          </label>
+          <p v-if="submitError !== null" class="form-error">{{ submitError }}</p>
         </section>
-
-        <p v-if="submitError !== null" class="form-error">{{ submitError }}</p>
-
-        <div class="generate__actions">
-          <AppButton type="submit" :disabled="!canSubmit">
-            {{ submitting ? t('generate.form.submitting') : t('generate.form.submit') }}
-          </AppButton>
-          <span class="generate__total">
-            {{ t('generate.form.total', { count: totalCount, calls: totalCount }) }}
-          </span>
-        </div>
       </form>
 
       <aside class="generate__jobs">
@@ -169,55 +144,38 @@ async function onSubmit(): Promise<void> {
 </template>
 
 <style scoped>
-/* Two regions of one work surface: the form column and the jobs rail, split by
-   the rail's left rule — the same vocabulary as the 題庫 columns (D26). */
+/* Three columns of one work surface — 出題範圍｜題目設定｜出題紀錄 — split by
+   rules, each with its own scrollbar (D35). 題目設定 gets the wider share so a
+   題型×題數×難度 row stays on one line. */
 .generate {
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(0, 1fr) 24rem;
+  grid-template-columns: minmax(14rem, 1fr) minmax(0, 1.6fr) 22rem;
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   height: 100%;
   overflow: hidden;
 }
 
-/* The form owns the left column's scrollbar and keeps a readable line length:
-   fields size to their expected content instead of the whole column (D28). */
+/* The form is layout-transparent: its two sections are grid items of
+   `.generate`, while the element itself still owns submission. */
 .generate__form {
+  display: contents;
+}
+
+.generate__col {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
   min-width: 0;
   min-height: 0;
-  max-width: 44rem;
   overflow-y: auto;
-  padding: var(--space-5) var(--space-6) var(--space-7) 0;
+  padding: var(--space-5) var(--space-5) var(--space-7) 0;
 }
 
-.generate__scope {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: var(--space-4);
-}
-
-.generate__difficulty {
-  max-width: 16rem;
-}
-
-/* The submit row closes the form the way a dialog footer closes a dialog */
-.generate__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-4);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--color-hairline);
-}
-
-/* What the job will produce and what it will cost: read it at full size */
-.generate__total {
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
+.generate__col--settings {
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--color-border);
 }
 
 /* The session's jobs are a rail with its own header and its own scrollbar, so
@@ -232,13 +190,14 @@ async function onSubmit(): Promise<void> {
   border-left: 1px solid var(--color-border);
 }
 
+/* Top padding matches `.generate__col`, so the three column titles align */
 .generate__jobs-head {
   flex: none;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-3);
-  padding: var(--space-4) 0 var(--space-3);
+  padding: var(--space-5) 0 var(--space-3);
   border-bottom: 1px solid var(--color-hairline);
 }
 
@@ -293,10 +252,18 @@ async function onSubmit(): Promise<void> {
     overflow: visible;
   }
 
-  .generate__form {
-    max-width: none;
+  .generate__col {
     overflow: visible;
     padding-right: 0;
+    padding-bottom: 0;
+  }
+
+  .generate__col--settings {
+    margin-top: var(--space-5);
+    padding-top: var(--space-5);
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid var(--color-border);
   }
 
   .generate__jobs {

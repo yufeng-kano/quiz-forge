@@ -6,9 +6,11 @@ Wires `backend.questions.selection` (which chunk(s) feed each question) to
 specific type's Pydantic model). Every generated question is stored
 `status="draft"` immediately.
 
-One job payload carries `items: [{question_type, count}, ...]` — one or more
-「題型 × 數量」combos generated together (docs/question-bank.md 出題流程 step
-1). Material selection and generation for each item reuses the exact same
+One job payload carries `items: [{question_type, count, difficulty?}, ...]` —
+one or more「題型 × 數量 × 難度」combos generated together
+(docs/question-bank.md 出題流程 step 1). Difficulty is per item (D31); a
+job-level `difficulty` key is honoured as fallback for jobs queued before.
+Material selection and generation for each item reuses the exact same
 per-type logic a single-type job always used; the only thing multi-item adds
 is an outer loop over `items` and a progress denominator that spans all of
 them (`n/total_all_items`, `total_all_items` = the sum of eligible units
@@ -276,7 +278,11 @@ async def generate_questions(ctx: JobContext) -> None:
     items_payload = _require_items(payload)
     document_ids = _optional_int_list(payload, "document_ids")
     category_ids = _optional_int_list(payload, "category_ids")
-    difficulty = _optional_str(payload, "difficulty")
+    # Jobs queued before D31 carried one shared difficulty at the job level;
+    # an item without its own difficulty falls back to it so an old job's
+    # retry behaves as originally requested
+    # (docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md).
+    fallback_difficulty = _optional_str(payload, "difficulty")
 
     # Pass 1: resolve every item's source material up front, so the progress
     # denominator (total_all_items) is known before any generation call
@@ -284,11 +290,12 @@ async def generate_questions(ctx: JobContext) -> None:
     # material contributes zero units and a note — exactly like a
     # single-type job's "no eligible material" case used to fail that job,
     # except here it only knocks out *this* item, not the rest of `items`.
-    item_plans: list[tuple[str, type[BaseModel], list[GenerationUnit]]] = []
+    item_plans: list[tuple[str, type[BaseModel], list[GenerationUnit], str | None]] = []
     notes: list[str] = []
     for item_index, item_payload in enumerate(items_payload, start=1):
         question_type = _require_str(item_payload, "question_type")
         count = _require_int(item_payload, "count")
+        item_difficulty = _optional_str(item_payload, "difficulty") or fallback_difficulty
         if count <= 0:
             raise ValueError(
                 f"item {item_index} count must be a positive integer, got {count}"
@@ -313,9 +320,9 @@ async def generate_questions(ctx: JobContext) -> None:
             continue
         if len(units) < count:
             notes.append(generation_short_material(count, len(units)))
-        item_plans.append((question_type, model_cls, units))
+        item_plans.append((question_type, model_cls, units, item_difficulty))
 
-    total = sum(len(units) for _, _, units in item_plans)
+    total = sum(len(units) for _, _, units, _ in item_plans)
 
     # Pass 2: generate every unit of every surviving item, in order, sharing
     # one running index/total across the whole job (docs/question-bank.md —
@@ -323,11 +330,13 @@ async def generate_questions(ctx: JobContext) -> None:
     success = 0
     failure_reasons: list[str | None] = []
     index = 0
-    for question_type, model_cls, units in item_plans:
+    for question_type, model_cls, units, item_difficulty in item_plans:
         for unit in units:
             index += 1
             try:
-                question = await _generate_one(llm, model_cls, question_type, unit, difficulty)
+                question = await _generate_one(
+                    llm, model_cls, question_type, unit, item_difficulty
+                )
                 session.add(question)
                 await session.commit()
                 success += 1

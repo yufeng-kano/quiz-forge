@@ -164,8 +164,7 @@ async def test_create_generation_job_enqueues_job_with_scope(client: TestClient)
         "/v1/generate",
         json={
             "document_ids": [document_id],
-            "items": [{"question_type": "single_choice", "count": 3}],
-            "difficulty": "簡單",
+            "items": [{"question_type": "single_choice", "count": 3, "difficulty": "簡單"}],
         },
     )
 
@@ -178,11 +177,11 @@ async def test_create_generation_job_enqueues_job_with_scope(client: TestClient)
         assert job is not None
         assert job.kind == "generate_questions"
         assert job.status == "pending"
+        # Difficulty is per item (D31); the payload has no job-level key.
         assert job.payload == {
             "document_ids": [document_id],
             "category_ids": None,
-            "items": [{"question_type": "single_choice", "count": 3}],
-            "difficulty": "簡單",
+            "items": [{"question_type": "single_choice", "count": 3, "difficulty": "簡單"}],
         }
 
 
@@ -210,9 +209,9 @@ async def test_create_generation_job_enqueues_job_with_multiple_combos(
         job = await session.get(Job, body["job_id"])
         assert job is not None
         assert job.payload["items"] == [
-            {"question_type": "single_choice", "count": 10},
-            {"question_type": "true_false", "count": 5},
-            {"question_type": "short_answer", "count": 2},
+            {"question_type": "single_choice", "count": 10, "difficulty": None},
+            {"question_type": "true_false", "count": 5, "difficulty": None},
+            {"question_type": "short_answer", "count": 2, "difficulty": None},
         ]
 
 

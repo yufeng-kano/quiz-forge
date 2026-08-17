@@ -13,17 +13,29 @@ import {
 import AppButton from '@/components/AppButton.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import { useAppI18n } from '@/i18n'
-import { QUESTION_TYPE_LABEL_KEYS } from '@/questions/labels'
+import {
+  DIFFICULTY_LABEL_KEYS,
+  DIFFICULTY_LEVELS,
+  QUESTION_TYPE_LABEL_KEYS,
+} from '@/questions/labels'
 
 /**
- * The 題型 × 數量 rows of the 出題 form (docs/question-bank.md 出題流程 step 1 —
- * 多個「題型 × 數量」項目，一個 job 出完).
+ * The 題目設定 section of the 出題 form: 題型 × 數量 × 難度 rows
+ * (docs/question-bank.md 出題流程 step 1;
+ * docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md D31).
+ *
+ * The section heading and its add trigger live here too, because adding a row
+ * is this section's own action: the plus icon sits right of the title (D32).
  *
  * One request must not repeat a question type (`GenerateIn` rejects it with
  * 422), so a row's select offers every type except the ones the other rows
- * already took, and 新增題型 stops once all six are in use. That makes the
- * server rule unreachable from the form instead of only reporting it after a
- * failed request.
+ * already took, and the add trigger stops once all six are in use. That makes
+ * the server rule unreachable from the form instead of only reporting it after
+ * a failed request.
+ *
+ * `difficulty` is free text on the backend and goes straight into the prompt,
+ * so the option values are the localised level names themselves — see
+ * `src/questions/labels.ts`.
  */
 const items = defineModel<GenerateItem[]>({ required: true })
 
@@ -62,7 +74,7 @@ function onTypeChange(index: number, event: Event): void {
     return
   }
   if (isQuestionType(target.value)) {
-    replaceAt(index, { question_type: target.value, count: current.count })
+    replaceAt(index, { ...current, question_type: target.value })
   }
 }
 
@@ -76,7 +88,20 @@ function onCountInput(index: number, event: Event): void {
   const count = Number.isNaN(parsed)
     ? GENERATE_COUNT_MIN
     : Math.min(GENERATE_COUNT_MAX, Math.max(GENERATE_COUNT_MIN, parsed))
-  replaceAt(index, { question_type: current.question_type, count })
+  replaceAt(index, { ...current, count })
+}
+
+function onDifficultyChange(index: number, event: Event): void {
+  const target = event.target
+  const current = items.value[index]
+  if (!(target instanceof HTMLSelectElement) || current === undefined) {
+    return
+  }
+  const next: GenerateItem = { question_type: current.question_type, count: current.count }
+  if (target.value !== '') {
+    next.difficulty = target.value
+  }
+  replaceAt(index, next)
 }
 
 function addRow(): void {
@@ -97,6 +122,21 @@ function removeRow(index: number): void {
 
 <template>
   <div class="combos">
+    <div class="combos__head">
+      <h2 class="form-section__title">{{ t('generate.sections.settings') }}</h2>
+      <AppButton
+        variant="ghost"
+        icon
+        size="sm"
+        :disabled="!canAdd"
+        :aria-label="t('generate.form.addItem')"
+        :title="t('generate.form.addItem')"
+        @click="addRow"
+      >
+        <AppIcon name="plus" :size="16" />
+      </AppButton>
+    </div>
+
     <ul class="combos__rows">
       <li v-for="(item, index) in items" :key="item.question_type" class="combos__row">
         <label class="form-field combos__type">
@@ -127,6 +167,25 @@ function removeRow(index: number): void {
           />
         </label>
 
+        <label class="form-field combos__difficulty">
+          <span v-if="index === 0" class="form-label">{{ t('generate.form.difficulty') }}</span>
+          <select
+            class="form-select"
+            :value="item.difficulty ?? ''"
+            :aria-label="t('generate.form.difficulty')"
+            @change="onDifficultyChange(index, $event)"
+          >
+            <option value="">{{ t('generate.form.difficultyAny') }}</option>
+            <option
+              v-for="level in DIFFICULTY_LEVELS"
+              :key="level"
+              :value="t(DIFFICULTY_LABEL_KEYS[level])"
+            >
+              {{ t(DIFFICULTY_LABEL_KEYS[level]) }}
+            </option>
+          </select>
+        </label>
+
         <!-- md square: the same height as the controls it stands beside -->
         <AppButton
           variant="ghost"
@@ -140,15 +199,6 @@ function removeRow(index: number): void {
         </AppButton>
       </li>
     </ul>
-
-    <!-- A lone plus square under the rows reads as decoration, so this add
-         action carries its label (docs/decisions/2026-08-17-professional-form-pages.md D28) -->
-    <div>
-      <AppButton variant="secondary" size="sm" :disabled="!canAdd" @click="addRow">
-        <AppIcon name="plus" :size="16" />
-        {{ t('generate.form.addItem') }}
-      </AppButton>
-    </div>
   </div>
 </template>
 
@@ -159,6 +209,12 @@ function removeRow(index: number): void {
   gap: var(--space-3);
 }
 
+.combos__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
 .combos__rows {
   display: flex;
   flex-direction: column;
@@ -167,21 +223,25 @@ function removeRow(index: number): void {
   list-style: none;
 }
 
+/* One row, always: 題型｜題數｜難度｜移除 never wrap apart */
 .combos__row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-end;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-2);
 }
 
-/* Field widths follow their content (D28): six short type names, a number of
-   at most three digits — neither needs the column's full width */
+/* Field widths follow their content (D28): three-character type names, a
+   number of at most two digits, three-character difficulty words */
 .combos__type {
-  flex: 0 1 14rem;
-  min-width: 8rem;
+  flex: 0 0 7rem;
 }
 
 .combos__count {
-  flex: 0 0 6rem;
+  flex: 0 0 4.5rem;
+}
+
+.combos__difficulty {
+  flex: 0 0 7.5rem;
 }
 </style>

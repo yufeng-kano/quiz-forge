@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import AppButton from '@/components/AppButton.vue'
@@ -28,12 +27,6 @@ const { t } = useAppI18n()
 const { job, status, progress, error, requestError, isActive, retry } = useJobPolling(
   () => props.entry.jobId,
 )
-
-const difficultyLabel = computed(() =>
-  props.entry.difficulty === null
-    ? t('questions.difficulty.unspecified')
-    : t('questions.difficulty.prefix', { difficulty: props.entry.difficulty }),
-)
 </script>
 
 <template>
@@ -46,13 +39,20 @@ const difficultyLabel = computed(() =>
       <ProgressText v-if="isActive" :progress="progress" />
     </div>
 
+    <!-- Difficulty is a per-item fact (D31), so it rides on the item line -->
     <ul class="job-row__items">
       <li v-for="item in entry.items" :key="item.question_type" class="job-row__item">
         {{
-          t('generate.jobs.item', {
-            type: t(QUESTION_TYPE_LABEL_KEYS[item.question_type]),
-            count: item.count,
-          })
+          item.difficulty === undefined
+            ? t('generate.jobs.item', {
+                type: t(QUESTION_TYPE_LABEL_KEYS[item.question_type]),
+                count: item.count,
+              })
+            : t('generate.jobs.itemWithDifficulty', {
+                type: t(QUESTION_TYPE_LABEL_KEYS[item.question_type]),
+                count: item.count,
+                difficulty: item.difficulty,
+              })
         }}
       </li>
     </ul>
@@ -64,7 +64,6 @@ const difficultyLabel = computed(() =>
           datetime: formatDateTime(entry.submittedAt),
           documents: entry.documentCount,
           categories: entry.categoryCount,
-          difficulty: difficultyLabel,
         })
       }}
     </p>
