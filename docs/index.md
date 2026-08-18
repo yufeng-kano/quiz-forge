@@ -11,7 +11,7 @@
 
 | 路徑 | 用途 |
 |---|---|
-| `README.md` | 公開 repo 首頁：部署步驟、架構摘要、費用說明 |
+| `README.md` | 公開 repo 首頁：產品導向（功能），部署步驟、架構與安全附於最後 |
 | `.rule` | 給 LLM 的專案規則主檔 |
 | `CLAUDE.md`、`AGENTS.md` | 指向 `.rule` 的 symlink |
 | `.env.example` | 環境變數範本（真正的 `.env` 不入 Git） |
