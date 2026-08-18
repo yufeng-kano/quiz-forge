@@ -71,11 +71,17 @@ function onKeydown(event: KeyboardEvent): void {
   flex-direction: column;
 }
 
+/* Flat, full-width input surface (H2): no border/radius of its own — the
+   footer's top hairline is the only separator from the conversation area.
+   Horizontal text padding matches the message area's var(--space-3) inset. */
 .composer__input {
   height: 4.75rem;
   resize: none;
   overflow-y: auto;
   font-size: var(--font-size-md);
+  padding: 0.6rem var(--space-3);
+  border: none;
+  border-radius: 0;
 }
 
 .sr-only {

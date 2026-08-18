@@ -211,15 +211,19 @@ watch(
       </ul>
 
       <p v-else class="agent__empty">{{ t('bankAgent.messages.emptyTitle') }}</p>
-    </div>
 
-    <div class="agent__footer">
+      <!--
+        Turn state belongs to the conversation timeline: running progress and
+        failed+retry render at the bottom of the message list and scroll with
+        it, so the footer keeps holding only the composer
+        (docs/decisions/2026-08-18-bank-agent-progress-in-conversation.md H1).
+      -->
       <div v-if="store.isActiveTurnPending" class="agent__turn">
         <span class="agent__turn-label">{{ t('bankAgent.turn.running') }}</span>
         <ProgressText :progress="turnProgress" />
       </div>
 
-      <template v-else-if="store.hasActiveTurnFailed">
+      <div v-else-if="store.hasActiveTurnFailed" class="agent__turn-failed">
         <p class="form-error">
           {{
             turnError === null
@@ -232,8 +236,10 @@ watch(
             {{ t('bankAgent.turn.retry') }}
           </AppButton>
         </div>
-      </template>
+      </div>
+    </div>
 
+    <div class="agent__footer">
       <p v-if="turnRequestError !== null" class="form-error">{{ turnRequestError }}</p>
 
       <BankAgentComposer />
@@ -305,13 +311,23 @@ watch(
   list-style: none;
 }
 
+/* The footer IS the input surface (H2): no padding, so the borderless
+   composer spans the full column width; the top hairline is the only
+   separator from the conversation area. */
 .agent__footer {
   display: flex;
   flex: none;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3) var(--space-3);
+  padding: 0;
   border-top: 1px solid var(--color-hairline);
+}
+
+/* The rare send-request error sits above the input surface; keep it off the
+   column edges (H2). */
+.agent__footer > .form-error {
+  margin: 0;
+  padding: var(--space-2) var(--space-3) 0;
 }
 
 .agent__turn {
@@ -319,11 +335,19 @@ watch(
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-3);
 }
 
 .agent__turn-label {
   color: var(--color-text-muted);
   font-size: var(--font-size-md);
+}
+
+.agent__turn-failed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-3);
 }
 
 .sr-only {

@@ -59,3 +59,8 @@
 | `docs/decisions/2026-08-17-documents-folder-delete-icon.md` | L5 文件庫資料夾列刪除改 trash icon；按下仍走 ConfirmDialog。D18 的明確例外，只限資料夾列 |
 | `docs/decisions/2026-08-17-documents-workspace-flush.md` | L6 工作區貼齊外框不另加左右內距、L7 搜尋列與表格同一塊並加分隔線；左右緣已被同日 L8 推翻 |
 | `docs/decisions/2026-08-17-documents-workspace-bleed.md` | L8 文件庫工作區左右出血，與頁首底線同寬；推翻 L6「停在 page gutter」 |
+| `docs/decisions/2026-08-18-bank-workspace-flush.md` | B1 題庫 toolbar 底加分割線、B2 題庫工作區左右出血與頁首底線同寬（選題助手與主區一體感）；推翻 L8「題庫不要順手出血」對題庫的那一句 |
+| `docs/decisions/2026-08-18-bank-question-rows-flat.md` | B3 題目列（題庫＋審題共用）改用總覽清單節奏（`--space-2` padding）、B4 正解選項拿掉底色帶只留「正解」標籤；整份已被同日 C2 推翻 |
+| `docs/decisions/2026-08-18-bank-question-cards.md` | C1 題庫題目列改框線卡片（`StatCard` 語彙）、卡片間有間距；C2 推翻 B3／B4，審題維持分隔列 |
+| `docs/decisions/2026-08-18-bank-agent-progress-in-conversation.md` | H1 選題助手輸入欄位一體：欄底只放輸入框，回合進度與失敗重試改顯示在對話區底部；推翻 frontend.md「欄底顯示處理中」 |
+| `docs/decisions/2026-08-18-bank-agent-composer-flat-fullwidth.md` | H2 選題助手輸入欄位扁平滿寬：拿掉邊框圓角、貼齊欄寬，與對話區只留一條 hairline 分隔 |

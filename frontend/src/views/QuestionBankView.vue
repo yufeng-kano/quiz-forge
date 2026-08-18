@@ -582,6 +582,9 @@ function onCategoriesChanged(): void {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  /* Same bleed as PageHeader: cancel the .page gutter so the column divider
+     and the toolbar rule line up with the header rule (L8, B2). */
+  margin: 0 calc(-1 * var(--content-padding-x));
 }
 
 .bank.is-collapsed {
@@ -602,8 +605,12 @@ function onCategoriesChanged(): void {
   flex-direction: column;
 }
 
+/* One block with the list (L7): a rule under the band closes it; the band
+   regains the gutter the bleed cancelled, the rule still spans the column. */
 .bank__toolbar {
   flex: none;
+  padding: 0 var(--content-padding-x);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .bank__views {
@@ -637,32 +644,43 @@ function onCategoriesChanged(): void {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  padding: 0 var(--content-padding-x);
 }
 
+/* Each row is a framed card, the StatCard vocabulary (C1): border, radius,
+   background and padding on the row, the card frame replaces the hairline. */
 .bank__list {
   display: flex;
   flex-direction: column;
+  gap: var(--space-3);
   padding: 0;
   list-style: none;
+}
+
+.bank__list > li {
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-background);
+  scroll-margin-top: var(--space-3);
+}
+
+/* The shared row no longer draws its own hairline or padding inside the
+   card — the frame is the separator. */
+.bank__list :deep(.question-card) {
+  padding: 0;
+  border-bottom: none;
 }
 
 .bank__skeleton {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--color-hairline);
 }
 
 .bank__unavailable {
-  padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--color-hairline);
   color: var(--color-text-muted);
   font-size: var(--font-size-md);
-}
-
-.bank__list > li {
-  scroll-margin-top: var(--space-3);
 }
 
 .bank__link {
@@ -683,7 +701,7 @@ function onCategoriesChanged(): void {
 
 .bank :deep(.pagination) {
   flex: none;
-  padding: var(--space-3) 0 var(--space-2);
+  padding: var(--space-3) var(--content-padding-x) var(--space-2);
 }
 
 @media (max-width: 640px) {

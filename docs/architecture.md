@@ -55,6 +55,7 @@ proxy 設定檔在 `proxy/nginx.conf`，website 靜態 serve 設定檔在 `front
 - 一律 OpenAI-compatible 介面，不做 Anthropic message format。
 - 預設供應商 OpenRouter（chat + embeddings 同一把 key、同一個 base_url）。
 - 結構化輸出一律 `response_format: json_schema`，不 parse 自由文字。
+- 回應解析採兩段式：先以 Pydantic 對完整 content 做嚴格 `model_validate_json`；失敗時（已知案例：OpenRouter 部分 provider 未完全遵守 `strict: true`，在 JSON 物件後續上第二個物件或餘文字，造成 `trailing characters`）改用標準庫 `json.JSONDecoder().raw_decode` 抽出 content 內第一個完整 JSON 值再驗證。兩段都失敗才丟 `LLMResponseError`，不吞例外。
 - 每次呼叫記錄至 `llm_usage` 表（model、用途、prompt/completion tokens），提供用量頁面。
 
 ## `.env` 變數

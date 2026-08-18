@@ -6,13 +6,19 @@ Every chat/embeddings call goes through `LLMClient` so that, uniformly:
 - concurrency is capped by one `asyncio.Semaphore` sized from `LLM_CONCURRENCY`;
 - structured output always uses `response_format: json_schema` in strict
   mode and returns a validated Pydantic instance — callers never parse free
-  text themselves;
+  text themselves. Content is parsed in two stages: a strict
+  `model_validate_json` on the full content first, and on failure a
+  fallback that extracts the first complete JSON value (stdlib
+  `json.JSONDecoder().raw_decode`) and validates that object — only if
+  both stages fail is `LLMResponseError` raised (docs/architecture.md —
+  LLM 介接);
 - every call automatically records a `llm_usage` row (model/purpose/tokens),
   so callers (job handlers) never have to remember to log usage themselves.
 """
 
 import asyncio
 import base64
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -45,6 +51,42 @@ ModelT = TypeVar("ModelT", bound=BaseModel)
 
 class LLMResponseError(RuntimeError):
     """Raised when a structured-output response was empty or failed schema validation."""
+
+
+def parse_structured_output[ModelT: BaseModel](
+    response_model: type[ModelT], content: str
+) -> ModelT:
+    """Two-stage parse of a structured-output response (docs/architecture.md — LLM 介接).
+
+    Stage 1: strict `model_validate_json` on the full content. Stage 2 (only
+    when stage 1 fails — e.g. an upstream provider behind OpenRouter ignoring
+    `strict: true` and emitting a second JSON object or prose after the first):
+    extract the first complete JSON value via stdlib
+    `json.JSONDecoder().raw_decode` and validate that object. Only when both
+    stages fail is `LLMResponseError` raised; no exception is swallowed.
+    """
+    try:
+        return response_model.model_validate_json(content)
+    except ValidationError as strict_exc:
+        open_brackets = [idx for idx in (content.find("{"), content.find("[")) if idx != -1]
+        if not open_brackets:
+            raise LLMResponseError(
+                f"no JSON object found in structured-output content: {content!r}"
+            ) from strict_exc
+        try:
+            decoded, _ = json.JSONDecoder().raw_decode(content, min(open_brackets))
+        except json.JSONDecodeError as exc:
+            raise LLMResponseError(
+                f"could not extract a complete JSON value from structured-output "
+                f"content: {content!r}"
+            ) from exc
+        try:
+            return response_model.model_validate(decoded)
+        except ValidationError as exc:
+            raise LLMResponseError(
+                f"first JSON value in structured-output content failed schema "
+                f"validation: {content!r}"
+            ) from exc
 
 
 @dataclass(frozen=True)
@@ -122,12 +164,7 @@ class LLMClient:
         content = completion.choices[0].message.content
         if content is None:
             raise LLMResponseError(f"empty structured-output response for purpose {purpose!r}")
-        try:
-            return response_model.model_validate_json(content)
-        except ValidationError as exc:
-            raise LLMResponseError(
-                f"response failed schema validation for purpose {purpose!r}: {exc}"
-            ) from exc
+        return parse_structured_output(response_model, content)
 
     async def chat(
         self,
