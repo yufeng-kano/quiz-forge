@@ -134,11 +134,11 @@
       "noMatchTitle": "沒有符合條件的文件"
     },
     "folders": {
-      "label": "資料夾篩選",
+      "label": "文件庫左欄",
       "all": "全部",
       "unfiled": "未分類",
       "loading": "載入資料夾中…",
-      "empty": "尚未建立資料夾。按欄頭加號建立一個，再把文件列拖進來。",
+      "empty": "尚未建立資料夾。按加號建立一個，再把文件列拖進來。",
       "createAriaLabel": "新增資料夾",
       "createSubmit": "建立",
       "nameLabel": "資料夾名稱",

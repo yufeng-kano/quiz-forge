@@ -4,8 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { DOCUMENT_POLL_INTERVAL_MS, isReadyEntityStatus, type DocumentListItem } from '@/api'
 import AppButton from '@/components/AppButton.vue'
-import DocumentFolderSidebar from '@/components/documents/DocumentFolderSidebar.vue'
 import DocumentIntakePanel from '@/components/documents/DocumentIntakePanel.vue'
+import DocumentLibrarySidebar from '@/components/documents/DocumentLibrarySidebar.vue'
 import DocumentMoveModal from '@/components/documents/DocumentMoveModal.vue'
 import DocumentRenameModal from '@/components/documents/DocumentRenameModal.vue'
 import DocumentRowActions from '@/components/documents/DocumentRowActions.vue'
@@ -31,12 +31,14 @@ import { useDocumentsStore } from '@/stores/documents'
 import { useFoldersStore } from '@/stores/folders'
 import { useToastsStore } from '@/stores/toasts'
 import { matchesQuery, normalizeQuery } from '@/utils/search'
+import { readStoredValue, writeStoredValue } from '@/utils/storage'
 
 /**
- * Documents workspace (docs/frontend.md, L1–L4): folder sidebar + fill-height
- * table under a compact header. Upload lives in a header modal; `?tab=upload`
- * still opens it, then `replace`s the query away so `/documents` and
- * `/documents?tab=library` never look like two different pages.
+ * Documents workspace (docs/frontend.md, L1–L4): left column (filelist:
+ * 全部 / 未分類 / each folder) + fill-height table under a compact header.
+ * Upload lives in a header modal; `?tab=upload` still opens it, then
+ * `replace`s the query away so `/documents` and `/documents?tab=library`
+ * never look like two different pages.
  *
  * Rows created in this session carry a job id and refresh themselves through
  * their status cell. This view only covers what job polling cannot see: a
@@ -44,7 +46,7 @@ import { matchesQuery, normalizeQuery } from '@/utils/search'
  * endpoint can give back. For those, the whole list is refetched on an
  * interval, which stops as soon as none are left.
  *
- * The search box and the folder column narrow the rows client-side:
+ * The search box and the left column narrow the rows client-side:
  * `GET /api/v1/documents` returns the whole list in one response, so filtering
  * it here is instant and a server round trip (`?folder_id=`, `?unfiled=true`)
  * would only add latency — and it keeps the folder counts derived from exactly
@@ -102,20 +104,57 @@ watch(
 
 const search = ref('')
 
-/** Which folder the library list is showing; owned here, driven by the sidebar. */
-const folderFilter = ref<FolderFilter>('all')
+/* --------------------------------------------- left column state (G1) */
+
+const LEFT_FILELIST_STORAGE_KEY = 'quiz-forge:documents-left-filelist:v1'
+
+function readStoredFilelistFilter(): FolderFilter {
+  const value = readStoredValue(LEFT_FILELIST_STORAGE_KEY)
+  if (value === 'all' || value === 'unfiled') {
+    return value
+  }
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : 'all'
+}
+
+/**
+ * Which item of the left column's filelist is selected, persisted so a revisit
+ * lands on the last view. A stored value in a shape no build wrote (anything
+ * that is not 'all' / 'unfiled' / a positive integer) falls back to the
+ * default rather than crashing.
+ */
+const filter = ref<FolderFilter>(readStoredFilelistFilter())
+
+watch(filter, (value) => writeStoredValue(LEFT_FILELIST_STORAGE_KEY, value))
+
+/**
+ * A persisted folder id whose folder was deleted in the meantime falls back to
+ * 全部. Until the folder list has loaded there is nothing to check it against,
+ * so the stored value is trusted in the meantime.
+ */
+watch(
+  () => folders.loaded,
+  (loaded) => {
+    if (!loaded || typeof filter.value !== 'number') {
+      return
+    }
+    if (!folders.folders.some((folder) => folder.id === filter.value)) {
+      filter.value = 'all'
+    }
+  },
+  { immediate: true },
+)
 
 const query = computed(() => normalizeQuery(search.value))
 
 const visibleDocuments = computed<DocumentListItem[]>(() =>
   store.documents.filter(
     (document) =>
-      matchesFolderFilter(document, folderFilter.value) &&
+      matchesFolderFilter(document, filter.value) &&
       matchesQuery(document.title, query.value),
   ),
 )
 
-const isFiltering = computed(() => query.value !== '' || folderFilter.value !== 'all')
+const isFiltering = computed(() => query.value !== '' || filter.value !== 'all')
 
 /** Everything the pipeline has not finished: parsing, queued, or failed. */
 const inProgressDocuments = computed<DocumentListItem[]>(() =>
@@ -368,11 +407,7 @@ onUnmounted(clearTimer)
     </p>
 
     <div class="workspace">
-      <DocumentFolderSidebar
-        v-model="folderFilter"
-        class="workspace__sidebar"
-        @move="moveDocument"
-      />
+      <DocumentLibrarySidebar v-model="filter" class="workspace__sidebar" @move="moveDocument" />
 
       <div class="workspace__main">
         <div class="workspace__toolbar">

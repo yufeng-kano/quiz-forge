@@ -54,6 +54,8 @@
 | `docs/decisions/2026-08-17-drop-page-titles-keep-stat-cards.md` | D23 頁首不再放頁名（推翻同日頁首精簡決策的「只留頁名」）、D24 總覽與用量的總計維持 `StatCard` 卡片（D16 的明確例外）；D23 頁名部分已被同日 D25 推翻 |
 | `docs/decisions/2026-08-17-professional-form-pages.md` | 表單頁專業化 D25–D30：頁首恢復頁名（推翻 D23）、出題頁分欄工作區、表單分區小節標題、控制項樣式升級、匯出「題目與配分」合併 widget、逐題配分移入 store 修跨頁消失 bug |
 | `docs/decisions/2026-08-18-generate-row-difficulty-percent-scoring.md` | D31–D35：出題逐題型難度（`items[].difficulty`）、出題頁首放送出鈕與 icon 化觸發鈕（調整 D28）、配分改「目標總分＋題型百分比＋平均分配」（廢 `typePoints` 偏好）、修 `parsePointsInput` 對 number 的 crash、出題頁三欄並排（範圍｜題目設定｜紀錄） |
+| `docs/decisions/2026-08-18-documents-library-sidebar-tabs.md` | F1–F3：文件庫左欄改 3 tab（全部／未分類／資料夾）、新增鈕與資料夾清單只在資料夾 tab、資料夾 item 滿欄寬無邊框、tab 與選定資料夾持久化 localStorage、開始拖曳自動切到資料夾 tab、未分類 tab 是 drop 目標；F1 已被同日 single-filelist 決策推翻 |
+| `docs/decisions/2026-08-18-documents-library-single-filelist.md` | G1–G3：推翻 F1，左欄收回單一 filelist（全部／未分類／各資料夾，選定持久化 localStorage）、新增資料夾 band 常駐、drop 目標常駐可見並拿掉拖曳自動切 tab |
 | `docs/decisions/2026-08-17-documents-folder-delete-icon.md` | L5 文件庫資料夾列刪除改 trash icon；按下仍走 ConfirmDialog。D18 的明確例外，只限資料夾列 |
 | `docs/decisions/2026-08-17-documents-workspace-flush.md` | L6 工作區貼齊外框不另加左右內距、L7 搜尋列與表格同一塊並加分隔線；左右緣已被同日 L8 推翻 |
 | `docs/decisions/2026-08-17-documents-workspace-bleed.md` | L8 文件庫工作區左右出血，與頁首底線同寬；推翻 L6「停在 page gutter」 |

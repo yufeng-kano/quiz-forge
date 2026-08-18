@@ -18,18 +18,25 @@ import {
 } from './folders'
 
 /**
- * Folder sidebar of the documents workspace (docs/frontend.md).
+ * The 文件庫 left column (docs/decisions/2026-08-18-documents-library-single-filelist.md).
  *
- * Two jobs in one column, because they are the same list:
- * - it filters the library — 全部 / 未分類 / one folder — through `v-model`;
- * - every entry except 全部 is a drop target for a document row, and the
- *   `move` event is raised to the page, which owns the single move handler
- *   shared with the row menu's 移至資料夾 fallback (drag must not be the only
- *   way to move a document).
+ * One list — 全部 / 未分類 / each folder — that is both the view switcher and
+ * the folder manager: clicking an item filters the right-hand table (all /
+ * unfiled / that folder's documents), and the page persists the selection.
+ * 全部 and 未分類 share the folder items' visual: full width, borderless,
+ * active by weight and color only, plain counts.
+ *
+ * The create-folder band at the top of the column is always visible (G2): a
+ * full-width click target with a centred plus and a hairline below.
+ *
+ * The 未分類 item and every folder item are drop targets for a document row
+ * (全部 is not), and the `move` event is raised to the page, which owns the
+ * single move handler shared with the row menu's 移至資料夾 fallback (drag
+ * must not be the only way to move a document).
  *
  * Counts are derived from the document list this column filters, not from the
  * server's `document_count`: the page holds every document anyway, so counting
- * them here means a folder's badge and the rows next to it can never disagree
+ * them here means a folder's count and the rows next to it can never disagree
  * after a move, with no refetch.
  *
  * Creating, renaming and deleting folders is done inline here (this is the
@@ -256,80 +263,86 @@ async function removeFolder(folder: Folder): Promise<void> {
 </script>
 
 <template>
-  <nav class="folders" :aria-label="t('documents.folders.label')">
-    <div class="folders__head">
-      <AppButton
-        variant="ghost"
-        icon
-        size="sm"
-        :disabled="creating"
-        :aria-label="t('documents.folders.createAriaLabel')"
-        :title="t('documents.folders.createAriaLabel')"
-        @click="startCreating"
-      >
-        <AppIcon name="plus" :size="16" />
-      </AppButton>
-    </div>
-
-    <form v-if="creating" class="folders__create" @submit.prevent="submitCreate">
-      <input
-        ref="newNameInput"
-        v-model="newName"
-        class="form-input"
-        type="text"
-        :aria-label="t('documents.folders.nameLabel')"
-        :placeholder="t('documents.folders.namePlaceholder')"
-        @keyup.esc="cancelCreating"
-      />
-      <div class="folders__create-actions">
-        <AppButton type="submit" size="sm" :disabled="newName.trim() === '' || busy">
-          {{ t('documents.folders.createSubmit') }}
-        </AppButton>
-        <AppButton variant="ghost" size="sm" :disabled="busy" @click="cancelCreating">
-          {{ t('common.cancel') }}
-        </AppButton>
-      </div>
-    </form>
-
-    <ul class="folders__list">
-      <li class="folders__item">
+  <nav class="library" :aria-label="t('documents.folders.label')">
+    <ul class="library__list">
+      <li class="library__item">
         <button
-          class="folders__select"
-          :class="{ 'folders__select--active': filter === 'all' }"
+          class="library__select"
+          :class="{ 'library__select--active': filter === 'all' }"
           type="button"
           :aria-pressed="filter === 'all'"
           @click="filter = 'all'"
         >
-          <span class="folders__name text-ellipsis">{{ t('documents.folders.all') }}</span>
-          <span class="folders__count">{{ counts.total }}</span>
+          <span class="library__name text-ellipsis">{{ t('documents.folders.all') }}</span>
+          <span class="library__count">{{ counts.total }}</span>
         </button>
       </li>
 
       <li
-        class="folders__item"
-        :class="{ 'folders__item--drop': isDropTarget(null) }"
+        class="library__item"
+        :class="{ 'library__item--drop': isDropTarget(null) }"
         @dragenter="onDragEnter(null, $event)"
         @dragover="onDragOver(null, $event)"
         @dragleave="onDragLeave(null)"
         @drop="onDrop(null, $event)"
       >
         <button
-          class="folders__select"
-          :class="{ 'folders__select--active': filter === 'unfiled' }"
+          class="library__select"
+          :class="{ 'library__select--active': filter === 'unfiled' }"
           type="button"
           :aria-pressed="filter === 'unfiled'"
           @click="filter = 'unfiled'"
         >
-          <span class="folders__name text-ellipsis">{{ t('documents.folders.unfiled') }}</span>
-          <span class="folders__count">{{ counts.unfiled }}</span>
+          <span class="library__name text-ellipsis">{{ t('documents.folders.unfiled') }}</span>
+          <span class="library__count">{{ counts.unfiled }}</span>
         </button>
+      </li>
+
+      <!-- One hairline separates the virtual views (全部 / 未分類) from the real folders. -->
+      <li v-if="folders.folders.length > 0" class="library__divider" aria-hidden="true"></li>
+
+      <!-- The create control sits between the divider and the first folder: the
+           icon is centred, but the full-width row is the click target. -->
+      <li class="library__create-row">
+        <button
+          class="library__create-band-button"
+          type="button"
+          :disabled="creating"
+          :aria-label="t('documents.folders.createAriaLabel')"
+          :title="t('documents.folders.createAriaLabel')"
+          @click="startCreating"
+        >
+          <AppIcon name="plus" :size="16" />
+        </button>
+      </li>
+
+      <li v-if="creating" class="library__create-row">
+        <form class="library__create" @submit.prevent="submitCreate">
+          <input
+            ref="newNameInput"
+            v-model="newName"
+            class="form-input"
+            type="text"
+            :aria-label="t('documents.folders.nameLabel')"
+            :placeholder="t('documents.folders.namePlaceholder')"
+            @keyup.esc="cancelCreating"
+          />
+          <div class="library__form-actions">
+            <AppButton type="submit" size="sm" :disabled="newName.trim() === '' || busy">
+              {{ t('documents.folders.createSubmit') }}
+            </AppButton>
+            <AppButton variant="ghost" size="sm" :disabled="busy" @click="cancelCreating">
+              {{ t('common.cancel') }}
+            </AppButton>
+          </div>
+        </form>
       </li>
 
       <li
         v-for="folder in folders.folders"
         :key="folder.id"
-        class="folders__item"
-        :class="{ 'folders__item--drop': isDropTarget(folder.id) }"
+        class="library__item"
+        :class="{ 'library__item--drop': isDropTarget(folder.id) }"
         @dragenter="onDragEnter(folder.id, $event)"
         @dragover="onDragOver(folder.id, $event)"
         @dragleave="onDragLeave(folder.id)"
@@ -337,7 +350,7 @@ async function removeFolder(folder: Folder): Promise<void> {
       >
         <form
           v-if="editingId === folder.id"
-          class="folders__rename"
+          class="library__rename"
           @submit.prevent="submitRename(folder)"
         >
           <input
@@ -348,7 +361,7 @@ async function removeFolder(folder: Folder): Promise<void> {
             :aria-label="t('documents.folders.renameLabel', { name: folder.name })"
             @keyup.esc="cancelEditing"
           />
-          <div class="folders__create-actions">
+          <div class="library__form-actions">
             <AppButton type="submit" size="sm" :disabled="editingName.trim() === '' || busy">
               {{ t('documents.folders.renameSubmit') }}
             </AppButton>
@@ -360,17 +373,17 @@ async function removeFolder(folder: Folder): Promise<void> {
 
         <template v-else>
           <button
-            class="folders__select"
-            :class="{ 'folders__select--active': filter === folder.id }"
+            class="library__select"
+            :class="{ 'library__select--active': filter === folder.id }"
             type="button"
             :aria-pressed="filter === folder.id"
             @click="filter = folder.id"
           >
-            <span class="folders__name text-ellipsis" :title="folder.name">{{ folder.name }}</span>
-            <span class="folders__count">{{ countOf(folder) }}</span>
+            <span class="library__name text-ellipsis" :title="folder.name">{{ folder.name }}</span>
+            <span class="library__count">{{ countOf(folder) }}</span>
           </button>
 
-          <span class="folders__actions">
+          <span class="library__actions">
             <AppButton
               variant="ghost"
               icon
@@ -398,16 +411,16 @@ async function removeFolder(folder: Folder): Promise<void> {
       </li>
     </ul>
 
-    <p v-if="folders.loading" class="folders__hint">{{ t('documents.folders.loading') }}</p>
-    <p v-else-if="folders.loadError !== null" class="folders__error">{{ folders.loadError }}</p>
-    <p v-else-if="folders.folders.length === 0" class="folders__hint">
+    <p v-if="folders.loading" class="library__hint">{{ t('documents.folders.loading') }}</p>
+    <p v-else-if="folders.loadError !== null" class="library__error">{{ folders.loadError }}</p>
+    <p v-else-if="folders.folders.length === 0" class="library__hint">
       {{ t('documents.folders.empty') }}
     </p>
   </nav>
 </template>
 
 <style scoped>
-.folders {
+.library {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -416,18 +429,45 @@ async function removeFolder(folder: Folder): Promise<void> {
   padding: var(--space-3) 0 0;
 }
 
-/* No column heading: the list under it (全部 / 未分類 / folder names) says what
-   this column is, and the `nav` already carries the accessible name (D19). */
-.folders__head {
-  display: flex;
+/* The create-folder control (G2): a row between the divider and the first
+   folder — full-width click target with a centred plus, no border of its own,
+   and the same row height as the list items (identical padding to
+   `.library__select`; the 16px icon is shorter than the text line box). */
+.library__create-row {
   flex: none;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-2);
 }
 
-.folders__create,
-.folders__rename {
+.library__create-band-button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.library__create-band-button:hover:not(:disabled) {
+  color: var(--color-heading);
+  background: var(--color-background-mute);
+}
+
+.library__create-band-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.library__create-band-button:disabled {
+  cursor: default;
+}
+
+.library__create,
+.library__rename {
   display: flex;
   flex: none;
   flex-direction: column;
@@ -436,13 +476,13 @@ async function removeFolder(folder: Folder): Promise<void> {
   min-width: 0;
 }
 
-.folders__create-actions {
+.library__form-actions {
   display: flex;
   gap: var(--space-2);
 }
 
 /* The column itself fills the workspace; only this list scrolls. */
-.folders__list {
+.library__list {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -453,23 +493,28 @@ async function removeFolder(folder: Folder): Promise<void> {
   list-style: none;
 }
 
-.folders__item {
+.library__divider {
+  flex: none;
+  margin: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Borderless and full width: the 1px transparent border exists only so the
+   drag-over highlight has an edge to fill, and it never shows at rest. */
+.library__item {
   display: flex;
   align-items: center;
   gap: var(--space-1);
   min-width: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
 }
 
-/* Drag-over highlight: the design system's low-chroma accent, so the target
-   folder is unmistakable without introducing a new colour */
-.folders__item--drop {
+.library__item--drop {
   border-color: var(--color-accent);
   background: var(--color-accent-soft);
 }
 
-.folders__select {
+.library__select {
   flex: 1;
   display: flex;
   align-items: center;
@@ -478,8 +523,6 @@ async function removeFolder(folder: Folder): Promise<void> {
   min-width: 0;
   padding: var(--space-1) var(--space-2);
   border: none;
-  border-left: 2px solid transparent;
-  border-radius: var(--radius-sm);
   background: none;
   color: var(--color-text);
   font: inherit;
@@ -488,22 +531,21 @@ async function removeFolder(folder: Folder): Promise<void> {
   cursor: pointer;
 }
 
-.folders__select:hover {
+.library__select:hover {
   background: var(--color-background-mute);
 }
 
-.folders__select--active {
-  border-left-color: var(--color-accent);
-  background: var(--color-accent-soft);
+/* Selected state is weight and color only — no border, no background. */
+.library__select--active {
   color: var(--color-heading);
   font-weight: 600;
 }
 
-.folders__name {
+.library__name {
   min-width: 0;
 }
 
-.folders__count {
+.library__count {
   flex: none;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
@@ -513,7 +555,7 @@ async function removeFolder(folder: Folder): Promise<void> {
    reads as a filter list first. Faded rather than `display: none`, which would
    take them out of the tab order and make them unreachable by keyboard — the
    space they occupy is reserved either way, so nothing shifts when they appear. */
-.folders__actions {
+.library__actions {
   display: flex;
   flex: none;
   gap: var(--space-1);
@@ -521,29 +563,29 @@ async function removeFolder(folder: Folder): Promise<void> {
   transition: opacity 0.15s ease;
 }
 
-.folders__item:hover .folders__actions,
-.folders__item:focus-within .folders__actions {
+.library__item:hover .library__actions,
+.library__item:focus-within .library__actions {
   opacity: 1;
 }
 
-.folders__hint,
-.folders__error {
+.library__hint,
+.library__error {
   flex: none;
   font-size: var(--font-size-md);
 }
 
-.folders__hint {
+.library__hint {
   color: var(--color-text-muted);
 }
 
-.folders__error {
+.library__error {
   color: var(--color-status-failed-text);
   overflow-wrap: anywhere;
 }
 
 /* Without a pointer there is no hover to reveal them */
 @media (hover: none) {
-  .folders__actions {
+  .library__actions {
     opacity: 1;
   }
 }

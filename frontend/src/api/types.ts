@@ -148,7 +148,7 @@ export interface DocumentListItem {
  * `document_count` is the server's own count. The 文件庫 sidebar does not
  * display it: that page already holds every document, so it derives the counts
  * from the list it is filtering, which keeps a badge and the rows next to it
- * from disagreeing after a move (see `DocumentFolderSidebar.vue`).
+ * from disagreeing after a move (see `DocumentLibrarySidebar.vue`).
  */
 export interface Folder {
   id: number
