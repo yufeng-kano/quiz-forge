@@ -21,13 +21,13 @@
 
 ## 部署
 
-**需求**：Docker 與 Docker Compose、OpenRouter API key。
+**需求**：Docker 與 Docker Compose、[OpenRouter](https://openrouter.ai/) API key（到 OpenRouter 註冊帳號，建立自己的 API key）。
 
 ```bash
 git clone https://github.com/yufeng-kano/quiz-forge
 cd quiz-forge
 cp .env.example .env
-# 編輯 .env，至少填入 LLM_API_KEY，並更換 POSTGRES_PASSWORD
+# 編輯 .env：填入 LLM_API_KEY，並把 2 處 change-me 換成自己想出的密碼（兩處要一致）
 docker compose up -d --build
 ```
 
