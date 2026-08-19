@@ -16,6 +16,7 @@ RUN uv sync --frozen --no-install-project --no-dev
 COPY . .
 RUN uv sync --frozen --no-dev
 
-RUN chmod +x /app/entrypoint.sh
+# Windows checkout 可能帶 CRLF，去掉 CR 避免 shebang 失效
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
