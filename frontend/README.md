@@ -1,48 +1,20 @@
 # frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+Quiz Forge 的 Vue 3 前端專案。技術棧：Vite、Pinia、vue-router、vue-i18n（zh-Hant-TW）。
 
-## Recommended IDE Setup
+## 開發
 
-[VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
-
-## Recommended Browser Setup
-
-- Chromium-based browsers (Chrome, Edge, Brave, etc.):
-  - [Vue.js devtools](https://chromewebstore.google.com/detail/vuejs-devtools/nhdogjmejiglipccpnnnanhbledajbpd)
-  - [Turn on Custom Object Formatter in Chrome DevTools](http://bit.ly/object-formatters)
-- Firefox:
-  - [Vue.js devtools](https://addons.mozilla.org/en-US/firefox/addon/vue-js-devtools/)
-  - [Turn on Custom Object Formatter in Firefox DevTools](https://fxdx.dev/firefox-devtools-custom-object-formatters/)
-
-## Type Support for `.vue` Imports in TS
-
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
-
-```sh
+```bash
 npm install
+npm run dev        # Vite dev server
+npm run build      # type-check + 產出 dist/
+npm run lint       # oxlint + eslint
+npm run format     # prettier
 ```
 
-### Compile and Hot-Reload for Development
+## 部署
 
-```sh
-npm run dev
-```
+`Dockerfile` 是兩階段建置：先用 Node 把 `dist/` build 出來，再 COPY 進 `nginx:alpine` 常駐伺服。
 
-### Type-Check, Compile and Minify for Production
-
-```sh
-npm run build
-```
-
-### Lint with [ESLint](https://eslint.org/)
-
-```sh
-npm run lint
-```
+- `nginx.conf` 是 **website container** 的靜態 serve 設定（含 SPA fallback），不是 proxy 的。
+- 靜態檔的對外轉發由 `proxy/` 的 nginx 負責，見根目錄 `README.md` 與 `docs/architecture.md`。
